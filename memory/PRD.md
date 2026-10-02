@@ -27,3 +27,10 @@ Delivered:
 
 ## Key truth
 No responsible path exists to auto-trade real money on this build by the go-live date. "Profits from day 1" is a goal to build toward safely, not a guarantee.
+
+## Phase 2/3 foundation (implemented, SANDBOX only)
+- Backend: `src/server/greeks.ts` (Black-Scholes + IV), `src/server/riskEngine.ts` (kill-switch, daily-loss/position/notional/lot limits, approx SEBI margin, sandbox order router), `src/server/backtester.ts` (per-agent rules-based backtest on real Yahoo daily history).
+- Endpoints (owner-gated): `/api/risk/*`, `/api/broker/sandbox/*`, `/api/greeks/compute`, `/api/backtest/*`.
+- Frontend: `GuardedRiskControl.tsx` + `BacktestLab.tsx`, wired into Sidebar/Header/App nav.
+- Verified via tsc + vite build + 11 backend curl assertions. See `PHASE2_3_BUILD_LOG.md`.
+- Still needs YOUR keys/decisions for live: connected broker (Dhan/Kite), licensed real-time + option-chain feed, DB persistence, broker-exact margin, deliberate go-live switch.
