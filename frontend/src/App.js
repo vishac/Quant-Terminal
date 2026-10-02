@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useCallback } from "react";
 import "@/App.css";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import axios from "axios";
@@ -8,18 +8,17 @@ const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
 const Home = () => {
-  const helloWorldApi = async () => {
+  const helloWorldApi = useCallback(async () => {
     try {
-      const response = await axios.get(`${API}/`);
-      console.log(response.data.message);
+      await axios.get(`${API}/`);
     } catch (e) {
-      console.error(e, `errored out requesting / api`);
+      // Splash probe to /api/ failed; intentionally ignored.
     }
-  };
+  }, []);
 
   useEffect(() => {
     helloWorldApi();
-  }, []);
+  }, [helloWorldApi]);
 
   return (
     // The marker attribute below lets the platform probe detect the stock splash — remove it with this page
