@@ -51,6 +51,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: <span className="material-symbols-outlined text-[18px]">security</span> 
     },
     { 
+      id: 'risk_guard', 
+      label: 'Guarded Risk', 
+      icon: <span className="material-symbols-outlined text-[18px]">gpp_maybe</span> 
+    },
+    { 
+      id: 'backtest_lab', 
+      label: 'Backtest Lab', 
+      icon: <span className="material-symbols-outlined text-[18px]">query_stats</span> 
+    },
+    { 
       id: 'settings', 
       label: 'Settings', 
       icon: <span className="material-symbols-outlined text-[18px]">settings</span> 

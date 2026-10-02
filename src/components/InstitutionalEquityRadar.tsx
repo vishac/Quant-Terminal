@@ -386,7 +386,7 @@ export const InstitutionalEquityRadar: React.FC = () => {
           </div>
           <div className="flex items-center gap-4 text-[11px]">
             <span>UNIVERSE: <strong>15 HIGH-LIQUIDITY EQUITIES</strong></span>
-            <span>EXCHANGE ROUTE: <strong className="text-cyan-300">NSE / BSE LIVE TICK</strong></span>
+            <span>EXCHANGE ROUTE: <strong className="text-cyan-300">NSE / BSE · DELAYED (YAHOO, UNOFFICIAL)</strong></span>
             <span>LATENCY: <strong className="text-emerald-400">{latencyMs} ms</strong></span>
           </div>
         </div>

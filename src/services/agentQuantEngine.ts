@@ -27,14 +27,18 @@ export function deriveLiveAutonomousAgents(
   const bankNiftyQuote = quotes['^NSEBANK'];
   const vixQuote = quotes['^INDIAVIX'];
 
-  const niftyPrice = niftyQuote?.price ?? 22620.45;
+  const hasNifty = niftyQuote?.price != null;
+  const hasVix = vixQuote?.price != null;
+  const niftyPrice = niftyQuote?.price ?? 0;
   const niftyPct = niftyQuote?.changePct ?? 0;
-  const vix = vixQuote?.price ?? 13.5;
+  const vix = vixQuote?.price ?? 0;
+  const niftyDisplay = hasNifty ? `₹${niftyPrice.toLocaleString('en-IN')}` : 'awaiting delayed data';
+  const vixDisplay = hasVix ? vix.toFixed(2) : '—';
 
   const now = new Date();
   const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) + ' IST';
 
-  // Dynamic strike calculation from real NIFTY spot
+  // Dynamic strike calculation from the delayed NIFTY spot (SIMULATION / PAPER only)
   const atmNiftyStrike = Math.round(niftyPrice / 50) * 50;
   const otmSellStrike = niftyPct >= 0 ? atmNiftyStrike - 100 : atmNiftyStrike + 100;
   const otmBuyStrike = niftyPct >= 0 ? atmNiftyStrike - 200 : atmNiftyStrike + 200;
@@ -59,8 +63,10 @@ export function deriveLiveAutonomousAgents(
     }
   }
 
-  const topEquityPrice = topEquityQuote?.price ?? 2075.0;
-  const topEquityPct = topEquityQuote?.changePct ?? 1.19;
+  const hasTopEquity = topEquityQuote?.price != null;
+  const topEquityPrice = topEquityQuote?.price ?? 0;
+  const topEquityPct = topEquityQuote?.changePct ?? 0;
+  const topEquityDisplay = hasTopEquity ? `₹${topEquityPrice.toLocaleString('en-IN')} (${topEquityPct >= 0 ? '+' : ''}${topEquityPct.toFixed(2)}%)` : 'awaiting delayed data';
 
   // Agent metrics strictly derived from real session orders
   const computeAgentStats = (agentId: string) => {
@@ -116,7 +122,7 @@ export function deriveLiveAutonomousAgents(
         'Halt automated entry if Brent crude intraday volatility exceeds 4.0%',
         'Hard statutory stop-loss strictly capped at 0.6% of allocated macro capital'
       ],
-      lastAction: `Tracking NIFTY at ₹${niftyPrice.toLocaleString('en-IN')} (${niftyPct >= 0 ? '+' : ''}${niftyPct.toFixed(2)}%) with India VIX at ${vix.toFixed(2)}. Global risk corridor confirms ${niftyPct >= 0 ? 'bullish gap support' : 'defensive wing hedge'}.`,
+      lastAction: `[SIMULATION] Tracking NIFTY at ${niftyDisplay} (${niftyPct >= 0 ? '+' : ''}${niftyPct.toFixed(2)}%) with India VIX at ${vixDisplay}. Global risk corridor suggests ${niftyPct >= 0 ? 'bullish gap support' : 'defensive wing hedge'}.`,
       lastActionTimestamp: timeStr
     },
     {
@@ -161,7 +167,7 @@ export function deriveLiveAutonomousAgents(
         'Mandatory bracket stop-loss set at 0.5% below entry execution price',
         'Mandatory automated cash MIS square-off at 15:14:15 IST before market close'
       ],
-      lastAction: `Surveilling institutional momentum in ${topEquitySymbol} at ₹${topEquityPrice.toLocaleString('en-IN')} (${topEquityPct >= 0 ? '+' : ''}${topEquityPct.toFixed(2)}%). Awaiting VWAP breakout signal.`,
+      lastAction: `[SIMULATION] Surveilling momentum in ${topEquitySymbol} at ${topEquityDisplay}. Awaiting VWAP breakout signal.`,
       lastActionTimestamp: timeStr
     },
     {
@@ -223,13 +229,13 @@ export function generateLiveMarketOrder(
   const niftyQuote = quotes['^NSEI'];
   const vixQuote = quotes['^INDIAVIX'];
 
-  const niftyPrice = niftyQuote?.price ?? 22620.45;
+  const niftyPrice = niftyQuote?.price ?? 0;
   const niftyPct = niftyQuote?.changePct ?? 0;
-  const vix = vixQuote?.price ?? 13.5;
+  const vix = vixQuote?.price ?? 0;
 
   const now = new Date();
   const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) + ' IST';
-  const orderId = `NSE-ORD-${Date.now().toString().slice(-6)}`;
+  const orderId = `SIM-ORD-${Date.now().toString().slice(-6)}`;
 
   if (agentId === 'agent_bhishma') {
     // Generate authentic NIFTY option spread pegged to real current spot
@@ -267,7 +273,8 @@ export function generateLiveMarketOrder(
       timestamp: timeStr,
       status: 'OPEN',
       pnlINR: 0, // Zero at entry
-      sebiComplianceVerified: true
+      sebiComplianceVerified: false,
+      isSimulation: true
     };
   } else if (agentId === 'agent_arjuna') {
     // Top equity momentum order from live quotes
@@ -282,7 +289,7 @@ export function generateLiveMarketOrder(
       }
     }
 
-    const price = selectedQuote?.price ?? 2075.0;
+    const price = selectedQuote?.price ?? 0;
     const qty = 50;
     const stopLoss = Number((price * 0.995).toFixed(2));
     const target = Number((price * 1.012).toFixed(2));
@@ -306,7 +313,8 @@ export function generateLiveMarketOrder(
       timestamp: timeStr,
       status: 'OPEN',
       pnlINR: 0, // Zero at entry
-      sebiComplianceVerified: true
+      sebiComplianceVerified: false,
+      isSimulation: true
     };
   } else if (agentId === 'agent_kuber') {
     // MCX Commodities hedge
@@ -327,7 +335,8 @@ export function generateLiveMarketOrder(
       timestamp: timeStr,
       status: 'OPEN',
       pnlINR: 0, // Zero at entry
-      sebiComplianceVerified: true
+      sebiComplianceVerified: false,
+      isSimulation: true
     };
   } else {
     // Macro Sentinel index hedge
@@ -349,7 +358,8 @@ export function generateLiveMarketOrder(
       timestamp: timeStr,
       status: 'OPEN',
       pnlINR: 0, // Zero at entry
-      sebiComplianceVerified: true
+      sebiComplianceVerified: false,
+      isSimulation: true
     };
   }
 }
