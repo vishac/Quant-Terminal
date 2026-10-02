@@ -94,10 +94,10 @@ export const MacroThreatIntelligenceMatrix: React.FC<MacroThreatIntelligenceMatr
 
   useEffect(() => {
     fetchIntelligence();
-    // Auto-refresh cadence: every 3 minutes
+    // Background refresh aligned with 15-minute institutional macro window
     const interval = setInterval(() => {
       fetchIntelligence(false);
-    }, 180000);
+    }, 15 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
 
@@ -142,9 +142,13 @@ export const MacroThreatIntelligenceMatrix: React.FC<MacroThreatIntelligenceMatr
               <span className="font-bold text-slate-100 uppercase tracking-wide text-sm">
                 GLOBAL MACRO THREAT & NEWS MATRIX
               </span>
-              <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-emerald-950/80 text-emerald-300 border border-emerald-500/40 flex items-center gap-1 shadow-sm">
+              <span className={`px-2 py-0.5 rounded text-[9px] font-bold flex items-center gap-1 shadow-sm border ${
+                data?.isGrounded
+                  ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40'
+                  : 'bg-cyan-950/80 text-cyan-300 border-cyan-500/40'
+              }`}>
                 <CheckCircle2 className="w-2.5 h-2.5" />
-                GROUNDED IN SEARCH · 0 HALLUCINATION
+                {data?.isGrounded ? 'GROUNDED IN SEARCH · 0 HALLUCINATION' : 'INSTITUTIONAL QUANTITATIVE MATRIX'}
               </span>
             </div>
             <p className="text-[10px] text-slate-400 mt-0.5 max-w-xl truncate">

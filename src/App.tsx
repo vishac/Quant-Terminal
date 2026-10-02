@@ -86,6 +86,14 @@ export default function App() {
   };
 
   const handleExecuteCircuitBreaker = (tier: string) => {
+    window.dispatchEvent(new CustomEvent('jarvis:circuit-breaker', {
+      detail: { tier, timestamp: Date.now() }
+    }));
+    try {
+      localStorage.setItem('jarvis_bots_armed_state', 'false');
+    } catch {
+      // Ignore
+    }
     setSystemAlertMessage(`Statutory Circuit Breaker Routine [${tier.toUpperCase()}] executed. Portfolio delta neutralized across NSE/MCX.`);
     setTimeout(() => {
       setSystemAlertMessage(null);

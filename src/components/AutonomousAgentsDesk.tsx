@@ -93,9 +93,56 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({ onOp
   const [isSyncingPostMarket, setIsSyncingPostMarket] = useState<boolean>(false);
   const [syncToastMessage, setSyncToastMessage] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState<boolean>(false);
-  const [allBotsArmed, setAllBotsArmed] = useState<boolean>(true);
-  const [agentStatusOverrides, setAgentStatusOverrides] = useState<Record<string, 'ACTIVE_HEDGING' | 'STANDBY_RULES'>>({});
+  const [allBotsArmed, setAllBotsArmed] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('jarvis_bots_armed_state');
+      return saved !== null ? saved === 'true' : true;
+    } catch {
+      return true;
+    }
+  });
+  const [agentStatusOverrides, setAgentStatusOverrides] = useState<Record<string, 'ACTIVE_HEDGING' | 'STANDBY_RULES'>>(() => {
+    try {
+      const saved = localStorage.getItem('jarvis_bot_status_overrides');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
   const [showDeskInfo, setShowDeskInfo] = useState<boolean>(false);
+  const [showKillConfirmModal, setShowKillConfirmModal] = useState<boolean>(false);
+
+  // Persist bots armed state and overrides
+  useEffect(() => {
+    try {
+      localStorage.setItem('jarvis_bots_armed_state', String(allBotsArmed));
+      localStorage.setItem('jarvis_bot_status_overrides', JSON.stringify(agentStatusOverrides));
+    } catch {
+      // Ignore
+    }
+  }, [allBotsArmed, agentStatusOverrides]);
+
+  // Listen for global emergency circuit-breaker events across components
+  useEffect(() => {
+    const handleCircuitBreakerEvent = () => {
+      setAllBotsArmed(false);
+      setAgentStatusOverrides({
+        agent_chanakya: 'STANDBY_RULES',
+        agent_bhishma: 'STANDBY_RULES',
+        agent_arjuna: 'STANDBY_RULES',
+        agent_kuber: 'STANDBY_RULES',
+        agent_vidura: 'STANDBY_RULES',
+      });
+      setOrders(prev => prev.map(o => o.status === 'OPEN' ? {
+        ...o,
+        status: 'SQUARED_OFF',
+        timestamp: new Date().toLocaleTimeString('en-IN') + ' (Circuit Breaker)'
+      } : o));
+    };
+
+    window.addEventListener('jarvis:circuit-breaker' as any, handleCircuitBreakerEvent);
+    return () => window.removeEventListener('jarvis:circuit-breaker' as any, handleCircuitBreakerEvent);
+  }, []);
 
   // Persist orders to localStorage
   useEffect(() => {
@@ -121,9 +168,13 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({ onOp
       if (override) {
         return { ...a, status: override };
       }
+      // If master switch allBotsArmed is false, default to STANDBY_RULES (PAUSED)
+      if (!allBotsArmed) {
+        return { ...a, status: 'STANDBY_RULES' as const };
+      }
       return a;
     });
-  }, [quotes, orders, userAllocations, agentStatusOverrides]);
+  }, [quotes, orders, userAllocations, agentStatusOverrides, allBotsArmed]);
 
   const selectedAgent = agents.find(a => a.id === selectedAgentId) || agents[0];
 
@@ -180,12 +231,65 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({ onOp
     }
   };
 
+  const handleToggleMasterBotsArmed = () => {
+    const nextState = !allBotsArmed;
+    setAllBotsArmed(nextState);
+    const newOverrides: Record<string, 'ACTIVE_HEDGING' | 'STANDBY_RULES'> = {};
+    ['agent_chanakya', 'agent_bhishma', 'agent_arjuna', 'agent_kuber', 'agent_vidura'].forEach(id => {
+      newOverrides[id] = nextState ? 'ACTIVE_HEDGING' : 'STANDBY_RULES';
+    });
+    setAgentStatusOverrides(newOverrides);
+    setSyncToastMessage(nextState ? 'All 5 autonomous strategy bots ARMED & ACTIVE.' : 'All 5 autonomous strategy bots PAUSED (Standby Rules).');
+    setTimeout(() => setSyncToastMessage(null), 3500);
+  };
+
   const handleToggleAgentStatus = (agentId: string) => {
     setAgentStatusOverrides(prev => {
-      const current = prev[agentId] || agents.find(a => a.id === agentId)?.status || 'ACTIVE_HEDGING';
-      const next = current === 'STANDBY_RULES' ? 'ACTIVE_HEDGING' : 'STANDBY_RULES';
-      return { ...prev, [agentId]: next };
+      const current = prev[agentId] || (allBotsArmed ? 'ACTIVE_HEDGING' : 'STANDBY_RULES');
+      const next: 'ACTIVE_HEDGING' | 'STANDBY_RULES' = current === 'STANDBY_RULES' ? 'ACTIVE_HEDGING' : 'STANDBY_RULES';
+      const updated: Record<string, 'ACTIVE_HEDGING' | 'STANDBY_RULES'> = { ...prev, [agentId]: next };
+      
+      // If at least one bot is active, master switch is armed; if all are standby, master is paused
+      const anyActive = Object.values(updated).some(status => status === 'ACTIVE_HEDGING');
+      setAllBotsArmed(anyActive);
+      return updated;
     });
+  };
+
+  const handleExecuteBotKillSwitch = () => {
+    setShowKillConfirmModal(false);
+    setAllBotsArmed(false);
+    const pausedOverrides: Record<string, 'ACTIVE_HEDGING' | 'STANDBY_RULES'> = {
+      agent_chanakya: 'STANDBY_RULES',
+      agent_bhishma: 'STANDBY_RULES',
+      agent_arjuna: 'STANDBY_RULES',
+      agent_kuber: 'STANDBY_RULES',
+      agent_vidura: 'STANDBY_RULES',
+    };
+    setAgentStatusOverrides(pausedOverrides);
+
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) + ' IST (Kill Switch)';
+
+    // Square off all open orders
+    setOrders(prev => prev.map(o => {
+      if (o.status === 'OPEN') {
+        return {
+          ...o,
+          status: 'SQUARED_OFF',
+          timestamp: timeStr,
+        };
+      }
+      return o;
+    }));
+
+    // Broadcast circuit breaker event
+    window.dispatchEvent(new CustomEvent('jarvis:circuit-breaker', {
+      detail: { source: 'AUTONOMOUS_BOT_KILL_SWITCH', timestamp: Date.now() }
+    }));
+
+    setSyncToastMessage('🚨 EMERGENCY KILL SWITCH ENGAGED: All 5 bots paused. All active orders squared off.');
+    setTimeout(() => setSyncToastMessage(null), 6000);
   };
 
   const handleSaveCapitalAllocation = (newTotal: number) => {
@@ -275,22 +379,33 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({ onOp
             <button
               onClick={handleTriggerScanCycle}
               disabled={isScanning || !allBotsArmed}
-              className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-sky-600 hover:bg-sky-500 disabled:opacity-50 rounded-xl transition-all shadow-md shadow-sky-600/20 active:scale-95 cursor-pointer"
+              className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-sky-600 hover:bg-sky-500 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl transition-all shadow-md shadow-sky-600/20 active:scale-95 cursor-pointer"
+              title={!allBotsArmed ? 'Bots are paused. Re-arm bots to resume algorithmic market scanning.' : 'Trigger algorithmic scan cycle'}
             >
               <RotateCw className={`w-3.5 h-3.5 ${isScanning ? 'animate-spin' : ''}`} />
               <span>{isScanning ? 'Scanning Markets...' : 'Scan All Markets Now'}</span>
             </button>
 
             <button
-              onClick={() => setAllBotsArmed(!allBotsArmed)}
+              onClick={handleToggleMasterBotsArmed}
               className={`flex items-center gap-1.5 px-3 py-2 text-xs font-mono font-semibold rounded-xl border transition-all cursor-pointer ${
                 allBotsArmed 
-                  ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300' 
-                  : 'bg-rose-950/40 border-rose-500/40 text-rose-300'
+                  ? 'bg-emerald-950/60 border-emerald-500/50 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.15)]' 
+                  : 'bg-rose-950/60 border-rose-500/50 text-rose-300 shadow-[0_0_12px_rgba(244,63,94,0.15)]'
               }`}
+              title={allBotsArmed ? 'Click to pause all strategy bots' : 'Click to arm all strategy bots'}
             >
               {allBotsArmed ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
               <span>{allBotsArmed ? 'ALL BOTS ARMED' : 'BOTS PAUSED'}</span>
+            </button>
+
+            <button
+              onClick={() => setShowKillConfirmModal(true)}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-mono font-bold rounded-xl bg-rose-600 hover:bg-rose-500 text-white shadow-[0_0_15px_rgba(225,29,72,0.35)] transition-all active:scale-95 cursor-pointer"
+              title="Emergency Stop: Pause all bots and square off all open positions"
+            >
+              <AlertTriangle className="w-3.5 h-3.5" />
+              <span>KILL SWITCH</span>
             </button>
           </div>
         </div>
@@ -372,7 +487,9 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({ onOp
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-xs font-bold font-display text-slate-100 flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    <span className={`w-2 h-2 rounded-full ${
+                      agent.status === 'ACTIVE_HEDGING' ? 'bg-emerald-400 animate-pulse' : 'bg-rose-500'
+                    }`} />
                     <span>{agent.name}</span>
                   </span>
                   <span className="text-[10px] font-mono text-slate-500">{agent.codeName}</span>
@@ -410,11 +527,12 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({ onOp
                   <span className="text-[10px] text-slate-500">{agent.tradesToday} trades</span>
                   <button
                     onClick={(e) => { e.stopPropagation(); handleToggleAgentStatus(agent.id); }}
-                    className={`text-[10px] px-2 py-0.5 rounded font-bold transition-colors cursor-pointer ${
+                    className={`text-[10px] px-2 py-0.5 rounded font-bold transition-all cursor-pointer ${
                       agent.status === 'ACTIVE_HEDGING'
                         ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-500/40 hover:bg-rose-950 hover:text-rose-300'
-                        : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                        : 'bg-rose-950/60 text-rose-300 border border-rose-500/40 hover:bg-emerald-950 hover:text-emerald-400'
                     }`}
+                    title={agent.status === 'ACTIVE_HEDGING' ? 'Click to Pause this bot' : 'Click to Arm this bot'}
                   >
                     {agent.status === 'ACTIVE_HEDGING' ? 'ARMED' : 'PAUSED'}
                   </button>
@@ -977,6 +1095,66 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({ onOp
                 className="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs shadow-[0_0_15px_rgba(0,240,255,0.3)] cursor-pointer"
               >
                 SAVE ALLOCATION
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EMERGENCY BOT KILL SWITCH CONFIRMATION MODAL */}
+      {showKillConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-150">
+          <div className="max-w-md w-full bg-[#0d0408] border-2 border-rose-500/70 rounded-2xl p-6 shadow-[0_0_50px_rgba(244,63,94,0.4)] flex flex-col gap-4 font-mono">
+            <div className="flex items-center gap-3 text-rose-400">
+              <div className="w-10 h-10 rounded-xl bg-rose-950/80 border border-rose-500/50 flex items-center justify-center text-rose-400 shrink-0">
+                <AlertTriangle className="w-6 h-6 animate-pulse text-rose-500" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white uppercase font-display">
+                  EMERGENCY BOT KILL SWITCH
+                </h3>
+                <span className="text-[10px] text-rose-400 font-bold uppercase tracking-wider">
+                  STATUTORY LEVEL-4 OVERRIDE
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed font-sans">
+              Engaging the emergency kill switch will immediately execute the following statutory safety actions:
+            </p>
+
+            <ul className="text-xs text-slate-300 space-y-1.5 font-sans pl-1">
+              <li className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-400 shrink-0" />
+                <span>Pause all <strong>5 autonomous strategy bots</strong> (Chanakya, Bhishma, Arjuna, Kuber, Vidura).</span>
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-400 shrink-0" />
+                <span>Auto-square off <strong>all {openOrders.length} active open positions</strong>.</span>
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-400 shrink-0" />
+                <span>Halt all automated order routing to exchange gateways.</span>
+              </li>
+            </ul>
+
+            <div className="p-3 rounded-xl bg-rose-950/50 border border-rose-500/40 text-xs text-rose-200 font-mono">
+              [STATUTORY SAFETY]: All collateral locked in overnight repo. Net delta recentered to 0.00.
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                onClick={() => setShowKillConfirmModal(false)}
+                className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-bold transition-colors cursor-pointer"
+              >
+                CANCEL & RETURN
+              </button>
+              <button
+                onClick={handleExecuteBotKillSwitch}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-[0_0_20px_rgba(244,63,94,0.5)] transition-all cursor-pointer active:scale-95 flex items-center gap-1.5"
+              >
+                <AlertTriangle className="w-3.5 h-3.5" />
+                <span>CONFIRM EMERGENCY KILL</span>
               </button>
             </div>
           </div>

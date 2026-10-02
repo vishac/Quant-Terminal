@@ -52,6 +52,7 @@ export const RiskEngineTerminal: React.FC<RiskEngineTerminalProps> = ({ onOpenCi
   const [vegaSurgeArmed, setVegaSurgeArmed] = useState(true);
   const [slippageGuardArmed, setSlippageGuardArmed] = useState(true);
   const [globalKillActive, setGlobalKillActive] = useState(false);
+  const [killConfirmModal, setKillConfirmModal] = useState<'GLOBAL_KILL' | 'OTM_EXPEL' | null>(null);
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -116,21 +117,58 @@ export const RiskEngineTerminal: React.FC<RiskEngineTerminalProps> = ({ onOpenCi
     }
   ]);
 
-  const handleGlobalKill = () => {
-    if (confirm('TACTICAL OVERRIDE: Engaging Global Circuit Breaker will immediately purge all live working quotes on NSE/BSE and lock synthetic hedges. Confirm emergency kill?')) {
-      setGlobalKillActive(true);
+  const handleTriggerGlobalKillModal = () => {
+    if (globalKillActive) {
+      // Disengage circuit breaker
+      setGlobalKillActive(false);
       const now = new Date();
-      const timeStr = now.toLocaleTimeString() + '.' + String(now.getMilliseconds()).padStart(3, '0');
+      const timeStr = now.toLocaleTimeString();
       setEventLogs(prev => [{
         id: `e-${Date.now()}`,
         timestamp: timeStr,
-        tag: '[GLOBAL_KILL]',
-        tagClass: 'bg-rose-950/80 text-rose-400 border border-rose-500/40 font-bold',
-        message: 'GLOBAL CIRCUIT BREAKER ENGAGED. 124 WORKING ORDERS CANCELLED ACROSS NIFTY/BANKNIFTY BOOKS. CASH SPREAD HEDGED.'
+        tag: '[CIRCUIT_RESET]',
+        tagClass: 'bg-emerald-950/80 text-emerald-400 border border-emerald-500/40 font-bold',
+        message: 'GLOBAL CIRCUIT BREAKER DISENGAGED. Risk circuits and limit order processing re-armed.'
       }, ...prev]);
-      setToastMessage('EMERGENCY CIRCUIT BREAKER EXECUTED: All exchange quotes flushed.');
-      setTimeout(() => setToastMessage(null), 5000);
+      setToastMessage('Global Circuit Breaker Disengaged: Circuits re-armed.');
+      setTimeout(() => setToastMessage(null), 4000);
+      return;
     }
+    setKillConfirmModal('GLOBAL_KILL');
+  };
+
+  const handleConfirmGlobalKill = () => {
+    setKillConfirmModal(null);
+    setGlobalKillActive(true);
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString() + '.' + String(now.getMilliseconds()).padStart(3, '0');
+    setEventLogs(prev => [{
+      id: `e-${Date.now()}`,
+      timestamp: timeStr,
+      tag: '[GLOBAL_KILL]',
+      tagClass: 'bg-rose-950/80 text-rose-400 border border-rose-500/40 font-bold',
+      message: 'GLOBAL CIRCUIT BREAKER ENGAGED. All active quotes flushed across NSE/BSE books. Synthetic cash hedge engaged.'
+    }, ...prev]);
+
+    // Square off session orders in localStorage
+    try {
+      const saved = localStorage.getItem('jarvis_session_orders');
+      if (saved) {
+        const orders = JSON.parse(saved);
+        const squared = orders.map((o: any) => o.status === 'OPEN' ? { ...o, status: 'SQUARED_OFF', timestamp: timeStr } : o);
+        localStorage.setItem('jarvis_session_orders', JSON.stringify(squared));
+      }
+    } catch {
+      // Ignore
+    }
+
+    // Broadcast global circuit breaker event to pause all bots and update UI
+    window.dispatchEvent(new CustomEvent('jarvis:circuit-breaker', {
+      detail: { source: 'RISK_ENGINE_GLOBAL_KILL', timestamp: Date.now() }
+    }));
+
+    setToastMessage('EMERGENCY CIRCUIT BREAKER EXECUTED: All exchange quotes flushed & orders squared off.');
+    setTimeout(() => setToastMessage(null), 5000);
   };
 
   const handlePauseScript = () => {
@@ -147,20 +185,19 @@ export const RiskEngineTerminal: React.FC<RiskEngineTerminalProps> = ({ onOpenCi
     setTimeout(() => setToastMessage(null), 4000);
   };
 
-  const handleCloseOTM = () => {
-    if (confirm('Confirm instant market expulsion of all open Out-The-Money (OTM) options positions?')) {
-      const now = new Date();
-      const timeStr = now.toLocaleTimeString();
-      setEventLogs(prev => [{
-        id: `e-${Date.now()}`,
-        timestamp: timeStr,
-        tag: '[OTM_EXPEL]',
-        tagClass: 'bg-rose-950/60 text-rose-400 border border-rose-500/30',
-        message: 'OTM Liquidation sweep triggered: 18 CE/PE strikes liquidated via high-speed IOC market slice.'
-      }, ...prev]);
-      setToastMessage('All OTM options positions liquidated.');
-      setTimeout(() => setToastMessage(null), 4000);
-    }
+  const handleConfirmOTMExpel = () => {
+    setKillConfirmModal(null);
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString();
+    setEventLogs(prev => [{
+      id: `e-${Date.now()}`,
+      timestamp: timeStr,
+      tag: '[OTM_EXPEL]',
+      tagClass: 'bg-rose-950/60 text-rose-400 border border-rose-500/30',
+      message: 'OTM Liquidation sweep triggered: All open OTM options strikes liquidated via high-speed IOC market slice.'
+    }, ...prev]);
+    setToastMessage('All OTM options positions liquidated.');
+    setTimeout(() => setToastMessage(null), 4000);
   };
 
   const handleCashHedge = () => {
@@ -252,20 +289,24 @@ export const RiskEngineTerminal: React.FC<RiskEngineTerminalProps> = ({ onOpenCi
         {/* Emergency Trigger Button */}
         <div className="z-10 flex items-center">
           <button
-            onClick={handleGlobalKill}
+            onClick={handleTriggerGlobalKillModal}
             className={`w-full xl:w-auto relative group overflow-hidden px-5 py-2.5 rounded-xl text-white font-bold tracking-wide transition-all duration-300 shadow-[0_0_28px_rgba(255,59,48,0.45)] active:scale-95 flex items-center justify-center gap-3 cursor-pointer ${
-              globalKillActive ? 'bg-rose-700' : 'bg-rose-600 hover:bg-rose-500'
+              globalKillActive ? 'bg-amber-600 hover:bg-amber-500' : 'bg-rose-600 hover:bg-rose-500'
             }`}
           >
             <ShieldAlert className="w-5 h-5 text-white animate-pulse" />
             <div className="flex flex-col text-left">
               <span className="text-[10px] text-rose-200 uppercase font-bold tracking-widest">TACTICAL INTERRUPT</span>
               <span className="text-xs text-white uppercase font-extrabold tracking-wide">
-                {globalKillActive ? 'CIRCUIT BREAKER ENGAGED' : 'ENGAGE GLOBAL CIRCUIT BREAKER'}
+                {globalKillActive ? 'CIRCUIT TRIPPED (LOCKED)' : 'ENGAGE GLOBAL CIRCUIT BREAKER'}
               </span>
             </div>
-            <span className="text-[10px] bg-rose-950/80 px-2 py-0.5 rounded ml-2 uppercase font-semibold border border-rose-400/30">
-              KILL ORDERS
+            <span className={`text-[10px] px-2 py-0.5 rounded ml-2 uppercase font-semibold border ${
+              globalKillActive 
+                ? 'bg-emerald-950 text-emerald-300 border-emerald-500/40' 
+                : 'bg-rose-950/80 text-rose-200 border-rose-400/30'
+            }`}>
+              {globalKillActive ? 'CLICK TO RESET' : 'KILL ORDERS'}
             </span>
           </button>
         </div>
@@ -522,7 +563,7 @@ export const RiskEngineTerminal: React.FC<RiskEngineTerminalProps> = ({ onOpenCi
 
               {/* Action 2 */}
               <button
-                onClick={handleCloseOTM}
+                onClick={() => setKillConfirmModal('OTM_EXPEL')}
                 className="p-3 rounded-xl bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/40 text-rose-300 flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer shadow active:scale-95 text-center"
               >
                 <XCircle className="w-5 h-5 text-rose-400" />
@@ -571,6 +612,59 @@ export const RiskEngineTerminal: React.FC<RiskEngineTerminalProps> = ({ onOpenCi
           ))}
         </div>
       </div>
+
+      {/* IN-APP RISK ENGINE KILL SWITCH CONFIRMATION MODAL */}
+      {killConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-150">
+          <div className="max-w-md w-full bg-[#0d0408] border-2 border-rose-500/70 rounded-2xl p-6 shadow-[0_0_50px_rgba(244,63,94,0.4)] flex flex-col gap-4 font-mono">
+            <div className="flex items-center gap-3 text-rose-400">
+              <div className="w-10 h-10 rounded-xl bg-rose-950/80 border border-rose-500/50 flex items-center justify-center text-rose-400 shrink-0">
+                <ShieldAlert className="w-6 h-6 animate-pulse text-rose-500" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white uppercase font-display">
+                  {killConfirmModal === 'GLOBAL_KILL' ? 'GLOBAL CIRCUIT BREAKER OVERRIDE' : 'EXPEL ALL OTM OPTIONS'}
+                </h3>
+                <span className="text-[10px] text-rose-400 font-bold uppercase tracking-wider">
+                  STATUTORY SEBI CIRCUIT PROTOCOL
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed font-sans">
+              {killConfirmModal === 'GLOBAL_KILL' 
+                ? 'Engaging the master circuit breaker will immediately purge all working exchange quotes on NSE/BSE, square off open intraday derivative positions, lock portfolio delta, and divert clearing capital into overnight risk-free repo collateral.'
+                : 'Confirming this action will immediately fire high-speed IOC market slice orders to liquidate all open Out-The-Money (OTM) index and equity options contracts across active books.'
+              }
+            </p>
+
+            <div className="p-3 rounded-xl bg-rose-950/50 border border-rose-500/40 text-xs text-rose-200 font-mono">
+              {killConfirmModal === 'GLOBAL_KILL'
+                ? '[CRITICAL SAFEGUARD]: All 5 autonomous quant bots will be set to STANDBY mode.'
+                : '[EXECUTION AUDIT]: Sub-millisecond sweep through NSE co-location optical gateway.'
+              }
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                onClick={() => setKillConfirmModal(null)}
+                className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-bold transition-colors cursor-pointer"
+              >
+                ABORT & RETURN
+              </button>
+              <button
+                onClick={killConfirmModal === 'GLOBAL_KILL' ? handleConfirmGlobalKill : handleConfirmOTMExpel}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-[0_0_20px_rgba(244,63,94,0.5)] transition-all cursor-pointer active:scale-95 flex items-center gap-1.5"
+              >
+                <ShieldAlert className="w-3.5 h-3.5" />
+                <span>
+                  {killConfirmModal === 'GLOBAL_KILL' ? 'CONFIRM GLOBAL CIRCUIT KILL' : 'CONFIRM OTM LIQUIDATION'}
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

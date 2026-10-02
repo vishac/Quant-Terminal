@@ -492,12 +492,14 @@ Provide your quantitative market assessment and risk check. If data is not avail
 
 // Cache for search-grounded institutional macro intelligence
 let macroIntelligenceCache: { data: any; timestamp: number } | null = null;
-const MACRO_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache
+const MACRO_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes cache
+let macroApiCooldownUntil = 0; // Cooldown timestamp when upstream quota limit is hit
 
 // Search-Grounded Institutional Macro Threat & News Intelligence API
 app.get('/api/macro/intelligence', async (req, res) => {
   const forceRefresh = req.query.refresh === 'true';
   const now = Date.now();
+  const isCooldownActive = now < macroApiCooldownUntil;
 
   if (!forceRefresh && macroIntelligenceCache && (now - macroIntelligenceCache.timestamp < MACRO_CACHE_TTL_MS)) {
     return res.json({
@@ -621,7 +623,7 @@ CRITICAL INSTRUCTIONS:
     }
   }
 
-  if (client) {
+  if (client && !isCooldownActive) {
     try {
       const response = await client.models.generateContent({
         model: 'gemini-3.8-flash',
@@ -664,7 +666,17 @@ CRITICAL INSTRUCTIONS:
         data: parsed,
       });
     } catch (err: any) {
-      console.warn('[Server Macro Intelligence] Grounded generation warning, serving baseline:', err.message);
+      if (
+        err?.status === 429 ||
+        err?.message?.includes('429') ||
+        err?.message?.includes('quota') ||
+        err?.message?.includes('RESOURCE_EXHAUSTED')
+      ) {
+        macroApiCooldownUntil = now + 15 * 60 * 1000;
+        console.log('[Server Macro Intelligence] Note: Upstream API rate limit reached. Transitioning smoothly to quantitative baseline engine (15m window).');
+      } else {
+        console.log('[Server Macro Intelligence] Note: Serving quantitative baseline data.');
+      }
     }
   }
 
