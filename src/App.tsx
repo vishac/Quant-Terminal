@@ -1,0 +1,244 @@
+import React, { useState } from 'react';
+import { ActiveTab } from './types/quant';
+import { Sidebar } from './components/Sidebar';
+import { Header, UserRole } from './components/Header';
+import { ViewerDashboard } from './components/ViewerDashboard';
+import { JarvisVoiceHUD } from './components/JarvisVoiceHUD';
+import { QuantTerminal3D } from './components/QuantTerminal3D';
+import { MacroPolicyThesis } from './components/MacroPolicyThesis';
+import { BrokerGatewayRouter } from './components/BrokerGatewayRouter';
+import { RiskEngineTerminal } from './components/RiskEngineTerminal';
+import { SettingsTerminal } from './components/SettingsTerminal';
+import { InstitutionalEquityRadar } from './components/InstitutionalEquityRadar';
+import { AutonomousAgentsDesk } from './components/AutonomousAgentsDesk';
+import { CircuitBreakerModal } from './components/CircuitBreakerModal';
+import { OfflineIndicator } from './components/OfflineIndicator';
+import { Radio, Eye, Shield } from 'lucide-react';
+
+export default function App() {
+  const [userRole, setUserRoleState] = useState<UserRole>(() => {
+    try {
+      return (localStorage.getItem('jarvis_user_role') as UserRole) || 'viewer';
+    } catch {
+      return 'viewer';
+    }
+  });
+
+  const setUserRole = (role: UserRole) => {
+    setUserRoleState(role);
+    try {
+      localStorage.setItem('jarvis_user_role', role);
+    } catch {
+      // ignore
+    }
+  };
+
+  const [activeTab, setActiveTab] = useState<ActiveTab>('quant_bot');
+  const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
+  const [isCircuitBreakerOpen, setIsCircuitBreakerOpen] = useState<boolean>(false);
+  const [systemAlertMessage, setSystemAlertMessage] = useState<string | null>(null);
+
+  const handleToggleVoiceBriefing = () => {
+    if (!('speechSynthesis' in window)) {
+      setSystemAlertMessage('Speech synthesis is not supported on this browser.');
+      setTimeout(() => setSystemAlertMessage(null), 4000);
+      return;
+    }
+
+    if (isSpeaking) {
+      window.speechSynthesis.cancel();
+      setIsSpeaking(false);
+    } else {
+      const summary = `Good morning Sir. Live market telemetry is active. All autonomous risk circuits are armed and fully compliant with SEBI peak margin rules.`;
+      const utterance = new SpeechSynthesisUtterance(summary);
+      utterance.rate = 1.05;
+      utterance.pitch = 0.95;
+
+      const voices = window.speechSynthesis.getVoices();
+      const preferredVoice = voices.find(v => v.lang.includes('en-GB') || v.name.includes('UK') || v.name.includes('Daniel'));
+      if (preferredVoice) utterance.voice = preferredVoice;
+
+      utterance.onstart = () => setIsSpeaking(true);
+      utterance.onend = () => setIsSpeaking(false);
+      utterance.onerror = () => setIsSpeaking(false);
+
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
+  const handleExecuteCircuitBreaker = (tier: string) => {
+    setSystemAlertMessage(`Statutory Circuit Breaker Routine [${tier.toUpperCase()}] executed. Portfolio delta neutralized across NSE/MCX.`);
+    setTimeout(() => {
+      setSystemAlertMessage(null);
+    }, 6000);
+  };
+
+  return (
+    <div className="min-h-screen bg-[#060913] text-slate-100 flex antialiased selection:bg-cyan-500/30 selection:text-cyan-200">
+      {/* Fixed Left Sidebar: Only displayed in Admin / Operations mode */}
+      {userRole === 'admin' && (
+        <div className="hidden lg:block">
+          <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+        </div>
+      )}
+
+      {/* Main Workspace Frame (Offset by 64 on desktop when in admin mode) */}
+      <div className={`flex-1 flex flex-col min-w-0 ${userRole === 'admin' ? 'lg:pl-64' : ''}`}>
+        {/* Fixed Top Telemetry Ribbon Header with Role Switcher */}
+        <Header
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          isSpeaking={isSpeaking}
+          onToggleVoiceBriefing={handleToggleVoiceBriefing}
+          onOpenCircuitBreaker={() => setIsCircuitBreakerOpen(true)}
+          userRole={userRole}
+          setUserRole={setUserRole}
+        />
+
+        {/* System Alert Banner */}
+        {systemAlertMessage && (
+          <div className="mx-4 sm:mx-6 mt-20 p-3 rounded-xl bg-amber-950/40 border border-amber-500/40 text-xs font-mono text-amber-200 flex items-center justify-between animate-in slide-in-from-top-2 duration-300">
+            <div className="flex items-center gap-2">
+              <Radio className="w-4 h-4 text-amber-400 animate-pulse" />
+              <span>{systemAlertMessage}</span>
+            </div>
+            <button
+              onClick={() => setSystemAlertMessage(null)}
+              className="text-amber-400 hover:text-amber-200 underline text-[11px]"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
+        {/* Viewport Content */}
+        <main className={`flex-1 w-full max-w-[1720px] mx-auto px-3.5 sm:px-6 pt-20 ${userRole === 'viewer' ? 'pb-8' : 'pb-24 lg:pb-8'}`}>
+          {userRole === 'viewer' ? (
+            /* VIEWER MODE: Clean, lightweight, instant, 100% authentic market numbers */
+            <ViewerDashboard />
+          ) : (
+            /* OWNER / ADMIN MODE: Advanced operational quant desks, broker sync & risk engine */
+            <>
+              {activeTab === 'voice_hud' && (
+                <JarvisVoiceHUD
+                  isSpeaking={isSpeaking}
+                  setIsSpeaking={setIsSpeaking}
+                  onOpenCircuitBreaker={() => setIsCircuitBreakerOpen(true)}
+                />
+              )}
+
+              {activeTab === 'quant_bot' && (
+                <QuantTerminal3D onNavigateToAgents={() => setActiveTab('autonomous_agents')} />
+              )}
+
+              {activeTab === 'autonomous_agents' && (
+                <AutonomousAgentsDesk onOpenCircuitBreaker={() => setIsCircuitBreakerOpen(true)} />
+              )}
+
+              {activeTab === 'equity_radar' && <InstitutionalEquityRadar />}
+
+              {activeTab === 'deep_thesis' && <MacroPolicyThesis />}
+
+              {activeTab === 'sync_hub' && <BrokerGatewayRouter />}
+
+              {activeTab === 'risk_engine' && (
+                <RiskEngineTerminal onOpenCircuitBreaker={() => setIsCircuitBreakerOpen(true)} />
+              )}
+
+              {activeTab === 'settings' && <SettingsTerminal />}
+            </>
+          )}
+        </main>
+      </div>
+
+      {/* Mobile Bottom Navigation Bar (Operational tabs for Owner/Admin only) */}
+      {userRole === 'admin' && (
+        <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 h-16 bg-[#090e19]/95 backdrop-blur-2xl border-t border-cyan-500/20 shadow-[0_-4px_24px_rgba(0,0,0,0.8)] flex items-center justify-around px-2 font-mono">
+          <div className="flex items-center justify-around w-full overflow-x-auto no-scrollbar py-1">
+            <button
+              onClick={() => setActiveTab('quant_bot')}
+              className={`flex flex-col items-center justify-center min-w-[50px] h-12 rounded-xl transition-all ${
+                activeTab === 'quant_bot'
+                  ? 'text-cyan-300 bg-cyan-950/40 border border-cyan-500/40 font-bold'
+                  : 'text-slate-400'
+              }`}
+            >
+              <span className="material-symbols-outlined text-[18px]">monitoring</span>
+              <span className="text-[8px] uppercase tracking-wider mt-0.5">Quant</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('autonomous_agents')}
+              className={`flex flex-col items-center justify-center min-w-[50px] h-12 rounded-xl transition-all ${
+                activeTab === 'autonomous_agents'
+                  ? 'text-cyan-300 bg-cyan-950/40 border border-cyan-500/40 font-bold'
+                  : 'text-slate-400'
+              }`}
+            >
+              <span className="material-symbols-outlined text-[18px]">group_work</span>
+              <span className="text-[8px] uppercase tracking-wider mt-0.5">5-Agents</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('equity_radar')}
+              className={`flex flex-col items-center justify-center min-w-[50px] h-12 rounded-xl transition-all ${
+                activeTab === 'equity_radar'
+                  ? 'text-cyan-300 bg-cyan-950/40 border border-cyan-500/40 font-bold'
+                  : 'text-slate-400'
+              }`}
+            >
+              <span className="material-symbols-outlined text-[18px]">candlestick_chart</span>
+              <span className="text-[8px] uppercase tracking-wider mt-0.5">Radar</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('risk_engine')}
+              className={`flex flex-col items-center justify-center min-w-[50px] h-12 rounded-xl transition-all ${
+                activeTab === 'risk_engine'
+                  ? 'text-cyan-300 bg-cyan-950/40 border border-cyan-500/40 font-bold'
+                  : 'text-slate-400'
+              }`}
+            >
+              <span className="material-symbols-outlined text-[18px]">security</span>
+              <span className="text-[8px] uppercase tracking-wider mt-0.5">Risk</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('sync_hub')}
+              className={`flex flex-col items-center justify-center min-w-[50px] h-12 rounded-xl transition-all ${
+                activeTab === 'sync_hub'
+                  ? 'text-cyan-300 bg-cyan-950/40 border border-cyan-500/40 font-bold'
+                  : 'text-slate-400'
+              }`}
+            >
+              <span className="material-symbols-outlined text-[18px]">hub</span>
+              <span className="text-[8px] uppercase tracking-wider mt-0.5">Sync</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('voice_hud')}
+              className={`flex flex-col items-center justify-center min-w-[50px] h-12 rounded-xl transition-all ${
+                activeTab === 'voice_hud'
+                  ? 'text-cyan-300 bg-cyan-950/40 border border-cyan-500/40 font-bold'
+                  : 'text-slate-400'
+              }`}
+            >
+              <span className="material-symbols-outlined text-[18px]">mic</span>
+              <span className="text-[8px] uppercase tracking-wider mt-0.5">Voice</span>
+            </button>
+          </div>
+        </nav>
+      )}
+
+      {/* Circuit Breaker Modal */}
+      <CircuitBreakerModal
+        isOpen={isCircuitBreakerOpen}
+        onClose={() => setIsCircuitBreakerOpen(false)}
+        onExecuteBreaker={handleExecuteCircuitBreaker}
+      />
+
+      {/* PWA Offline Network Indicator */}
+      <OfflineIndicator />
+    </div>
+  );
+}

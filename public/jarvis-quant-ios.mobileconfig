@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>PayloadContent</key>
+    <array>
+        <dict>
+            <key>FullScreen</key>
+            <true/>
+            <key>Icon</key>
+            <data>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</data>
+            <key>IsRemovable</key>
+            <true/>
+            <key>Label</key>
+            <string>JARVIS Quant</string>
+            <key>PayloadDescription</key>
+            <string>Configures Standalone App Web Clip for J.A.R.V.I.S. Institutional Quant Terminal</string>
+            <key>PayloadDisplayName</key>
+            <string>JARVIS Quant Terminal WebClip</string>
+            <key>PayloadIdentifier</key>
+            <string>com.jarvis.quant.webclip</string>
+            <key>PayloadType</key>
+            <string>com.apple.webClip.managed</string>
+            <key>PayloadUUID</key>
+            <string>B6C3A401-D181-45F6-6F9F-005155244201</string>
+            <key>PayloadVersion</key>
+            <integer>1</integer>
+            <key>Precomposed</key>
+            <true/>
+            <key>URL</key>
+            <string>https://ais-pre-vukfnptjjqdoqpnhegsft2-932561199131.asia-southeast1.run.app</string>
+        </dict>
+    </array>
+    <key>PayloadDisplayName</key>
+    <string>J.A.R.V.I.S. Quant Terminal</string>
+    <key>PayloadIdentifier</key>
+    <string>com.jarvis.quant.profile</string>
+    <key>PayloadOrganization</key>
+    <string>J.A.R.V.I.S. Quantitative Systems</string>
+    <key>PayloadRemovalDisallowed</key>
+    <false/>
+    <key>PayloadType</key>
+    <string>Configuration</string>
+    <key>PayloadUUID</key>
+    <string>B6C3A402-D181-45F6-6F9F-005155244202</string>
+    <key>PayloadVersion</key>
+    <integer>1</integer>
+</dict>
+</plist>

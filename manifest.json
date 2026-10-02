@@ -1,0 +1,33 @@
+{
+  "id": "/",
+  "name": "J.A.R.V.I.S. Institutional Quant Terminal",
+  "short_name": "JARVIS Quant",
+  "description": "Executive AI financial assistant, 3D volatility matrix, real-time risk engine, macro policy thesis generator, and broker feed router.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#060913",
+  "theme_color": "#060913",
+  "lang": "en",
+  "icons": [
+    {
+      "src": "/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
