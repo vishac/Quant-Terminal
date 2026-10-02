@@ -140,6 +140,7 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
   // 4. LONG_DELIVERY (Institutional Long Delivery & Script Decision Dossier)
   const [decisionViewMode, setDecisionViewMode] = useState<'OPTION_CHAIN' | 'PAYOFF' | 'SETUPS' | 'LONG_DELIVERY'>('OPTION_CHAIN');
   const [selectedDeliveryScript, setSelectedDeliveryScript] = useState<'TRENT' | 'LT' | 'NIFTY'>('TRENT');
+  const [showDecisionInfo, setShowDecisionInfo] = useState<boolean>(false);
 
   // Option Chain controls
   const [strikeRangeFilter, setStrikeRangeFilter] = useState<'TIGHT' | 'STANDARD' | 'WIDE'>('STANDARD');
@@ -682,6 +683,31 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                       LIVE OI
                     </span>
+                    <div className="relative">
+                      <button
+                        onClick={() => setShowDecisionInfo(!showDecisionInfo)}
+                        className="p-1 rounded-lg bg-slate-900/80 hover:bg-slate-800 text-slate-400 hover:text-cyan-300 border border-slate-800 hover:border-cyan-500/40 transition-colors cursor-pointer"
+                        title="Decision Engine Architecture & Strike Analytics"
+                      >
+                        <Info className="w-3.5 h-3.5 text-cyan-400" />
+                      </button>
+                      {showDecisionInfo && (
+                        <div className="absolute left-0 top-8 z-30 w-80 sm:w-96 p-3.5 rounded-xl bg-[#090e19] border border-cyan-500/40 shadow-2xl text-xs font-mono text-slate-300 leading-relaxed animate-in fade-in duration-150">
+                          <div className="flex items-center justify-between pb-1.5 border-b border-slate-800 mb-2">
+                            <span className="font-bold text-[10px] text-cyan-300 uppercase">Option Chain Decision Model</span>
+                            <button onClick={() => setShowDecisionInfo(false)} className="text-slate-400 hover:text-white cursor-pointer">
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          <p className="text-[11px] text-slate-300 font-sans">
+                            Strikes are calculated in real time around the active spot price. Open Interest (OI) buildup classifies market behavior into <strong>Long Buildup</strong>, <strong>Short Buildup</strong>, <strong>Short Covering</strong>, and <strong>Long Unwinding</strong> with sub-millisecond pre-trade SPAN + Exposure margin verification.
+                          </p>
+                          <div className="mt-2 pt-2 border-t border-slate-800/80 text-[10px] text-emerald-400">
+                            ✓ Direct exchange tick feeds · Zero mock telemetry
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <p className="text-[10px] text-slate-400 tracking-wider uppercase mt-0.5">
                     PEGGED TO NIFTY SPOT ₹{niftySpot.toLocaleString('en-IN', { minimumFractionDigits: 2 })} • ATM: {atmStrike} • VIX: {vixVal.toFixed(2)}

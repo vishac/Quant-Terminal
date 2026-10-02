@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ActiveTab } from './types/quant';
 import { Sidebar } from './components/Sidebar';
 import { Header, UserRole } from './components/Header';
@@ -37,6 +37,25 @@ export default function App() {
   const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
   const [isCircuitBreakerOpen, setIsCircuitBreakerOpen] = useState<boolean>(false);
   const [systemAlertMessage, setSystemAlertMessage] = useState<string | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
+
+  // Global Keyboard Shortcut: Press 'c' or 'C' to toggle left panel
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        e.target instanceof HTMLSelectElement
+      ) {
+        return;
+      }
+      if (e.key === 'c' || e.key === 'C') {
+        setIsSidebarOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const handleToggleVoiceBriefing = () => {
     if (!('speechSynthesis' in window)) {
@@ -75,16 +94,27 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#060913] text-slate-100 flex antialiased selection:bg-cyan-500/30 selection:text-cyan-200">
-      {/* Fixed Left Sidebar: Only displayed in Admin / Operations mode */}
+      {/* Fixed Left Sidebar: Only displayed in Admin / Operations mode, collapsible via 'c' or breadcrumb button */}
       {userRole === 'admin' && (
-        <div className="hidden lg:block">
-          <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+        <div 
+          className={`fixed left-0 top-0 h-full z-50 transition-transform duration-300 ease-in-out ${
+            isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+          }`}
+        >
+          <Sidebar 
+            activeTab={activeTab} 
+            setActiveTab={setActiveTab} 
+            isOpen={isSidebarOpen}
+            onToggle={() => setIsSidebarOpen(false)}
+          />
         </div>
       )}
 
-      {/* Main Workspace Frame (Offset by 64 on desktop when in admin mode) */}
-      <div className={`flex-1 flex flex-col min-w-0 ${userRole === 'admin' ? 'lg:pl-64' : ''}`}>
-        {/* Fixed Top Telemetry Ribbon Header with Role Switcher */}
+      {/* Main Workspace Frame (Smoothly offsets by 64 on desktop when in admin mode AND sidebar is open) */}
+      <div className={`flex-1 flex flex-col min-w-0 transition-all duration-300 ease-in-out ${
+        userRole === 'admin' && isSidebarOpen ? 'lg:pl-64' : 'lg:pl-0'
+      }`}>
+        {/* Fixed Top Telemetry Ribbon Header with Role Switcher & Breadcrumb Toggle */}
         <Header
           activeTab={activeTab}
           setActiveTab={setActiveTab}
@@ -93,6 +123,8 @@ export default function App() {
           onOpenCircuitBreaker={() => setIsCircuitBreakerOpen(true)}
           userRole={userRole}
           setUserRole={setUserRole}
+          isSidebarOpen={isSidebarOpen}
+          onToggleSidebar={() => setIsSidebarOpen(prev => !prev)}
         />
 
         {/* System Alert Banner */}

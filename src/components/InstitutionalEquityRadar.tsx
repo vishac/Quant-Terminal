@@ -35,7 +35,8 @@ import {
   Scale,
   Compass,
   Award,
-  BookOpen
+  BookOpen,
+  Info
 } from 'lucide-react';
 
 type ViewMode = 'TABLE_MATRIX' | 'SPLIT_DOSSIER';
@@ -62,6 +63,7 @@ export const InstitutionalEquityRadar: React.FC = () => {
 
   // Notifications
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [showRadarInfo, setShowRadarInfo] = useState<boolean>(false);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
   // Daily Daemon status
@@ -210,12 +212,36 @@ export const InstitutionalEquityRadar: React.FC = () => {
               </span>
             </div>
 
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-cyan-100 tracking-tight font-sans flex items-center gap-2">
-              INSTITUTIONAL STRATEGY RADAR & CONVICTION MATRIX
-            </h1>
-            <p className="text-xs text-slate-300/90 mt-1 max-w-3xl font-sans leading-relaxed">
-              Every stock in this universe is strictly quantified across 5 orthogonal strategies: <strong className="text-slate-100">Order Flow (20%)</strong>, <strong className="text-slate-100">Momentum / CANSLIM (25%)</strong>, <strong className="text-slate-100">Fundamental QARP (25%)</strong>, <strong className="text-slate-100">Risk-Reward Asymmetry (15%)</strong>, and <strong className="text-slate-100">Sovereign Moat (15%)</strong>. All Last Traded Prices (LTP) stream directly from exchange tick feeds with <strong className="text-emerald-400 font-bold">0 Gemini API credits consumed</strong>.
-            </p>
+            <div className="flex items-center gap-2.5">
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-cyan-100 tracking-tight font-sans">
+                INSTITUTIONAL STRATEGY RADAR & CONVICTION MATRIX
+              </h1>
+              <div className="relative">
+                <button
+                  onClick={() => setShowRadarInfo(!showRadarInfo)}
+                  className="p-1.5 rounded-lg bg-slate-900/80 hover:bg-slate-800 text-slate-400 hover:text-cyan-300 border border-slate-800 hover:border-cyan-500/40 transition-colors cursor-pointer"
+                  title="5-Factor Quantitative Methodology & Model Weights"
+                >
+                  <Info className="w-4 h-4 text-cyan-400" />
+                </button>
+                {showRadarInfo && (
+                  <div className="absolute left-0 top-9 z-30 w-80 sm:w-96 p-3.5 rounded-xl bg-[#090e19] border border-cyan-500/40 shadow-2xl text-xs font-sans text-slate-300 leading-relaxed animate-in fade-in duration-150">
+                    <div className="flex items-center justify-between pb-1.5 border-b border-slate-800 mb-2">
+                      <span className="font-mono font-bold text-[10px] text-cyan-300 uppercase">5-Factor Strategy Weights</span>
+                      <button onClick={() => setShowRadarInfo(false)} className="text-slate-400 hover:text-white cursor-pointer">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-slate-300">
+                      Every stock in this universe is strictly quantified across 5 orthogonal strategies: <strong className="text-cyan-300">Order Flow (20%)</strong>, <strong className="text-cyan-300">Momentum / CANSLIM (25%)</strong>, <strong className="text-cyan-300">Fundamental QARP (25%)</strong>, <strong className="text-cyan-300">Risk-Reward Asymmetry (15%)</strong>, and <strong className="text-cyan-300">Sovereign Moat (15%)</strong>.
+                    </p>
+                    <div className="mt-2 pt-2 border-t border-slate-800/80 text-[10px] text-emerald-400 font-mono">
+                      ✓ Direct exchange tick feeds · 0 Gemini API credits consumed
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">

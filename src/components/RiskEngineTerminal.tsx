@@ -1,6 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
-import * as THREE from 'three';
+import React, { useEffect, useState } from 'react';
 import { useMarketWebSocket } from '../services/useMarketWebSocket';
+import { MacroThreatIntelligenceMatrix } from './MacroThreatIntelligenceMatrix';
 import { 
   ShieldAlert, 
   ShieldCheck, 
@@ -115,217 +115,6 @@ export const RiskEngineTerminal: React.FC<RiskEngineTerminalProps> = ({ onOpenCi
       message: 'Sub-millisecond micro-hedge matched 40 lots NIFTY PE 24,500. Portfolio delta recentered from +0.28 to +0.12.'
     }
   ]);
-
-  const containerRef = useRef<HTMLDivElement>(null);
-  const tooltipRef = useRef<HTMLDivElement>(null);
-
-  // 3D Risk Geodesic Containment Sphere with Three.js
-  useEffect(() => {
-    const containerEl = containerRef.current;
-    if (!containerEl) return;
-
-    const width = containerEl.clientWidth || 700;
-    const height = containerEl.clientHeight || 420;
-
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(46, width / height, 0.1, 1000);
-    camera.position.set(0, 4, 28);
-
-    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-    renderer.setSize(width, height);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    containerEl.innerHTML = '';
-    containerEl.appendChild(renderer.domElement);
-
-    // Inner Risk Polyhedron: Icosahedron / Geodesic Sphere
-    const coreGeo = new THREE.IcosahedronGeometry(4.2, 2);
-    const coreMat = new THREE.MeshBasicMaterial({
-      color: 0x00f0ff,
-      wireframe: true,
-      transparent: true,
-      opacity: 0.35,
-    });
-    const coreMesh = new THREE.Mesh(coreGeo, coreMat);
-    scene.add(coreMesh);
-
-    // Outer Circuit-Breaker Containment Shield
-    const shieldGeo = new THREE.IcosahedronGeometry(6.4, 1);
-    const shieldMat = new THREE.MeshBasicMaterial({
-      color: 0xff3b30,
-      wireframe: true,
-      transparent: true,
-      opacity: 0.2,
-    });
-    const shieldMesh = new THREE.Mesh(shieldGeo, shieldMat);
-    scene.add(shieldMesh);
-
-    // Orbiting Volatility Horizon Rings (Threshold Gauges)
-    const ringGeo1 = new THREE.TorusGeometry(8.5, 0.08, 16, 80);
-    const ringMat1 = new THREE.MeshBasicMaterial({ color: 0x00f0ff, transparent: true, opacity: 0.5 });
-    const ringMesh1 = new THREE.Mesh(ringGeo1, ringMat1);
-    ringMesh1.rotation.x = Math.PI / 2.3;
-    scene.add(ringMesh1);
-
-    const ringGeo2 = new THREE.TorusGeometry(7.2, 0.06, 16, 80);
-    const ringMat2 = new THREE.MeshBasicMaterial({ color: 0xffb800, transparent: true, opacity: 0.4 });
-    const ringMesh2 = new THREE.Mesh(ringGeo2, ringMat2);
-    ringMesh2.rotation.y = Math.PI / 3;
-    scene.add(ringMesh2);
-
-    const ringGeo3 = new THREE.TorusGeometry(9.6, 0.05, 16, 80);
-    const ringMat3 = new THREE.MeshBasicMaterial({ color: 0xff3b30, transparent: true, opacity: 0.35, wireframe: true });
-    const ringMesh3 = new THREE.Mesh(ringGeo3, ringMat3);
-    ringMesh3.rotation.z = Math.PI / 4;
-    scene.add(ringMesh3);
-
-    // Dynamic Particle Swarm for Liquidity & Margin Flow
-    const particleCount = 1000;
-    const pGeo = new THREE.BufferGeometry();
-    const pPos = new Float32Array(particleCount * 3);
-    const pColors = new Float32Array(particleCount * 3);
-    const pVelocities: any[] = [];
-
-    const colCyan = new THREE.Color(0x00f0ff);
-    const colAlert = new THREE.Color(0xff3b30);
-    const colAmber = new THREE.Color(0xffb800);
-
-    for (let i = 0; i < particleCount; i++) {
-      const radius = 3.8 + Math.random() * 8.5;
-      const theta = Math.random() * Math.PI * 2;
-      const phi = Math.acos(Math.random() * 2 - 1);
-
-      pPos[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
-      pPos[i * 3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
-      pPos[i * 3 + 2] = radius * Math.cos(phi);
-
-      const c = Math.random() > 0.75 ? colAlert : Math.random() > 0.4 ? colCyan : colAmber;
-      pColors[i * 3] = c.r;
-      pColors[i * 3 + 1] = c.g;
-      pColors[i * 3 + 2] = c.b;
-
-      pVelocities.push({
-        speed: 0.008 + Math.random() * 0.018,
-        axis: new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize(),
-      });
-    }
-    pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
-    pGeo.setAttribute('color', new THREE.BufferAttribute(pColors, 3));
-
-    // Particle Canvas Sprite
-    const canvas = document.createElement('canvas');
-    canvas.width = 64;
-    canvas.height = 64;
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-      const grad = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-      grad.addColorStop(0, 'rgba(255, 255, 255, 1)');
-      grad.addColorStop(0.3, 'rgba(0, 240, 255, 0.85)');
-      grad.addColorStop(0.65, 'rgba(0, 100, 255, 0.3)');
-      grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      ctx.arc(32, 32, 32, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    const pTex = new THREE.CanvasTexture(canvas);
-    const pMat = new THREE.PointsMaterial({
-      size: 1.25,
-      map: pTex,
-      vertexColors: true,
-      transparent: true,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    });
-    const particles = new THREE.Points(pGeo, pMat);
-    scene.add(particles);
-
-    let mouseX = 0, mouseY = 0;
-    let targetX = 0, targetY = 0;
-
-    const onPointer = (e: MouseEvent | TouchEvent) => {
-      const rect = containerEl.getBoundingClientRect();
-      const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-      const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-
-      mouseX = (clientX - (rect.left + rect.width / 2)) * 0.0006;
-      mouseY = (clientY - (rect.top + rect.height / 2)) * 0.0006;
-    };
-
-    containerEl.addEventListener('mousemove', onPointer);
-    containerEl.addEventListener('touchmove', onPointer, { passive: true });
-
-    const onResize = () => {
-      const w = containerEl.clientWidth || 700;
-      const h = containerEl.clientHeight || 420;
-      camera.aspect = w / h;
-      camera.updateProjectionMatrix();
-      renderer.setSize(w, h);
-    };
-    window.addEventListener('resize', onResize);
-
-    const clock = new THREE.Clock();
-    let reqId: number;
-
-    const animate = () => {
-      reqId = requestAnimationFrame(animate);
-      const t = clock.getElapsedTime();
-
-      targetX += (mouseX - targetX) * 0.05;
-      targetY += (mouseY - targetY) * 0.05;
-      camera.position.x = targetX * 16;
-      camera.position.y = 4 - targetY * 10;
-      camera.lookAt(0, 0, 0);
-
-      coreMesh.rotation.y = t * 0.22;
-      coreMesh.rotation.x = t * 0.15;
-      const coreScale = 1.0 + Math.sin(t * 2.8) * 0.06;
-      coreMesh.scale.set(coreScale, coreScale, coreScale);
-
-      shieldMesh.rotation.y = -t * 0.12;
-      shieldMesh.rotation.z = t * 0.09;
-      const shieldScale = 1.0 + Math.cos(t * 1.9) * 0.04;
-      shieldMesh.scale.set(shieldScale, shieldScale, shieldScale);
-
-      ringMesh1.rotation.z += 0.009;
-      ringMesh2.rotation.x += 0.012;
-      ringMesh3.rotation.y += 0.007;
-
-      const pos = pGeo.attributes.position.array as Float32Array;
-      for (let idx = 0; idx < particleCount; idx++) {
-        const v = pVelocities[idx];
-        const pVec = new THREE.Vector3(pos[idx * 3], pos[idx * 3 + 1], pos[idx * 3 + 2]);
-        pVec.applyAxisAngle(v.axis, v.speed);
-        pos[idx * 3] = pVec.x;
-        pos[idx * 3 + 1] = pVec.y;
-        pos[idx * 3 + 2] = pVec.z;
-      }
-      pGeo.attributes.position.needsUpdate = true;
-
-      renderer.render(scene, camera);
-    };
-    animate();
-
-    return () => {
-      cancelAnimationFrame(reqId);
-      containerEl.removeEventListener('mousemove', onPointer);
-      window.removeEventListener('resize', onResize);
-      coreGeo.dispose();
-      coreMat.dispose();
-      shieldGeo.dispose();
-      shieldMat.dispose();
-      ringGeo1.dispose();
-      ringMat1.dispose();
-      ringGeo2.dispose();
-      ringMat2.dispose();
-      ringGeo3.dispose();
-      ringMat3.dispose();
-      pGeo.dispose();
-      pMat.dispose();
-      pTex.dispose();
-      renderer.dispose();
-    };
-  }, []);
 
   const handleGlobalKill = () => {
     if (confirm('TACTICAL OVERRIDE: Engaging Global Circuit Breaker will immediately purge all live working quotes on NSE/BSE and lock synthetic hedges. Confirm emergency kill?')) {
@@ -493,61 +282,22 @@ export const RiskEngineTerminal: React.FC<RiskEngineTerminalProps> = ({ onOpenCi
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left Column: 3D Geodesic Containment & Stress VaR Matrix (7/12 desktop) */}
         <div className="lg:col-span-7 flex flex-col gap-6">
-          {/* 3D Risk Geodesic Containment Canvas Pod */}
-          <div className="relative bg-[#080d1a]/95 rounded-2xl p-5 border border-cyan-500/20 shadow-xl overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800 text-xs">
-              <div className="flex items-center gap-2">
-                <span className="text-cyan-300 uppercase tracking-widest font-semibold">// SEC-04::CORE_RISK_GEODESIC</span>
-                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="text-slate-400">LATTICE: SPHERICAL-VaR</span>
-                <span className="bg-slate-900 border border-slate-800 px-2 py-0.5 rounded text-emerald-400 uppercase font-bold">
-                  SYS_OK
-                </span>
-              </div>
-            </div>
-
-            {/* Geodesic 3D Viewport with HUD Overlays */}
-            <div className="relative w-full h-[400px] rounded-xl overflow-hidden bg-[#060c18] border border-cyan-500/20 shadow-inner flex items-center justify-center mt-3">
-              {/* Three.js Canvas container */}
-              <div ref={containerRef} className="w-full h-full" />
-
-              {/* Floating Brackets Top-Left */}
-              <div className="absolute top-3 left-3 pointer-events-none flex flex-col gap-1 bg-slate-950/85 backdrop-blur-md p-2.5 rounded-lg border border-slate-800 text-[10px]">
-                <div className="flex items-center gap-2">
-                  <span className="text-cyan-300 font-bold uppercase">3D_CONTAINMENT_SURFACE</span>
-                  <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
-                </div>
-                <span className="text-slate-400">TENSOR: 128-VERTEX MONTE CARLO</span>
-                <span className="text-emerald-400 font-semibold">EQUILIBRIUM: NOMINAL (0.04% DRIFT)</span>
-              </div>
-
-              {/* Top-Right Chip */}
-              <div className="absolute top-3 right-3 pointer-events-none flex items-center gap-3 bg-slate-950/85 backdrop-blur-md px-2.5 py-1 rounded-lg border border-slate-800 text-[10px]">
-                <div className="flex items-center gap-1">
-                  <span className="text-slate-400">FPS:</span>
-                  <span className="text-cyan-300 font-bold">59.8</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className="text-slate-400">MEM:</span>
-                  <span className="text-cyan-300">42MB</span>
-                </div>
-              </div>
-
-              {/* Bottom Tactical Interaction HUD */}
-              <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between pointer-events-none text-[10px]">
-                <div className="bg-slate-950/85 backdrop-blur-md px-3 py-1.5 rounded-lg border border-slate-800 flex items-center gap-2 text-cyan-300 font-bold">
-                  <Crosshair className="w-3.5 h-3.5" />
-                  <span>TAP CORE FOR STRESS VaR TOOLTIP</span>
-                </div>
-                <div className="bg-slate-950/85 backdrop-blur-md px-3 py-1.5 rounded-lg border border-slate-800 flex items-center gap-2 text-slate-300">
-                  <span>PARAMETRIC CONVERGENCE:</span>
-                  <span className="text-emerald-400 font-bold">0.9998</span>
-                </div>
-              </div>
-            </div>
-          </div>
+          {/* Live Global Macro Threat & Grounded AI Intelligence Matrix (Replaces decorative 3D canvas) */}
+          <MacroThreatIntelligenceMatrix 
+            onStageHedge={(actionTitle, detail) => {
+              const now = new Date();
+              const timeStr = now.toLocaleTimeString();
+              setEventLogs(prev => [{
+                id: `e-${Date.now()}`,
+                timestamp: timeStr,
+                tag: '[MACRO_HEDGE]',
+                tagClass: 'bg-cyan-950/60 text-cyan-300 border border-cyan-500/30',
+                message: `Grounded Tactical Hedge [${actionTitle}]: ${detail}. Verified against SEBI margin invariants.`
+              }, ...prev]);
+              setToastMessage(`Tactical Hedge Staged: ${actionTitle}`);
+              setTimeout(() => setToastMessage(null), 4000);
+            }}
+          />
 
           {/* Real-time Value at Risk (VaR) & Expected Shortfall Matrix */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

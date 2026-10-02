@@ -22,7 +22,8 @@ import {
   Edit3, 
   Trash2, 
   X,
-  Check
+  Check,
+  Info
 } from 'lucide-react';
 import { 
   NSE_BSE_HOLIDAYS_2026,
@@ -94,6 +95,7 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({ onOp
   const [isScanning, setIsScanning] = useState<boolean>(false);
   const [allBotsArmed, setAllBotsArmed] = useState<boolean>(true);
   const [agentStatusOverrides, setAgentStatusOverrides] = useState<Record<string, 'ACTIVE_HEDGING' | 'STANDBY_RULES'>>({});
+  const [showDeskInfo, setShowDeskInfo] = useState<boolean>(false);
 
   // Persist orders to localStorage
   useEffect(() => {
@@ -224,15 +226,39 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({ onOp
               <Bot className="w-6 h-6" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-slate-100 flex items-center gap-2 font-display">
-                <span>Autonomous Multi-Agent Quant & Hedge Desk</span>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950/60 border border-emerald-500/40 text-emerald-400 font-bold">
-                  SEBI / NSE / MCX COMPLIANT
-                </span>
-              </h2>
-              <p className="text-xs text-slate-400">
-                5 specialized strategy bots executing strictly defined-risk positions with zero naked exposures and mathematical asymmetry.
-              </p>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-bold text-slate-100 flex items-center gap-2 font-display">
+                  <span>Autonomous Multi-Agent Quant & Hedge Desk</span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950/60 border border-emerald-500/40 text-emerald-400 font-bold">
+                    SEBI / NSE / MCX COMPLIANT
+                  </span>
+                </h2>
+                <div className="relative">
+                  <button
+                    onClick={() => setShowDeskInfo(!showDeskInfo)}
+                    className="p-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-cyan-300 border border-slate-700 transition-colors cursor-pointer"
+                    title="Agent Strategy Architecture & Safety Rules"
+                  >
+                    <Info className="w-3.5 h-3.5 text-sky-400" />
+                  </button>
+                  {showDeskInfo && (
+                    <div className="absolute left-0 top-8 z-30 w-80 sm:w-96 p-3.5 rounded-xl bg-[#090e19] border border-cyan-500/40 shadow-2xl text-xs font-sans text-slate-300 leading-relaxed animate-in fade-in duration-150">
+                      <div className="flex items-center justify-between pb-1.5 border-b border-slate-800 mb-2">
+                        <span className="font-mono font-bold text-[10px] text-sky-300 uppercase">5-Agent Quant Architecture</span>
+                        <button onClick={() => setShowDeskInfo(false)} className="text-slate-400 hover:text-white cursor-pointer">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      <p className="text-[11px] text-slate-300">
+                        5 specialized strategy bots executing strictly defined-risk positions with zero naked exposures and mathematical asymmetry: <strong className="text-sky-300">Chanakya</strong> (Macro Policy), <strong className="text-sky-300">Bhishma</strong> (Vega & Iron Condor), <strong className="text-sky-300">Arjuna</strong> (Momentum Gamma), <strong className="text-sky-300">Kuber</strong> (Cash Delivery), and <strong className="text-sky-300">Vidura</strong> (Statutory Risk Arbitrage).
+                      </p>
+                      <div className="mt-2 pt-2 border-t border-slate-800/80 text-[10px] text-emerald-400 font-mono">
+                        ✓ Peak Margin Rule Compliant · Zero Overnight Naked Risk
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
 
