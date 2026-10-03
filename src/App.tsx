@@ -8,11 +8,14 @@ import { QuantTerminal3D } from './components/QuantTerminal3D';
 import { MacroPolicyThesis } from './components/MacroPolicyThesis';
 import { BrokerGatewayRouter } from './components/BrokerGatewayRouter';
 import { RiskEngineTerminal } from './components/RiskEngineTerminal';
+import { GuardedRiskControl } from './components/GuardedRiskControl';
+import { BacktestLab } from './components/BacktestLab';
 import { SettingsTerminal } from './components/SettingsTerminal';
 import { InstitutionalEquityRadar } from './components/InstitutionalEquityRadar';
 import { AutonomousAgentsDesk } from './components/AutonomousAgentsDesk';
 import { CircuitBreakerModal } from './components/CircuitBreakerModal';
 import { OfflineIndicator } from './components/OfflineIndicator';
+import { OwnerGate } from './components/OwnerGate';
 import { Radio, Eye, Shield } from 'lucide-react';
 
 export default function App() {
@@ -24,13 +27,34 @@ export default function App() {
     }
   });
 
+  const [gateOpen, setGateOpen] = useState<boolean>(false);
+
   const setUserRole = (role: UserRole) => {
+    if (role === 'admin') {
+      let hasToken = false;
+      try { hasToken = !!localStorage.getItem('jarvis_owner_token'); } catch {}
+      if (!hasToken) {
+        setGateOpen(true);
+        return;
+      }
+    }
     setUserRoleState(role);
     try {
       localStorage.setItem('jarvis_user_role', role);
     } catch {
       // ignore
     }
+  };
+
+  const handleGateSuccess = (token: string) => {
+    try {
+      localStorage.setItem('jarvis_owner_token', token);
+      localStorage.setItem('jarvis_user_role', 'admin');
+    } catch {
+      // ignore
+    }
+    setUserRoleState('admin');
+    setGateOpen(false);
   };
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('quant_bot');
@@ -185,6 +209,10 @@ export default function App() {
                 <RiskEngineTerminal onOpenCircuitBreaker={() => setIsCircuitBreakerOpen(true)} />
               )}
 
+              {activeTab === 'risk_guard' && <GuardedRiskControl />}
+
+              {activeTab === 'backtest_lab' && <BacktestLab />}
+
               {activeTab === 'settings' && <SettingsTerminal />}
             </>
           )}
@@ -256,6 +284,30 @@ export default function App() {
             </button>
 
             <button
+              onClick={() => setActiveTab('risk_guard')}
+              className={`flex flex-col items-center justify-center min-w-[50px] h-12 rounded-xl transition-all ${
+                activeTab === 'risk_guard'
+                  ? 'text-cyan-300 bg-cyan-950/40 border border-cyan-500/40 font-bold'
+                  : 'text-slate-400'
+              }`}
+            >
+              <span className="material-symbols-outlined text-[18px]">gpp_maybe</span>
+              <span className="text-[8px] uppercase tracking-wider mt-0.5">Guard</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('backtest_lab')}
+              className={`flex flex-col items-center justify-center min-w-[50px] h-12 rounded-xl transition-all ${
+                activeTab === 'backtest_lab'
+                  ? 'text-cyan-300 bg-cyan-950/40 border border-cyan-500/40 font-bold'
+                  : 'text-slate-400'
+              }`}
+            >
+              <span className="material-symbols-outlined text-[18px]">query_stats</span>
+              <span className="text-[8px] uppercase tracking-wider mt-0.5">Backtest</span>
+            </button>
+
+            <button
               onClick={() => setActiveTab('voice_hud')}
               className={`flex flex-col items-center justify-center min-w-[50px] h-12 rounded-xl transition-all ${
                 activeTab === 'voice_hud'
@@ -276,6 +328,9 @@ export default function App() {
         onClose={() => setIsCircuitBreakerOpen(false)}
         onExecuteBreaker={handleExecuteCircuitBreaker}
       />
+
+      {/* Owner Access Gate (Phase 1) */}
+      <OwnerGate isOpen={gateOpen} onClose={() => setGateOpen(false)} onSuccess={handleGateSuccess} />
 
       {/* PWA Offline Network Indicator */}
       <OfflineIndicator />

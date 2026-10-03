@@ -50,12 +50,14 @@ export interface TwoSidedScenario {
 }
 
 export interface MacroIntelligenceData {
-  threatScore: number;
-  threatRegime: 'LOW_VOLATILITY' | 'MODERATE_ELEVATED' | 'HIGH_STRESS';
+  threatScore: number | null;
+  threatRegime: 'LOW_VOLATILITY' | 'MODERATE_ELEVATED' | 'HIGH_STRESS' | null;
   threatHeadline: string;
   threatSummary: string;
   lastUpdated?: string;
   isGrounded?: boolean;
+  dataUnavailable?: boolean;
+  notice?: string;
   macroVectors: MacroVector[];
   verifiedNews: VerifiedNewsItem[];
   twoSidedScenarios: TwoSidedScenario[];
@@ -79,13 +81,26 @@ export const MacroThreatIntelligenceMatrix: React.FC<MacroThreatIntelligenceMatr
     else setIsLoading(true);
 
     try {
-      const res = await fetch(`/api/macro/intelligence${force ? '?refresh=true' : ''}`);
+      let token = '';
+      try { token = localStorage.getItem('jarvis_owner_token') || ''; } catch {}
+      const res = await fetch(`/api/macro/intelligence${force ? '?refresh=true' : ''}`, {
+        headers: { 'x-owner-token': token },
+      });
+      if (res.status === 401 || res.status === 503) {
+        setData({
+          dataUnavailable: true, isGrounded: false,
+          notice: 'Owner authorization is required for macro intelligence.',
+          threatScore: null, threatRegime: null, threatHeadline: '', threatSummary: '',
+          macroVectors: [], verifiedNews: [], twoSidedScenarios: [], groundedSources: [], searchQueries: [],
+        });
+        return;
+      }
       const json = await res.json();
       if (json.success && json.data) {
         setData(json.data);
       }
     } catch (err) {
-      console.warn('[MacroThreatMatrix] Fetch failed, using client fallback', err);
+      console.warn('[MacroThreatMatrix] Fetch failed', err);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -117,14 +132,15 @@ export const MacroThreatIntelligenceMatrix: React.FC<MacroThreatIntelligenceMatr
           INGESTING SEARCH-GROUNDED MACRO INTELLIGENCE...
         </span>
         <span className="text-[10px] text-slate-500">
-          Scanning Google Search, Reuters, RBI & Global Bond Tensors (0 Hallucination Verified)
+          Requesting a Google-search-grounded AI assessment. Figures are AI-generated — verify independently.
         </span>
       </div>
     );
   }
 
-  const threatScore = data?.threatScore ?? 42;
-  const threatRegime = data?.threatRegime ?? 'MODERATE_ELEVATED';
+  const threatScoreNum = typeof data?.threatScore === 'number' ? data.threatScore : null;
+  const threatScore = threatScoreNum ?? 0;
+  const isUnavailable = data?.dataUnavailable === true;
 
   return (
     <div className="relative bg-[#080d1a]/95 rounded-2xl p-5 border border-cyan-500/25 shadow-2xl flex flex-col gap-4 font-mono select-none overflow-hidden">
@@ -145,14 +161,14 @@ export const MacroThreatIntelligenceMatrix: React.FC<MacroThreatIntelligenceMatr
               <span className={`px-2 py-0.5 rounded text-[9px] font-bold flex items-center gap-1 shadow-sm border ${
                 data?.isGrounded
                   ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40'
-                  : 'bg-cyan-950/80 text-cyan-300 border-cyan-500/40'
+                  : 'bg-slate-900 text-slate-400 border-slate-700'
               }`}>
                 <CheckCircle2 className="w-2.5 h-2.5" />
-                {data?.isGrounded ? 'GROUNDED IN SEARCH · 0 HALLUCINATION' : 'INSTITUTIONAL QUANTITATIVE MATRIX'}
+                {data?.isGrounded ? 'AI · GROUNDED IN GOOGLE SEARCH' : 'AI-GENERATED · VERIFY INDEPENDENTLY'}
               </span>
             </div>
             <p className="text-[10px] text-slate-400 mt-0.5 max-w-xl truncate">
-              {data?.threatHeadline || 'Macro equilibrium anchored by domestic DII absorption.'}
+              {data?.threatHeadline || (isUnavailable ? 'Live macro intelligence is unavailable right now.' : '')}
             </p>
           </div>
         </div>
@@ -165,7 +181,7 @@ export const MacroThreatIntelligenceMatrix: React.FC<MacroThreatIntelligenceMatr
               <span className={`text-sm font-bold tabular-nums ${
                 threatScore > 65 ? 'text-rose-400' : threatScore > 40 ? 'text-amber-300' : 'text-emerald-400'
               }`}>
-                {threatScore} / 100
+                {threatScoreNum != null ? threatScoreNum : '—'} / 100
               </span>
             </div>
             <div className="w-1.5 h-6 rounded-full bg-slate-800 overflow-hidden flex flex-col justify-end">
@@ -188,6 +204,14 @@ export const MacroThreatIntelligenceMatrix: React.FC<MacroThreatIntelligenceMatr
           </button>
         </div>
       </div>
+
+      {/* HONEST UNAVAILABLE STATE — never fabricated news/levels */}
+      {isUnavailable && (
+        <div className="p-3 rounded-xl bg-amber-950/40 border border-amber-500/40 text-amber-200 text-xs flex items-start gap-2" data-testid="macro-unavailable">
+          <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+          <span>{data?.notice || 'Live, search-grounded macro intelligence is unavailable right now. Showing no data rather than fabricated figures.'}</span>
+        </div>
+      )}
 
       {/* MACRO VECTOR HORIZONTAL STRIP */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
@@ -218,7 +242,7 @@ export const MacroThreatIntelligenceMatrix: React.FC<MacroThreatIntelligenceMatr
               }`}>
                 {v.impact}
               </span>
-              <span className="text-slate-500 text-[8px] uppercase">VERIFIED</span>
+              <span className="text-slate-500 text-[8px] uppercase">AI EST.</span>
             </div>
           </div>
         ))}
@@ -248,7 +272,7 @@ export const MacroThreatIntelligenceMatrix: React.FC<MacroThreatIntelligenceMatr
         </div>
 
         <span className="text-[9px] text-slate-500 hidden sm:inline">
-          MODEL: GEMINI-3.8-FLASH · ZERO SUBJECTIVE BIAS
+          MODEL: GEMINI 3.8 FLASH · AI-GENERATED, VERIFY INDEPENDENTLY
         </span>
       </div>
 
@@ -388,7 +412,7 @@ export const MacroThreatIntelligenceMatrix: React.FC<MacroThreatIntelligenceMatr
               REAL-TIME QUERIES EXECUTED:
             </span>
             <div className="flex flex-wrap gap-1.5">
-              {(data?.searchQueries || ['brent crude oil today', 'us 10y bond yield', 'rbi repo rate', 'fii cash flow nse']).map((q, qIdx) => (
+              {(data?.searchQueries && data.searchQueries.length > 0 ? data.searchQueries : ['— no queries reported —']).map((q, qIdx) => (
                 <span key={qIdx} className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-cyan-300 text-[10px]">
                   🔍 "{q}"
                 </span>
@@ -401,10 +425,8 @@ export const MacroThreatIntelligenceMatrix: React.FC<MacroThreatIntelligenceMatr
               VERIFIED CITATION SOURCES:
             </span>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {(data?.groundedSources || [
-                { title: 'Reuters World & Energy Markets', url: 'https://www.reuters.com' },
-                { title: 'Reserve Bank of India Monetary Policy', url: 'https://www.rbi.org.in' },
-                { title: 'NSE India FII/DII Net Turnovers', url: 'https://www.nseindia.com' }
+              {(data?.groundedSources && data.groundedSources.length > 0 ? data.groundedSources : [
+                { title: 'No grounded citations available', url: '' }
               ]).map((src, sIdx) => (
                 <a
                   key={sIdx}

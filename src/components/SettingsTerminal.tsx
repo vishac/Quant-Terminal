@@ -30,37 +30,34 @@ export const SettingsTerminal: React.FC = () => {
       apiKey: 'ABM_LIVE_•••781',
       sessionSecret: '••••••••••••••••3D9A',
       coloNode: 'BKC-DC02 // GATE-02',
-      status: 'CONNECTED',
-      latency: '2.8 ms',
+      status: 'NOT CONNECTED',
+      latency: '—',
     },
     {
       id: 'zerodha',
       name: 'Zerodha Kite Connect',
       apiCode: 'Kite Ticker Binary V3',
-      apiKey: 'KT_PROD_•••942',
+      apiKey: 'ABM_LIVE_•••781',
       sessionSecret: '••••••••••••••••ENCTOKEN',
       coloNode: 'MUMBAI NSE // RACK-08',
-      status: 'CONNECTED',
-      latency: '1.8 ms',
+      status: 'NOT CONNECTED',
+      latency: '—',
     },
     {
       id: 'dhan',
       name: 'Dhan HQ',
       apiCode: 'Prometheus Protobuf',
-      apiKey: '1100293847',
+      apiKey: '—',
       sessionSecret: '••••••••••••••••TOKEN',
       coloNode: 'MUMBAI-DC01',
-      status: 'STANDBY_HOT',
-      latency: '3.4 ms',
+      status: 'NOT CONNECTED',
+      latency: '—',
     },
   ]);
 
   const handleTestBroker = (brokerName: string) => {
-    setTestStatus(`Testing round-trip latency to ${brokerName} colocation gateway...`);
-    setTimeout(() => {
-      setTestStatus(`[SUCCESS] 0 packet drop. Handshake verified with ${brokerName} via FIX 5.0 SP2.`);
-      setTimeout(() => setTestStatus(null), 4000);
-    }, 800);
+    setTestStatus(`[NOT CONNECTED] ${brokerName} has no live broker integration in this build. Order execution is disabled until a broker is connected (Phase 2+).`);
+    setTimeout(() => setTestStatus(null), 5000);
   };
 
   const handleManualHolidayCheck = () => {
@@ -128,7 +125,7 @@ export const SettingsTerminal: React.FC = () => {
                 </span>
               </h2>
               <span className="text-[11px] text-slate-400 font-sans block mt-0.5">
-                Gemini 2.5 Flash / Flash-Lite server-side inference, tensor cores, neural load, audio DSP &amp; memory cache.
+                Server-side Gemini inference via /api/jarvis/analyze (owner-gated). The metrics below are illustrative placeholders, not live telemetry.
               </span>
             </div>
           </div>
@@ -136,7 +133,7 @@ export const SettingsTerminal: React.FC = () => {
           <div className="flex items-center gap-2 text-xs">
             <span className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span>HOST: MUMBAI-DC01 // RACK-08</span>
+              <span>HOST: server-side</span>
             </span>
           </div>
         </div>
@@ -224,11 +221,11 @@ export const SettingsTerminal: React.FC = () => {
         <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 text-xs font-mono space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-slate-400">ACTIVE LLM PROVIDER:</span>
-            <span className="text-cyan-300 font-bold">gemini-2.5-flash / gemini-2.5-flash-lite (Server-side Proxy /api/jarvis/analyze)</span>
+            <span className="text-cyan-300 font-bold">gemini-3.8-flash (server-side via /api/jarvis/analyze, owner-gated)</span>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-slate-400">FAILOVER ARMED ENGINE:</span>
-            <span className="text-emerald-400 font-bold">INSTITUTIONAL QUANT DETERMINISTIC ENGINE (Zero Credit Consumption)</span>
+            <span className="text-emerald-400 font-bold">Honest "unavailable" response — no fabricated figures</span>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-slate-400">AUDIO INFERENCE MODEL:</span>
@@ -255,7 +252,7 @@ export const SettingsTerminal: React.FC = () => {
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-950/60 border border-emerald-500/40 text-emerald-400 text-xs font-mono font-bold">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-              {isLive ? 'LIVE EXCHANGE TICKS ACTIVE' : 'CACHED'}
+              {isLive ? 'DELAYED QUOTES (UNOFFICIAL)' : 'CACHED'}
             </span>
             <span className="text-xs font-mono text-slate-400 bg-slate-900 px-2.5 py-1 rounded border border-slate-800">
               RTT: {latencyMs} ms
@@ -285,7 +282,7 @@ export const SettingsTerminal: React.FC = () => {
                     ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' 
                     : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
                 }`}>
-                  {isPacketSaverActive ? 'PACKET SAVER ACTIVE' : 'STREAMING LIVE TICKS'}
+                  {isPacketSaverActive ? 'PACKET SAVER ACTIVE' : 'DELAYED QUOTES SYNCING'}
                 </span>
               </div>
               <p className="text-[11px] text-slate-300 font-sans mt-1">
@@ -363,12 +360,12 @@ export const SettingsTerminal: React.FC = () => {
                 Configured Broker Nodes & API Key Vault
               </h2>
               <span className="text-[11px] text-slate-400 font-mono">
-                Hardware-encrypted credentials for direct DMA slicing, option basket execution, and WebSocket L2 streaming.
+                Illustrative placeholders only — no broker is actually connected and no real credentials are stored here. Order execution is disabled until a broker is integrated (Phase 2+).
               </span>
             </div>
           </div>
-          <span className="text-xs font-mono text-cyan-400 bg-cyan-950/40 px-2.5 py-1 rounded border border-cyan-500/30">
-            3 OF 3 NODES ARMED
+          <span className="text-xs font-mono text-amber-400 bg-amber-950/40 px-2.5 py-1 rounded border border-amber-500/30">
+            0 OF 3 CONNECTED (DEMO)
           </span>
         </div>
 

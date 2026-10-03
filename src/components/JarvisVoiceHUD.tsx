@@ -65,24 +65,14 @@ export const JarvisVoiceHUD: React.FC<JarvisVoiceHUDProps> = ({
   const [latestAssistantResponse, setLatestAssistantResponse] = useState<{
     answer: string;
     recommendation?: string;
-    confidenceScore?: number;
-    keyGreeksImpact?: {
+    confidenceScore?: number | null;
+    keyGreeksImpact?: null | {
       delta: string;
       gamma: string;
       vega: string;
       theta: string;
     };
-  } | null>({
-    answer: `Sir, market telemetry feed is active. Autonomous risk containment circuits and statutory SEBI peak margin rules are active with zero naked exposure.`,
-    recommendation: 'Deploy NIFTY weekly Strangle or Bull Put Spread when volatility compression signals confirm.',
-    confidenceScore: 96,
-    keyGreeksImpact: {
-      delta: '+12.4 (Delta Neutral buffer)',
-      gamma: '+14.2 (Safe ATM buffer)',
-      vega: '-₹12,400 (Front-month vega decay)',
-      theta: '+₹42,800/day (Positive theta accrual)'
-    }
-  });
+  } | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const speechUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
@@ -94,7 +84,7 @@ export const JarvisVoiceHUD: React.FC<JarvisVoiceHUDProps> = ({
     ? `${niftyQuote.change >= 0 ? 'up' : 'down'} ${Math.abs(niftyQuote.change).toFixed(1)} points (${niftyQuote.changePct >= 0 ? '+' : ''}${niftyQuote.changePct.toFixed(2)}%)`
     : 'standing by for tick';
 
-  const briefingSummary = `Good morning Sir. Live market telemetry confirms Nifty is currently trading at ${niftyPriceStr}, ${niftyChangeStr}. Sensex is at ${sensexPriceStr}, and India VIX is at ${vixPriceStr}, confirming exchange volatility levels. All risk containment circuits and statutory SEBI peak margin rules are active with verified authentic data.`;
+  const briefingSummary = `Good morning Sir. Using delayed, unofficial market data, Nifty is at ${niftyPriceStr}, ${niftyChangeStr}. Sensex is at ${sensexPriceStr}, and India VIX is at ${vixPriceStr}. This is a paper-trading simulation; no real orders are placed and the figures are not a licensed real-time feed.`;
 
   // Real TTS Playback using Web Speech API
   const handlePlayVocal = () => {
@@ -529,10 +519,10 @@ export const JarvisVoiceHUD: React.FC<JarvisVoiceHUDProps> = ({
             </div>
             <div className="flex items-center gap-2 text-[10px]">
               <span className="px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 font-bold">
-                CONFIDENCE: {latestAssistantResponse.confidenceScore || 96}%
+                CONFIDENCE: {latestAssistantResponse.confidenceScore != null ? `${latestAssistantResponse.confidenceScore}%` : 'N/A'}
               </span>
-              <span className="px-2 py-0.5 rounded bg-cyan-950/80 border border-cyan-500/30 text-cyan-300 font-bold">
-                100% DEFINED-RISK
+              <span className="px-2 py-0.5 rounded bg-amber-950/80 border border-amber-500/30 text-amber-300 font-bold">
+                SIMULATION / PAPER
               </span>
             </div>
           </div>

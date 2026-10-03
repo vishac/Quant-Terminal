@@ -25,6 +25,8 @@ const TAB_LABELS: Record<ActiveTab, string> = {
   deep_thesis: 'Deep Thesis',
   sync_hub: 'Sync Hub',
   risk_engine: 'Risk Engine',
+  risk_guard: 'Guarded Risk',
+  backtest_lab: 'Backtest Lab',
   settings: 'Settings',
 };
 
@@ -113,8 +115,8 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Live Feed Pill */}
           <div className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1 bg-slate-900/80 border border-slate-800 rounded-lg text-xs">
             <span className="text-slate-400 text-[10px] hidden sm:inline">FEED:</span>
-            <span className="text-cyan-300 font-bold text-[10px]">NSE/BSE</span>
-            <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+            <span className="text-amber-300 font-bold text-[10px]">NSE/BSE · DELAYED</span>
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400"></span>
           </div>
 
           {/* Latency Telemetry */}
@@ -244,11 +246,11 @@ export const Header: React.FC<HeaderProps> = ({
 
             <div className="space-y-3 text-slate-300 text-xs leading-relaxed max-h-[60vh] overflow-y-auto no-scrollbar pr-1">
               <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
-                <span className="text-[11px] font-bold text-cyan-300 block uppercase">
-                  1. Zero Gemini Credits & Direct Exchange Tick Ingestion
+                <span className="text-[11px] font-bold text-amber-300 block uppercase">
+                  1. Market Data: Delayed &amp; Unofficial (Phase 1)
                 </span>
                 <p className="text-[11px] text-slate-400">
-                  All price updates, option chain Greeks, order-book calculations, and volatility smiles are derived algorithmically from raw exchange tick feeds. Zero LLM API calls are consumed for live telemetry, ensuring instantaneous &lt;2ms response and 100% data authenticity.
+                  Quotes come from an unofficial Yahoo Finance endpoint (daily candles) and are DELAYED, not a licensed real-time exchange feed. No option-chain or live greeks data is available yet. A licensed real-time feed is a Phase 2 item.
                 </p>
               </div>
 

@@ -96,12 +96,12 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
               <h2 className="text-sm font-bold text-slate-100 uppercase tracking-wide">
                 Live Indian Markets (NSE &amp; BSE)
               </h2>
-              <span className="text-[11px] font-mono text-cyan-400 font-semibold bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-800/40">
-                100% Real Feed
+              <span className="text-[11px] font-mono text-amber-300 font-semibold bg-amber-950/60 px-2 py-0.5 rounded border border-amber-700/40">
+                DELAYED · UNOFFICIAL
               </span>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Strictly authentic exchange quotes with verified previous close calculations. Zero demo or mock numbers.
+              Delayed, unofficial quotes (Yahoo Finance daily candles) — not a licensed real-time exchange feed. Change % is computed against the prior session close. For information only.
             </p>
           </div>
         </div>

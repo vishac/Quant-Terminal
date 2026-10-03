@@ -1,4 +1,4 @@
-export type ActiveTab = 'voice_hud' | 'quant_bot' | 'autonomous_agents' | 'equity_radar' | 'deep_thesis' | 'sync_hub' | 'risk_engine' | 'settings';
+export type ActiveTab = 'voice_hud' | 'quant_bot' | 'autonomous_agents' | 'equity_radar' | 'deep_thesis' | 'sync_hub' | 'risk_engine' | 'risk_guard' | 'backtest_lab' | 'settings';
 
 export interface OptionContract {
   strike: number;
@@ -84,6 +84,7 @@ export interface PaperTradeOrder {
   status: 'OPEN' | 'SQUARED_OFF' | 'TARGET_HIT' | 'STOP_HIT';
   pnlINR: number;
   sebiComplianceVerified: boolean;
+  isSimulation?: boolean;
 }
 
 export interface SebiComplianceRule {
