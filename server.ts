@@ -1,12 +1,17 @@
+import dotenv from 'dotenv';
 import express from 'express';
 import { createServer as createHttpServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
+
+dotenv.config({ path: '.env.local' });
+dotenv.config();
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
+import { DEFAULT_DEV_OWNER_TOKEN, isDevOwnerFallback, resolveOwnerAccessToken } from './src/server/auth';
 import { computeGreeks } from './src/server/greeks';
 import {
   getRiskConfig, setRiskConfig, getRiskState, setKillSwitch, setDayPnl,
@@ -43,7 +48,7 @@ if (geminiApiKey && geminiApiKey.trim().length > 10) {
 // or overload the service. Fails CLOSED if OWNER_ACCESS_TOKEN is not configured.
 // NOTE: This is a Phase-1 stopgap. Phase 3 should move to a real auth provider.
 // =============================================================================
-const OWNER_ACCESS_TOKEN = (process.env.OWNER_ACCESS_TOKEN || '').trim();
+const OWNER_ACCESS_TOKEN = resolveOwnerAccessToken();
 
 function timingSafeEqual(a: string, b: string): boolean {
   const ab = Buffer.from(a);
@@ -65,11 +70,18 @@ function requireOwner(req: express.Request, res: express.Response, next: express
     return res.status(503).json({
       success: false,
       error: 'OWNER_ACCESS_TOKEN is not configured on the server. AI endpoints are disabled until an owner token is set.',
+      devFallback: false,
+      fallbackToken: null,
     });
   }
   const token = extractToken(req);
   if (!token || !timingSafeEqual(token, OWNER_ACCESS_TOKEN)) {
-    return res.status(401).json({ success: false, error: 'Unauthorized: valid owner token required.' });
+    return res.status(401).json({
+      success: false,
+      error: 'Unauthorized: valid owner token required.',
+      devFallback: isDevOwnerFallback(),
+      fallbackToken: isDevOwnerFallback() ? OWNER_ACCESS_TOKEN : null,
+    });
   }
   next();
 }
@@ -683,7 +695,11 @@ async function startServer() {
 
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`[JARVIS Terminal Server] Online on port ${PORT} with WebSocket on /ws/market`);
-    if (!OWNER_ACCESS_TOKEN) console.warn('[SECURITY] OWNER_ACCESS_TOKEN is not set — AI endpoints are disabled until it is configured.');
+    if (!process.env.OWNER_ACCESS_TOKEN && process.env.NODE_ENV !== 'production') {
+      console.warn(`[SECURITY] OWNER_ACCESS_TOKEN is not set. Using development fallback token: ${DEFAULT_DEV_OWNER_TOKEN}`);
+    } else if (!OWNER_ACCESS_TOKEN) {
+      console.warn('[SECURITY] OWNER_ACCESS_TOKEN is not set — AI endpoints are disabled until it is configured.');
+    }
   });
 }
 

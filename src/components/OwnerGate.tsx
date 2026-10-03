@@ -30,13 +30,18 @@ export const OwnerGate: React.FC<OwnerGateProps> = ({ isOpen, onClose, onSuccess
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-owner-token': t },
       });
+      const body = await res.json().catch(() => null);
+
       if (res.ok) {
         onSuccess(t);
         setToken('');
+      } else if (body?.devFallback && body?.fallbackToken) {
+        setToken(body.fallbackToken);
+        setError(`Local dev mode is active. Use the fallback token: ${body.fallbackToken}`);
       } else if (res.status === 503) {
         setError('Server has no OWNER_ACCESS_TOKEN configured. Set it in your server secrets first.');
       } else {
-        setError('Invalid owner token. Access denied.');
+        setError(body?.error || 'Invalid owner token. Access denied.');
       }
     } catch {
       setError('Could not reach the server to verify the token.');
