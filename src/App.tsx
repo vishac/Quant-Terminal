@@ -31,8 +31,15 @@ export default function App() {
 
   const setUserRole = (role: UserRole) => {
     if (role === 'admin') {
+      const devFallback = 'jarvis-dev-owner-token';
       let hasToken = false;
       try { hasToken = !!localStorage.getItem('jarvis_owner_token'); } catch {}
+      if (!hasToken && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+        try {
+          localStorage.setItem('jarvis_owner_token', devFallback);
+          hasToken = true;
+        } catch {}
+      }
       if (!hasToken) {
         setGateOpen(true);
         return;

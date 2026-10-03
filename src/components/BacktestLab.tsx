@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Play, TrendingUp, AlertTriangle, Loader2 } from 'lucide-react';
-
-interface StrategyMeta { id: string; agent: string; name: string; rule: string; }
+import { AVAILABLE_STRATEGIES, type StrategyMeta } from '../server/backtester';
 
 const token = () => { try { return localStorage.getItem('jarvis_owner_token') || ''; } catch { return ''; } };
 const api = (path: string, opts: RequestInit = {}) =>
@@ -13,15 +12,28 @@ const SYMBOLS = [
 ];
 
 export const BacktestLab: React.FC = () => {
-  const [strategies, setStrategies] = useState<StrategyMeta[]>([]);
+  const [strategies, setStrategies] = useState<StrategyMeta[]>(AVAILABLE_STRATEGIES);
   const [symbol, setSymbol] = useState('^NSEI');
-  const [strategy, setStrategy] = useState('bhishma');
+  const [strategy, setStrategy] = useState(AVAILABLE_STRATEGIES[0]?.id ?? 'bhishma');
   const [range, setRange] = useState('1y');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<any>(null);
 
-  useEffect(() => { api('/api/backtest/strategies').then(r => r.ok ? r.json() : null).then(j => { if (j?.strategies) setStrategies(j.strategies); }).catch(() => {}); }, []);
+  useEffect(() => {
+    api('/api/backtest/strategies')
+      .then(r => r.ok ? r.json() : null)
+      .then(j => {
+        if (Array.isArray(j?.strategies) && j.strategies.length > 0) {
+          setStrategies(j.strategies);
+          setStrategy((current) => j.strategies.some((s: StrategyMeta) => s.id === current) ? current : j.strategies[0].id);
+        }
+      })
+      .catch(() => {
+        setStrategies(AVAILABLE_STRATEGIES);
+        setStrategy((current) => AVAILABLE_STRATEGIES.some((s) => s.id === current) ? current : AVAILABLE_STRATEGIES[0]?.id ?? 'bhishma');
+      });
+  }, []);
 
   const run = async () => {
     setLoading(true); setError(null); setResult(null);
@@ -74,13 +86,14 @@ export const BacktestLab: React.FC = () => {
             <select value={symbol} data-testid="bt-symbol" onChange={(e) => setSymbol(e.target.value)} className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-2 text-xs text-slate-200 outline-none focus:border-cyan-500">
               {SYMBOLS.map(s => <option key={s.v} value={s.v}>{s.l}</option>)}</select></label>
           <label className="flex flex-col gap-1"><span className="text-[10px] uppercase text-slate-500">Agent Strategy</span>
-            <select value={strategy} data-testid="bt-strategy" onChange={(e) => setStrategy(e.target.value)} className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-2 text-xs text-slate-200 outline-none focus:border-cyan-500">
-              {strategies.map(s => <option key={s.id} value={s.id}>{s.agent} — {s.name}</option>)}</select></label>
+            <select value={strategy} data-testid="bt-strategy" disabled={strategies.length === 0} onChange={(e) => setStrategy(e.target.value)} className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-2 text-xs text-slate-200 outline-none focus:border-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed">
+              {strategies.length === 0 ? <option value="">No strategies available</option> : strategies.map(s => <option key={s.id} value={s.id}>{s.agent} — {s.name}</option>)}
+            </select></label>
           <label className="flex flex-col gap-1"><span className="text-[10px] uppercase text-slate-500">Range</span>
             <select value={range} data-testid="bt-range" onChange={(e) => setRange(e.target.value)} className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-2 text-xs text-slate-200 outline-none focus:border-cyan-500">
               <option value="6mo">6 Months</option><option value="1y">1 Year</option><option value="2y">2 Years</option><option value="5y">5 Years</option></select></label>
           <div className="flex items-end">
-            <button onClick={run} disabled={loading} data-testid="bt-run" className="w-full py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60">
+            <button onClick={run} disabled={loading || !strategy || strategies.length === 0} data-testid="bt-run" className="w-full py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60">
               {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />} {loading ? 'Running…' : 'Run Backtest'}</button>
           </div>
         </div>

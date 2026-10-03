@@ -34,14 +34,32 @@ export const GuardedRiskControl: React.FC = () => {
   const [state, setState] = useState<RiskState | null>(null);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [pnlInput, setPnlInput] = useState('0');
 
   const [order, setOrder] = useState({ symbol: 'NIFTY', side: 'BUY', productType: 'FNO_OPT_BUY', lots: 1, qty: 75, price: 120, underlyingNotionalInr: 0 });
   const [evalResult, setEvalResult] = useState<any>(null);
 
   const refresh = useCallback(async () => {
-    const res = await api('/api/risk/state');
-    if (res.ok) { const j = await res.json(); setState(j.state); setConfig(j.config); setPnlInput(String(j.state.dayRealizedPnlInr)); }
+    try {
+      const res = await api('/api/risk/state');
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        setError(body?.error || 'Risk engine request failed.');
+        setConfig(null);
+        setState(null);
+        return;
+      }
+      const j = await res.json();
+      setError(null);
+      setState(j.state);
+      setConfig(j.config);
+      setPnlInput(String(j.state.dayRealizedPnlInr));
+    } catch (err) {
+      setError('Could not reach the risk engine. Please verify the owner token or server status.');
+      setConfig(null);
+      setState(null);
+    }
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
@@ -76,7 +94,26 @@ export const GuardedRiskControl: React.FC = () => {
 
   const resetSandbox = async () => { await api('/api/broker/sandbox/reset', { method: 'POST' }); setEvalResult(null); refresh(); flash('Sandbox reset.'); };
 
-  if (!config || !state) return <div className="p-8 text-slate-400 font-mono text-sm" data-testid="risk-loading">Loading risk engine…</div>;
+  if (!config || !state) return (
+    <div className="p-8 text-slate-400 font-mono text-sm" data-testid="risk-loading">
+      <div className="rounded-2xl border border-slate-800 bg-[#0a1120] p-5 max-w-xl">
+        <div className="text-cyan-400 font-bold uppercase tracking-wide mb-2">Risk engine</div>
+        {error ? (
+          <div className="space-y-3">
+            <p className="text-rose-300">{error}</p>
+            <button onClick={() => refresh()} className="px-3 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold">
+              Retry
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 text-slate-300">
+            <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />
+            <span>Loading risk engine…</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <div className="space-y-5 font-mono" data-testid="guarded-risk-control">
