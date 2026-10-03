@@ -12,7 +12,9 @@ const Home = () => {
     try {
       await axios.get(`${API}/`);
     } catch (e) {
-      // Splash probe to /api/ failed; intentionally ignored.
+      if (process.env.NODE_ENV !== "production") {
+        console.error("Splash probe to /api/ failed:", e);
+      }
     }
   }, []);
 
