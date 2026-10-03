@@ -7,12 +7,12 @@ import fs from 'fs';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
-import { computeGreeks } from './src/server/greeks';
+import { computeGreeks } from './src/server/greeks.ts';
 import {
   getRiskConfig, setRiskConfig, getRiskState, setKillSwitch, setDayPnl,
   evaluateOrder, placeSandboxOrder, getSandboxOrders, resetSandbox,
-} from './src/server/riskEngine';
-import { runBacktest, AVAILABLE_STRATEGIES } from './src/server/backtester';
+} from './src/server/riskEngine.ts';
+import { runBacktest, AVAILABLE_STRATEGIES } from './src/server/backtester.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
