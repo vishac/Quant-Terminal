@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { ShieldAlert, Power, Save, RefreshCw, CheckCircle2, XCircle, AlertTriangle, Calculator } from 'lucide-react';
+import { ShieldAlert, Power, Save, RefreshCw, CheckCircle2, XCircle, AlertTriangle, Calculator, Loader2 } from 'lucide-react';
 
 interface RiskConfig {
   capitalInr: number; maxDailyLossInr: number; maxOpenPositions: number;
@@ -34,14 +34,37 @@ export const GuardedRiskControl: React.FC = () => {
   const [state, setState] = useState<RiskState | null>(null);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [pnlInput, setPnlInput] = useState('0');
 
   const [order, setOrder] = useState({ symbol: 'NIFTY', side: 'BUY', productType: 'FNO_OPT_BUY', lots: 1, qty: 75, price: 120, underlyingNotionalInr: 0 });
   const [evalResult, setEvalResult] = useState<any>(null);
 
   const refresh = useCallback(async () => {
-    const res = await api('/api/risk/state');
-    if (res.ok) { const j = await res.json(); setState(j.state); setConfig(j.config); setPnlInput(String(j.state.dayRealizedPnlInr)); }
+    setLoadError(null);
+    try {
+      const res = await api('/api/risk/state');
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        setLoadError(body?.error || `Risk engine request failed (${res.status}).`);
+        setState(null);
+        setConfig(null);
+        return;
+      }
+      if (!body?.state || !body?.config) {
+        setLoadError('The risk engine returned an incomplete response.');
+        setState(null);
+        setConfig(null);
+        return;
+      }
+      setState(body.state);
+      setConfig(body.config);
+      setPnlInput(String(body.state.dayRealizedPnlInr));
+    } catch {
+      setLoadError('Could not reach the risk engine. Check the server connection and try again.');
+      setState(null);
+      setConfig(null);
+    }
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
@@ -76,7 +99,26 @@ export const GuardedRiskControl: React.FC = () => {
 
   const resetSandbox = async () => { await api('/api/broker/sandbox/reset', { method: 'POST' }); setEvalResult(null); refresh(); flash('Sandbox reset.'); };
 
-  if (!config || !state) return <div className="p-8 text-slate-400 font-mono text-sm" data-testid="risk-loading">Loading risk engine…</div>;
+  if (!config || !state) return (
+    <div className="p-8 text-slate-400 font-mono text-sm" data-testid="risk-loading">
+      <div className="max-w-xl rounded-2xl border border-slate-800 bg-[#0a1120] p-5">
+        <div className="mb-2 font-bold uppercase tracking-wide text-cyan-400">Risk engine</div>
+        {loadError ? (
+          <div className="space-y-3">
+            <p className="text-rose-300" role="alert">{loadError}</p>
+            <button onClick={() => refresh()} className="rounded-lg bg-cyan-600 px-3 py-2 text-xs font-bold text-white hover:bg-cyan-500">
+              Retry
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 text-slate-300">
+            <Loader2 className="h-4 w-4 animate-spin text-cyan-400" />
+            <span>Loading risk engine…</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <div className="space-y-5 font-mono" data-testid="guarded-risk-control">

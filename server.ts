@@ -1,3 +1,4 @@
+import dotenv from 'dotenv';
 import express from 'express';
 import { createServer as createHttpServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
@@ -16,6 +17,9 @@ import { runBacktest, AVAILABLE_STRATEGIES } from './src/server/backtester.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+dotenv.config({ path: path.resolve(__dirname, '.env.local') });
+dotenv.config({ path: path.resolve(__dirname, '.env') });
 
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
@@ -64,7 +68,7 @@ function requireOwner(req: express.Request, res: express.Response, next: express
   if (!OWNER_ACCESS_TOKEN) {
     return res.status(503).json({
       success: false,
-      error: 'OWNER_ACCESS_TOKEN is not configured on the server. AI endpoints are disabled until an owner token is set.',
+      error: 'OWNER_ACCESS_TOKEN is not configured on the server. Owner-protected operations are unavailable until an owner token is set.',
     });
   }
   const token = extractToken(req);

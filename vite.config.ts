@@ -88,6 +88,7 @@ export default defineConfig(() => {
       },
     },
     server: {
+      allowedHosts: ['vscode-6c6abd77-58f3-4bf2-9bc3-db45835821df.cluster-12.preview.emergentcf.cloud'],
       hmr: false,
       watch: null,
     },
