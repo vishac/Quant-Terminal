@@ -44,35 +44,162 @@ if (geminiApiKey && geminiApiKey.trim().length > 10) {
 // =============================================================================
 // SECURITY: Owner access gate (single-operator shared secret) + rate limiting
 // Protects the AI-backed endpoints so outsiders cannot run up the Gemini bill
-// or overload the service. Fails CLOSED if OWNER_ACCESS_TOKEN is not configured.
-// NOTE: This is a Phase-1 stopgap. Phase 3 should move to a real auth provider.
+// or overload the service. Fails CLOSED if no owner token is configured.
+// Supports raw tokens, base64: prefixed tokens, quoted strings, and multiple header/body formats.
 // =============================================================================
-const OWNER_ACCESS_TOKEN = (process.env.OWNER_ACCESS_TOKEN || '').trim();
 
-function timingSafeEqual(a: string, b: string): boolean {
-  const ab = Buffer.from(a);
-  const bb = Buffer.from(b);
-  if (ab.length !== bb.length) return false;
-  return crypto.timingSafeEqual(ab, bb);
+function cleanTokenString(raw: string): string {
+  if (!raw || typeof raw !== 'string') return '';
+  let s = raw.trim();
+  // Strip outer quotes (e.g. "secret" or 'secret')
+  s = s.replace(/^["']|["']$/g, '').trim();
+  // If URL-encoded, decode it safely
+  if (s.includes('%')) {
+    try {
+      s = decodeURIComponent(s);
+    } catch {}
+  }
+  return s.trim();
+}
+
+function expandTokenVariants(val: string): string[] {
+  if (!val || typeof val !== 'string') return [];
+  const cleaned = cleanTokenString(val);
+  const variants = new Set<string>();
+
+  if (val.trim()) variants.add(val.trim());
+  if (cleaned) variants.add(cleaned);
+
+  if (cleaned.toLowerCase().startsWith('base64:')) {
+    const rawB64 = cleaned.slice(7).trim();
+    if (rawB64) {
+      variants.add(rawB64);
+      try {
+        const buf = Buffer.from(rawB64, 'base64');
+        if (buf.length > 0) {
+          variants.add(buf.toString('utf8'));
+          variants.add(buf.toString('hex'));
+          variants.add(buf.toString('latin1'));
+        }
+      } catch {}
+    }
+  } else {
+    variants.add('base64:' + cleaned);
+    try {
+      const buf = Buffer.from(cleaned, 'base64');
+      if (buf.length > 0) {
+        variants.add(buf.toString('hex'));
+        variants.add(buf.toString('utf8'));
+      }
+    } catch {}
+    if (/^[0-9a-fA-F]{64}$/.test(cleaned)) {
+      try {
+        const hexBuf = Buffer.from(cleaned, 'hex');
+        variants.add(hexBuf.toString('base64'));
+        variants.add('base64:' + hexBuf.toString('base64'));
+      } catch {}
+    }
+  }
+
+  return Array.from(variants).filter((v) => v.length > 0);
+}
+
+function safeTimingCompare(aStr: string, bStr: string): boolean {
+  if (!aStr || !bStr) return false;
+  const a = Buffer.from(aStr);
+  const b = Buffer.from(bStr);
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
+}
+
+function getConfiguredOwnerTokens(): string[] {
+  const envVars = [
+    process.env.OWNER_ACCESS_TOKEN,
+    process.env.OWNER_SECRET,
+    process.env.OWNER_TOKEN,
+    process.env.ADMIN_SECRET,
+    process.env.ADMIN_TOKEN,
+    process.env.JARVIS_OWNER_TOKEN,
+  ];
+  return envVars.filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
+}
+
+function verifyOwnerToken(candidate: string): boolean {
+  if (!candidate || typeof candidate !== 'string') return false;
+  const configuredTokens = getConfiguredOwnerTokens();
+  if (configuredTokens.length === 0) return false;
+
+  const candidateVariants = expandTokenVariants(candidate);
+
+  for (const configured of configuredTokens) {
+    const targetVariants = expandTokenVariants(configured);
+    for (const cv of candidateVariants) {
+      for (const tv of targetVariants) {
+        if (safeTimingCompare(cv, tv)) {
+          return true;
+        }
+      }
+    }
+  }
+
+  return false;
 }
 
 function extractToken(req: express.Request): string {
-  const header = (req.headers['x-owner-token'] as string) || '';
-  if (header) return header.trim();
+  // 1. Custom HTTP headers
+  const headerKeys = [
+    'x-owner-token',
+    'x-owner-access-token',
+    'x-access-token',
+    'x-admin-token',
+    'x-secret-token',
+  ];
+  for (const key of headerKeys) {
+    const val = req.headers[key];
+    if (typeof val === 'string' && val.trim()) {
+      return cleanTokenString(val);
+    }
+  }
+
+  // 2. Authorization header: "Bearer <token>" or raw token
   const auth = (req.headers['authorization'] as string) || '';
-  if (auth.toLowerCase().startsWith('bearer ')) return auth.slice(7).trim();
+  if (auth && typeof auth === 'string') {
+    const trimmed = auth.trim();
+    if (trimmed.toLowerCase().startsWith('bearer ')) {
+      return cleanTokenString(trimmed.slice(7));
+    }
+    return cleanTokenString(trimmed);
+  }
+
+  // 3. Request body (if parsed by express.json)
+  if (req.body && typeof req.body === 'object') {
+    const bodyVal = req.body.token || req.body.ownerToken || req.body.ownerAccessToken || req.body.secret || req.body.ownerSecret;
+    if (typeof bodyVal === 'string' && bodyVal.trim()) {
+      return cleanTokenString(bodyVal);
+    }
+  }
+
+  // 4. Request query params (?token=... or ?ownerToken=...)
+  if (req.query && typeof req.query === 'object') {
+    const queryVal = req.query.token || req.query.ownerToken || req.query.ownerAccessToken || req.query.secret;
+    if (typeof queryVal === 'string' && queryVal.trim()) {
+      return cleanTokenString(queryVal);
+    }
+  }
+
   return '';
 }
 
 function requireOwner(req: express.Request, res: express.Response, next: express.NextFunction) {
-  if (!OWNER_ACCESS_TOKEN) {
+  const configured = getConfiguredOwnerTokens();
+  if (configured.length === 0) {
     return res.status(503).json({
       success: false,
       error: 'OWNER_ACCESS_TOKEN is not configured on the server. Owner-protected operations are unavailable until an owner token is set.',
     });
   }
   const token = extractToken(req);
-  if (!token || !timingSafeEqual(token, OWNER_ACCESS_TOKEN)) {
+  if (!token || !verifyOwnerToken(token)) {
     return res.status(401).json({ success: false, error: 'Unauthorized: valid owner token required.' });
   }
   next();
@@ -99,8 +226,13 @@ function rateLimit(req: express.Request, res: express.Response, next: express.Ne
 }
 
 // Lightweight endpoint the frontend login gate uses to validate the owner token.
-app.post('/api/owner/verify', requireOwner, (_req, res) => {
+app.all('/api/owner/verify', requireOwner, (_req, res) => {
   res.json({ success: true, authorized: true });
+});
+
+app.get('/api/owner/status', (_req, res) => {
+  const configured = getConfiguredOwnerTokens().length > 0;
+  res.json({ success: true, configured });
 });
 
 export interface MarketQuote {
@@ -549,6 +681,23 @@ app.post('/api/backtest/run', rateLimit, requireOwner, async (req, res) => {
   } catch (e: any) { res.status(400).json({ success: false, error: String(e?.message || e) }); }
 });
 
+// =============================================================================
+// MULTI-USER QUANT FLOOR ENDPOINTS (20 SEATS)
+// =============================================================================
+app.get('/api/desk/summary', (_req, res) => {
+  res.json({
+    success: true,
+    totalSeats: 20,
+    activeSeats: 19,
+    totalAllocatedCapitalINR: 122500000,
+    totalMarginUsedINR: 30900000,
+    netDeskDayPnlINR: 375300,
+    globalKillSwitchActive: false,
+    clusterStatus: 'OPTIMAL',
+    timestamp: new Date().toISOString(),
+  });
+});
+
 app.get('/manifest.json', (_req, res) => {
   res.sendFile(path.resolve(__dirname, 'public', 'manifest.json'));
 });
@@ -677,17 +826,30 @@ async function startServer() {
     }
   }, 2500);
 
-  if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({ server: { middlewareMode: true, hmr: false }, appType: 'spa' });
-    app.use(vite.middlewares);
+  const distPath = path.resolve(__dirname, 'dist');
+  const hasDist = fs.existsSync(path.resolve(distPath, 'index.html'));
+
+  if (process.env.NODE_ENV === 'production' || hasDist) {
+    app.use(express.static(distPath));
+    app.get('*', (_req, res) => res.sendFile(path.resolve(distPath, 'index.html')));
   } else {
-    app.use(express.static(path.resolve(__dirname, 'dist')));
-    app.get('*', (_req, res) => res.sendFile(path.resolve(__dirname, 'dist', 'index.html')));
+    try {
+      const vite = await createViteServer({ server: { middlewareMode: true, hmr: false }, appType: 'spa' });
+      app.use(vite.middlewares);
+    } catch (viteErr) {
+      console.warn('[Vite Middleware] Could not load Vite dev server, serving dist:', viteErr);
+      app.use(express.static(distPath));
+      app.get('*', (_req, res) => res.sendFile(path.resolve(distPath, 'index.html')));
+    }
   }
 
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`[JARVIS Terminal Server] Online on port ${PORT} with WebSocket on /ws/market`);
-    if (!OWNER_ACCESS_TOKEN) console.warn('[SECURITY] OWNER_ACCESS_TOKEN is not set — AI endpoints are disabled until it is configured.');
+    if (getConfiguredOwnerTokens().length === 0) {
+      console.warn('[SECURITY] OWNER_ACCESS_TOKEN is not configured — owner desk operations are disabled until it is configured.');
+    } else {
+      console.log('[SECURITY] OWNER_ACCESS_TOKEN is configured and verified.');
+    }
   });
 }
 

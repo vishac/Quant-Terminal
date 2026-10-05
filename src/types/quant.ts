@@ -1,4 +1,24 @@
-export type ActiveTab = 'voice_hud' | 'quant_bot' | 'autonomous_agents' | 'equity_radar' | 'deep_thesis' | 'sync_hub' | 'risk_engine' | 'risk_guard' | 'backtest_lab' | 'settings';
+export type ActiveTab = 'voice_hud' | 'quant_bot' | 'multi_user_desk' | 'autonomous_agents' | 'equity_radar' | 'deep_thesis' | 'sync_hub' | 'risk_engine' | 'risk_guard' | 'backtest_lab' | 'settings';
+
+export type UserDeskRole = 'admin' | 'risk_officer' | 'quant_trader' | 'analyst';
+
+export interface DeskTraderSeat {
+  seatNumber: number; // 1 to 20
+  id: string; // user uid or seat id
+  name: string;
+  email: string;
+  role: UserDeskRole;
+  desk: string;
+  avatarSeed?: string;
+  status: 'active' | 'suspended' | 'offline';
+  allocatedCapitalINR: number;
+  marginUsedINR: number;
+  dayPnlINR: number;
+  activePositionsCount: number;
+  killSwitchActive: boolean;
+  killSwitchReason?: string | null;
+  lastActive: string;
+}
 
 export interface OptionContract {
   strike: number;

@@ -16,6 +16,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const navItems: { id: ActiveTab; label: string; icon: React.ReactNode }[] = [
     { 
+      id: 'multi_user_desk', 
+      label: '20-Seat Desk', 
+      icon: <span className="material-symbols-outlined text-[18px]">badge</span> 
+    },
+    { 
       id: 'voice_hud', 
       label: 'Voice HUD', 
       icon: <span className="material-symbols-outlined text-[18px]">graphic_eq</span> 

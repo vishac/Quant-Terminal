@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Lock, ShieldCheck, X, Loader2 } from 'lucide-react';
+import { Lock, ShieldCheck, X, Loader2, Eye, EyeOff } from 'lucide-react';
 
 interface OwnerGateProps {
   isOpen: boolean;
@@ -12,31 +12,44 @@ interface OwnerGateProps {
 // is also attached to the AI endpoints so outsiders cannot run up the Gemini bill.
 export const OwnerGate: React.FC<OwnerGateProps> = ({ isOpen, onClose, onSuccess }) => {
   const [token, setToken] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
 
   if (!isOpen) return null;
 
   const handleVerify = async () => {
-    const t = token.trim();
+    let t = token.trim();
     if (!t) {
       setError('Enter your owner access token.');
       return;
     }
+    // Clean token: strip surrounding quotes and leading "Bearer "
+    t = t.replace(/^["']|["']$/g, '').trim();
+    if (t.toLowerCase().startsWith('bearer ')) {
+      t = t.slice(7).trim();
+    }
+
     setVerifying(true);
     setError(null);
     try {
       const res = await fetch('/api/owner/verify', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-owner-token': t },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-owner-token': t,
+          'Authorization': `Bearer ${t}`,
+        },
+        body: JSON.stringify({ token: t }),
       });
-      if (res.ok) {
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.authorized) {
         onSuccess(t);
         setToken('');
       } else if (res.status === 503) {
-        setError('Server has no OWNER_ACCESS_TOKEN configured. Set it in your server secrets first.');
+        setError('Server has no OWNER_ACCESS_TOKEN configured in environment secrets.');
       } else {
-        setError('Invalid owner token. Access denied.');
+        setError('Invalid owner token. Access denied. Please ensure the token matches the server OWNER_ACCESS_TOKEN secret.');
       }
     } catch {
       setError('Could not reach the server to verify the token.');
@@ -69,19 +82,29 @@ export const OwnerGate: React.FC<OwnerGateProps> = ({ isOpen, onClose, onSuccess
           </div>
         </div>
 
-        <input
-          type="password"
-          value={token}
-          onChange={(e) => setToken(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') handleVerify(); }}
-          placeholder="Owner access token"
-          className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2.5 text-xs text-slate-200 placeholder-slate-500 outline-none focus:border-amber-500 transition"
-          data-testid="owner-gate-token-input"
-          autoFocus
-        />
+        <div className="relative w-full">
+          <input
+            type={showPassword ? 'text' : 'password'}
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleVerify(); }}
+            placeholder="Owner access token or secret"
+            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2.5 pr-10 text-xs text-slate-200 placeholder-slate-500 outline-none focus:border-amber-500 transition"
+            data-testid="owner-gate-token-input"
+            autoFocus
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 p-1"
+            title={showPassword ? 'Hide token' : 'Show token'}
+          >
+            {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+          </button>
+        </div>
 
         {error && (
-          <div className="text-[11px] text-rose-400 bg-rose-950/40 border border-rose-500/30 rounded-lg px-3 py-2" data-testid="owner-gate-error">
+          <div className="text-[11px] text-rose-400 bg-rose-950/40 border border-rose-500/30 rounded-lg px-3 py-2 leading-relaxed" data-testid="owner-gate-error">
             {error}
           </div>
         )}

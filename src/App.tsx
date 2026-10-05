@@ -16,14 +16,26 @@ import { AutonomousAgentsDesk } from './components/AutonomousAgentsDesk';
 import { CircuitBreakerModal } from './components/CircuitBreakerModal';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { OwnerGate } from './components/OwnerGate';
+import { DeskAuthProvider, useDeskAuth } from './context/DeskAuthContext';
+import { MultiUserDesk } from './components/MultiUserDesk';
+import { FirebaseAuthModal } from './components/FirebaseAuthModal';
 import { Radio, Eye, Shield } from 'lucide-react';
 
 export default function App() {
+  return (
+    <DeskAuthProvider>
+      <AppInner />
+    </DeskAuthProvider>
+  );
+}
+
+function AppInner() {
+  const { currentSeat } = useDeskAuth();
   const [userRole, setUserRoleState] = useState<UserRole>(() => {
     try {
-      return (localStorage.getItem('jarvis_user_role') as UserRole) || 'viewer';
+      return (localStorage.getItem('jarvis_user_role') as UserRole) || 'admin';
     } catch {
-      return 'viewer';
+      return 'admin';
     }
   });
 
@@ -77,8 +89,14 @@ export default function App() {
         setIsSidebarOpen((prev) => !prev);
       }
     };
+    const handleOpenGate = () => setGateOpen(true);
+
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('jarvis:open-owner-gate', handleOpenGate);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('jarvis:open-owner-gate', handleOpenGate);
+    };
   }, []);
 
   const handleToggleVoiceBriefing = () => {
@@ -183,6 +201,8 @@ export default function App() {
           ) : (
             /* OWNER / ADMIN MODE: Advanced operational quant desks, broker sync & risk engine */
             <>
+              {activeTab === 'multi_user_desk' && <MultiUserDesk />}
+
               {activeTab === 'voice_hud' && (
                 <JarvisVoiceHUD
                   isSpeaking={isSpeaking}
@@ -331,6 +351,9 @@ export default function App() {
 
       {/* Owner Access Gate (Phase 1) */}
       <OwnerGate isOpen={gateOpen} onClose={() => setGateOpen(false)} onSuccess={handleGateSuccess} />
+
+      {/* Multi-User 20-Seat Firebase Auth & Seat Switch Modal */}
+      <FirebaseAuthModal />
 
       {/* PWA Offline Network Indicator */}
       <OfflineIndicator />

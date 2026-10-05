@@ -48,6 +48,7 @@ export async function askJarvisQuantAssistant(
       headers: {
         'Content-Type': 'application/json',
         'x-owner-token': token,
+        'Authorization': `Bearer ${token}`,
       },
       body: JSON.stringify({ prompt, contextData }),
     });

@@ -15,9 +15,12 @@ import {
   Layers
 } from 'lucide-react';
 
+import { useDeskAuth } from '../context/DeskAuthContext';
+
 export type UserRole = 'viewer' | 'admin';
 
 const TAB_LABELS: Record<ActiveTab, string> = {
+  multi_user_desk: '20-Seat Desk',
   voice_hud: 'Voice HUD',
   quant_bot: 'Quant Bot',
   autonomous_agents: '5-Agent Desk',
@@ -63,6 +66,7 @@ export const Header: React.FC<HeaderProps> = ({
   } = useLiveMarketData(5000);
 
   const [isInfoModalOpen, setIsInfoModalOpen] = useState<boolean>(false);
+  const { currentSeat, setIsAuthModalOpen } = useDeskAuth();
 
   return (
     <>
@@ -201,6 +205,17 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
               </>
             )}
+          </button>
+
+          {/* Active 20-Seat Floor Operator Pill & Modal Launcher */}
+          <button
+            onClick={() => setIsAuthModalOpen(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-cyan-500/30 hover:border-cyan-400 text-xs font-mono transition cursor-pointer shadow-sm active:scale-95"
+            title="Active Quant Floor Seat. Click to switch between 20 trader seats or authenticate"
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse shrink-0" />
+            <span className="text-[10px] text-cyan-300 font-bold shrink-0">SEAT {String(currentSeat.seatNumber).padStart(2, '0')}:</span>
+            <span className="text-xs font-bold text-white max-w-[85px] sm:max-w-[120px] truncate">{currentSeat.name.split(' ')[0]}</span>
           </button>
 
           {/* The Single Unified Mobile App Install Button (Kept prominent here) */}

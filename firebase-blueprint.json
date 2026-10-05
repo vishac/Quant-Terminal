@@ -1,0 +1,129 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Trader profile and seat information within the quant terminal",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID matching document ID" },
+        "email": { "type": "string", "format": "email", "description": "Trader email address" },
+        "displayName": { "type": "string", "description": "Full name or quant handle" },
+        "role": {
+          "type": "string",
+          "enum": ["admin", "risk_officer", "quant_trader", "analyst"],
+          "description": "Assigned institutional role"
+        },
+        "desk": { "type": "string", "description": "Trading desk assignment" },
+        "seatNumber": { "type": "number", "description": "Seat number (1 to 20)" },
+        "allocatedCapitalInr": { "type": "number", "description": "Assigned sandbox capital in INR" },
+        "status": {
+          "type": "string",
+          "enum": ["active", "suspended"],
+          "description": "Account status"
+        },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Last update timestamp" }
+      },
+      "required": ["uid", "email", "displayName", "role", "status", "createdAt"]
+    },
+    "TraderState": {
+      "title": "TraderState",
+      "description": "Per-trader risk and margin state",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "UID of trader owner" },
+        "killSwitchActive": { "type": "boolean", "description": "Whether trader's kill switch is tripped" },
+        "killSwitchReason": { "type": "string", "description": "Reason for trip" },
+        "dayRealizedPnlInr": { "type": "number", "description": "Realized intraday P&L in INR" },
+        "marginUsedInr": { "type": "number", "description": "Utilized margin in INR" },
+        "marginAvailableInr": { "type": "number", "description": "Available margin in INR" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Timestamp of last recalculation" }
+      },
+      "required": ["userId", "killSwitchActive", "dayRealizedPnlInr", "marginUsedInr", "marginAvailableInr", "updatedAt"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Sandbox trade execution order record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique order ID" },
+        "userId": { "type": "string", "description": "Trader UID" },
+        "traderName": { "type": "string", "description": "Name of trader who placed order" },
+        "symbol": { "type": "string", "description": "Exchange symbol" },
+        "side": { "type": "string", "enum": ["BUY", "SELL"], "description": "Order side" },
+        "productType": {
+          "type": "string",
+          "enum": ["EQUITY_INTRADAY", "FNO_OPT_BUY", "FNO_OPT_SELL", "FNO_FUT"],
+          "description": "Product type"
+        },
+        "lots": { "type": "number", "description": "Number of lots" },
+        "qty": { "type": "number", "description": "Quantity of underlying" },
+        "price": { "type": "number", "description": "Order price" },
+        "status": {
+          "type": "string",
+          "enum": ["FILLED", "REJECTED", "CANCELLED"],
+          "description": "Execution status"
+        },
+        "riskCheckPassed": { "type": "boolean", "description": "Whether risk checks passed" },
+        "rejectReason": { "type": "string", "description": "Rejection explanation" },
+        "timestamp": { "type": "string", "format": "date-time", "description": "Execution time" }
+      },
+      "required": ["id", "userId", "traderName", "symbol", "side", "productType", "qty", "price", "status", "riskCheckPassed", "timestamp"]
+    },
+    "DeskConfig": {
+      "title": "DeskConfig",
+      "description": "Global institutional quant desk configuration",
+      "type": "object",
+      "properties": {
+        "globalKillSwitch": { "type": "boolean", "description": "Master desk kill switch" },
+        "maxDeskLossInr": { "type": "number", "description": "Aggregated daily loss limit across all seats" },
+        "maxActiveSeats": { "type": "number", "description": "Allowed active seats (20)" },
+        "defaultTraderCapitalInr": { "type": "number", "description": "Default allocated capital per seat" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Last modified timestamp" },
+        "updatedBy": { "type": "string", "description": "UID of admin who modified" }
+      },
+      "required": ["globalKillSwitch", "maxDeskLossInr", "maxActiveSeats", "defaultTraderCapitalInr", "updatedAt"]
+    },
+    "BacktestRecord": {
+      "title": "BacktestRecord",
+      "description": "Historical backtest run record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Backtest ID" },
+        "userId": { "type": "string", "description": "Trader UID" },
+        "traderName": { "type": "string", "description": "Trader handle" },
+        "symbol": { "type": "string", "description": "Backtested symbol" },
+        "strategy": { "type": "string", "description": "Strategy identifier" },
+        "range": { "type": "string", "description": "Backtest date range" },
+        "totalReturnPct": { "type": "number", "description": "Return percentage" },
+        "sharpe": { "type": "number", "description": "Sharpe ratio" },
+        "maxDrawdownPct": { "type": "number", "description": "Max drawdown percentage" },
+        "winRatePct": { "type": "number", "description": "Win rate percentage" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" }
+      },
+      "required": ["id", "userId", "symbol", "strategy", "range", "totalReturnPct", "sharpe", "maxDrawdownPct", "winRatePct", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Individual trader profile and seat assignment"
+    },
+    "/trader_states/{userId}": {
+      "schema": "TraderState",
+      "description": "Intraday risk, PnL, and margin state for each trader seat"
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Desk-wide and trader-specific sandbox order audit trail"
+    },
+    "/desk_config/{configId}": {
+      "schema": "DeskConfig",
+      "description": "Master institutional risk limits and global kill switch"
+    },
+    "/backtests/{backtestId}": {
+      "schema": "BacktestRecord",
+      "description": "Saved institutional strategy backtests"
+    }
+  }
+}

@@ -4,8 +4,18 @@ import { Play, TrendingUp, AlertTriangle, Loader2 } from 'lucide-react';
 interface StrategyMeta { id: string; agent: string; name: string; rule: string; }
 
 const token = () => { try { return localStorage.getItem('jarvis_owner_token') || ''; } catch { return ''; } };
-const api = (path: string, opts: RequestInit = {}) =>
-  fetch(path, { ...opts, headers: { 'Content-Type': 'application/json', 'x-owner-token': token(), ...(opts.headers || {}) } });
+const api = (path: string, opts: RequestInit = {}) => {
+  const t = token();
+  return fetch(path, {
+    ...opts,
+    headers: {
+      'Content-Type': 'application/json',
+      'x-owner-token': t,
+      'Authorization': `Bearer ${t}`,
+      ...(opts.headers || {}),
+    },
+  });
+};
 
 const SYMBOLS = [
   { v: '^NSEI', l: 'NIFTY 50' }, { v: '^NSEBANK', l: 'BANK NIFTY' }, { v: '^BSESN', l: 'SENSEX' },

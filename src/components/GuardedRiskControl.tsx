@@ -13,8 +13,18 @@ interface RiskState {
 }
 
 const token = () => { try { return localStorage.getItem('jarvis_owner_token') || ''; } catch { return ''; } };
-const api = (path: string, opts: RequestInit = {}) =>
-  fetch(path, { ...opts, headers: { 'Content-Type': 'application/json', 'x-owner-token': token(), ...(opts.headers || {}) } });
+const api = (path: string, opts: RequestInit = {}) => {
+  const t = token();
+  return fetch(path, {
+    ...opts,
+    headers: {
+      'Content-Type': 'application/json',
+      'x-owner-token': t,
+      'Authorization': `Bearer ${t}`,
+      ...(opts.headers || {}),
+    },
+  });
+};
 
 const fmt = (n: number) => '₹' + Math.round(n).toLocaleString('en-IN');
 
@@ -106,9 +116,14 @@ export const GuardedRiskControl: React.FC = () => {
         {loadError ? (
           <div className="space-y-3">
             <p className="text-rose-300" role="alert">{loadError}</p>
-            <button onClick={() => refresh()} className="rounded-lg bg-cyan-600 px-3 py-2 text-xs font-bold text-white hover:bg-cyan-500">
-              Retry
-            </button>
+            <div className="flex gap-2">
+              <button onClick={() => refresh()} className="rounded-lg bg-cyan-600 px-3 py-2 text-xs font-bold text-white hover:bg-cyan-500 cursor-pointer">
+                Retry
+              </button>
+              <button onClick={() => window.dispatchEvent(new CustomEvent('jarvis:open-owner-gate'))} className="rounded-lg bg-amber-600 px-3 py-2 text-xs font-bold text-white hover:bg-amber-500 cursor-pointer">
+                Enter / Update Owner Secret
+              </button>
+            </div>
           </div>
         ) : (
           <div className="flex items-center gap-2 text-slate-300">

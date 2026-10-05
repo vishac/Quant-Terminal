@@ -1,0 +1,75 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Core Auth & Role Helpers
+    function isSignedIn() {
+      return request.auth != null && request.auth.uid != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        getUserData().role == 'admin' ||
+        (request.auth.token != null && request.auth.token.role == 'admin') ||
+        request.auth.token.email == 'reachvishalc@gmail.com'
+      );
+    }
+
+    function isRiskOfficer() {
+      return isSignedIn() && (
+        isAdmin() ||
+        getUserData().role == 'risk_officer' ||
+        (request.auth.token != null && request.auth.token.role == 'risk_officer')
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 64;
+    }
+
+    // Collection: /users/{userId}
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && (isOwner(userId) || isAdmin());
+      allow update: if isSignedIn() && (isOwner(userId) || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    // Collection: /trader_states/{userId}
+    match /trader_states/{userId} {
+      allow read: if isSignedIn() && (isOwner(userId) || isRiskOfficer());
+      allow create: if isSignedIn() && (isOwner(userId) || isRiskOfficer());
+      allow update: if isSignedIn() && (isOwner(userId) || isRiskOfficer());
+      allow delete: if isAdmin();
+    }
+
+    // Collection: /orders/{orderId}
+    match /orders/{orderId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update: if isRiskOfficer();
+      allow delete: if isAdmin();
+    }
+
+    // Collection: /desk_config/{configId}
+    match /desk_config/{configId} {
+      allow read: if isSignedIn();
+      allow write: if isRiskOfficer();
+    }
+
+    // Collection: /backtests/{backtestId}
+    match /backtests/{backtestId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+  }
+}

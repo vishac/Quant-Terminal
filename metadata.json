@@ -1,6 +1,6 @@
 {
   "name": "J.A.R.V.I.S. Institutional Quant Terminal",
-  "description": "Executive AI financial assistant, 3D volatility matrix, real-time risk engine, macro policy thesis generator, and broker feed router.",
+  "description": "20-seat institutional quant trading floor, AI financial assistant, 3D volatility matrix, real-time risk engine, multi-trader portfolio & margin monitoring, and broker feed router.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
