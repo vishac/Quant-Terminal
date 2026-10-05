@@ -594,7 +594,7 @@ export const JarvisVoiceHUD: React.FC<JarvisVoiceHUDProps> = ({
             </span> with India VIX at <span className="text-emerald-400 font-mono font-semibold">{vixQuote?.price != null ? vixQuote.price.toFixed(2) : '—'}</span>.
           </p>
 
-          {/* Curated Verified Live Exchange Data Cards */}
+          {/* Real-Time Verified Live Exchange Data Cards */}
           <div className="space-y-2 pt-1 font-mono text-xs">
             {/* Live Card 1: Benchmark Indices Real Exchange Feed */}
             <div className="p-3.5 rounded-2xl bg-slate-900/60 border border-cyan-500/20 hover:border-cyan-400/50 transition-colors flex items-start gap-3 shadow-inner">

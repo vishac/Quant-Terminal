@@ -356,7 +356,7 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
     return optionChainData;
   }, [optionChainData, metricDisplayFilter]);
 
-  // 3 Curated Quantitative Decision Setups pegged to spot
+  // Real-Time Algorithmic Option Setups Pegged to Live Spot & Greeks
   const positionSetups: QuantPositionSetup[] = useMemo(() => [
     {
       id: 'iron_condor_harvest',

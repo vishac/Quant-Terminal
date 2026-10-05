@@ -20,6 +20,7 @@ import {
 import {
   quotesCache, syncMarketQuotes, fetchDelayedYahooQuote,
   checkIsMarketHours, DATA_SOURCE, DATA_DISCLAIMER, TRACKED_SYMBOLS,
+  fetchDynamicZonesScreener,
 } from './src/server/marketData.ts';
 import type { MarketQuote } from './src/types/quant.ts';
 
@@ -159,6 +160,22 @@ app.get('/api/market-data/:symbol', async (req, res) => {
     return res.json({ success: true, isDelayed: true, isOfficial: false, dataDisclaimer: DATA_DISCLAIMER, quote: q });
   }
   res.status(404).json({ success: false, error: 'Quote unavailable from the delayed data source.' });
+});
+
+// Chartink Live Dynamic Zones Breakout Screener API
+app.get('/api/screener/chartink', async (_req, res) => {
+  try {
+    const picks = await fetchDynamicZonesScreener();
+    res.json({
+      success: true,
+      source: 'CHARTINK_DYNAMIC_ZONES_SCANNER',
+      count: picks.length,
+      data: picks,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // =============================================================================
