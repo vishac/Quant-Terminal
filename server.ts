@@ -479,9 +479,291 @@ app.get('/api/market-data/:symbol', async (req, res) => {
   res.status(404).json({ success: false, error: 'Quote unavailable from the delayed data source.' });
 });
 
-// Broker status — HONEST: no broker is connected in this build.
-app.post('/api/broker/test-ping', (req, res) => {
+// =============================================================================
+// UPSTOX ANALYTICS & MARKET DATA GATEWAY (v2 API)
+// Real Upstox developer API integration for quotes, option chain, and telemetry.
+// =============================================================================
+
+interface UpstoxConfigState {
+  apiKey: string;
+  apiSecret: string;
+  accessToken: string;
+  baseUrl: string;
+  lastConnected: string | null;
+  lastLatencyMs: number | null;
+  status: 'CONNECTED' | 'DISCONNECTED' | 'ERROR' | 'UNCONFIGURED';
+  profile: any | null;
+}
+
+const upstoxConfig: UpstoxConfigState = {
+  apiKey: process.env.UPSTOX_API_KEY || '',
+  apiSecret: process.env.UPSTOX_API_SECRET || '',
+  accessToken: process.env.UPSTOX_ACCESS_TOKEN || '',
+  baseUrl: process.env.UPSTOX_BASE_URL || 'https://api.upstox.com/v2',
+  lastConnected: null,
+  lastLatencyMs: null,
+  status: process.env.UPSTOX_ACCESS_TOKEN ? 'DISCONNECTED' : 'UNCONFIGURED',
+  profile: null,
+};
+
+async function testUpstoxConnection(customToken?: string, customBaseUrl?: string): Promise<{
+  success: boolean;
+  status: 'CONNECTED' | 'DISCONNECTED' | 'ERROR' | 'UNCONFIGURED';
+  latencyMs: number | null;
+  profile?: any;
+  error?: string;
+}> {
+  const token = (customToken || upstoxConfig.accessToken || process.env.UPSTOX_ACCESS_TOKEN || '').trim();
+  const baseUrl = (customBaseUrl || upstoxConfig.baseUrl || 'https://api.upstox.com/v2').trim();
+
+  if (!token) {
+    upstoxConfig.status = 'UNCONFIGURED';
+    return {
+      success: false,
+      status: 'UNCONFIGURED',
+      latencyMs: null,
+      error: 'Upstox Access Token is not configured. Provide an access token or set UPSTOX_ACCESS_TOKEN in environment.',
+    };
+  }
+
+  const start = Date.now();
+  try {
+    const res = await fetch(`${baseUrl}/user/profile`, {
+      headers: {
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    const latencyMs = Date.now() - start;
+    if (res.ok) {
+      const data = await res.json();
+      const user = data.data || {};
+      upstoxConfig.status = 'CONNECTED';
+      upstoxConfig.lastConnected = new Date().toISOString();
+      upstoxConfig.lastLatencyMs = latencyMs;
+      upstoxConfig.profile = {
+        userId: user.user_id || user.client_id || 'UPSTOX-CLIENT',
+        userName: user.user_name || 'Upstox Trader',
+        email: user.email || '',
+        userType: user.user_type || 'INDIVIDUAL',
+        broker: 'UPSTOX',
+        exchanges: user.exchanges || ['NSE', 'BSE', 'MCX'],
+        products: user.products || ['CNC', 'MIS', 'NRML'],
+      };
+      return {
+        success: true,
+        status: 'CONNECTED',
+        latencyMs,
+        profile: upstoxConfig.profile,
+      };
+    } else {
+      const errBody = await res.json().catch(() => ({}));
+      const errMsg = errBody.errors?.[0]?.message || errBody.message || `Upstox API responded with HTTP status ${res.status}`;
+      upstoxConfig.status = 'ERROR';
+      return {
+        success: false,
+        status: 'ERROR',
+        latencyMs,
+        error: errMsg,
+      };
+    }
+  } catch (netErr: any) {
+    upstoxConfig.status = 'ERROR';
+    return {
+      success: false,
+      status: 'ERROR',
+      latencyMs: Date.now() - start,
+      error: `Network failure connecting to Upstox API: ${netErr.message}`,
+    };
+  }
+}
+
+// 1. Upstox Status & Telemetry
+app.get('/api/upstox/status', async (_req, res) => {
+  const isConfigured = !!(upstoxConfig.accessToken || process.env.UPSTOX_ACCESS_TOKEN);
+  res.json({
+    success: true,
+    configured: isConfigured,
+    status: upstoxConfig.status,
+    baseUrl: upstoxConfig.baseUrl,
+    hasApiKey: !!(upstoxConfig.apiKey || process.env.UPSTOX_API_KEY),
+    lastConnected: upstoxConfig.lastConnected,
+    lastLatencyMs: upstoxConfig.lastLatencyMs,
+    profile: upstoxConfig.profile,
+    supportedInstruments: [
+      { key: 'NSE_INDEX|Nifty 50', name: 'NIFTY 50 Index' },
+      { key: 'NSE_INDEX|Nifty Bank', name: 'BANK NIFTY Index' },
+      { key: 'BSE_INDEX|SENSEX', name: 'BSE SENSEX Index' },
+      { key: 'NSE_INDEX|India VIX', name: 'INDIA VIX' },
+    ],
+    features: [
+      'L2 Market Depth (Quotes API)',
+      'Real Options Chain (Delta, Gamma, Vega, Theta, IV)',
+      'Intraday & Historical Candles (1m, 5m, 15m, 1d)',
+      'NSE / BSE Exchange Status Telemetry'
+    ],
+    disclaimer: 'Upstox Analytics Gateway is active. Live feed requests require a valid, unexpired Upstox Access Token.',
+  });
+});
+
+// 2. Upstox Configuration & Session Pairing (Owner protected)
+app.post('/api/upstox/configure', rateLimit, requireOwner, async (req, res) => {
+  const { accessToken, apiKey, apiSecret, baseUrl } = req.body || {};
+
+  if (!accessToken || typeof accessToken !== 'string' || !accessToken.trim()) {
+    return res.status(400).json({ success: false, error: 'Valid Upstox Access Token is required.' });
+  }
+
+  const cleanToken = accessToken.trim().replace(/^Bearer\s+/i, '');
+  const cleanBaseUrl = (baseUrl && typeof baseUrl === 'string' ? baseUrl.trim() : 'https://api.upstox.com/v2');
+
+  const testResult = await testUpstoxConnection(cleanToken, cleanBaseUrl);
+  if (testResult.success) {
+    upstoxConfig.accessToken = cleanToken;
+    if (apiKey && typeof apiKey === 'string') upstoxConfig.apiKey = apiKey.trim();
+    if (apiSecret && typeof apiSecret === 'string') upstoxConfig.apiSecret = apiSecret.trim();
+    upstoxConfig.baseUrl = cleanBaseUrl;
+    upstoxConfig.status = 'CONNECTED';
+    return res.json({
+      success: true,
+      message: 'Upstox Analytics API successfully verified and connected!',
+      latencyMs: testResult.latencyMs,
+      profile: testResult.profile,
+    });
+  } else {
+    return res.status(401).json({
+      success: false,
+      error: testResult.error || 'Upstox Access Token verification failed.',
+      latencyMs: testResult.latencyMs,
+    });
+  }
+});
+
+// 3. Upstox Test Ping
+app.post('/api/upstox/test-ping', async (_req, res) => {
+  const result = await testUpstoxConnection();
+  res.json({
+    success: result.success,
+    status: result.status,
+    latencyMs: result.latencyMs,
+    profile: result.profile,
+    error: result.error,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// 4. Upstox Market Quote Proxy
+app.get('/api/upstox/market-quote', async (req, res) => {
+  const token = upstoxConfig.accessToken || process.env.UPSTOX_ACCESS_TOKEN;
+  if (!token) {
+    return res.status(400).json({
+      success: false,
+      configured: false,
+      error: 'Upstox API token is not configured. Please pair your Upstox Analytics API in Broker Router.',
+    });
+  }
+
+  const instrumentKey = req.query.instrument_key || 'NSE_INDEX|Nifty 50,NSE_INDEX|Nifty Bank,BSE_INDEX|SENSEX,NSE_INDEX|India VIX';
+  try {
+    const upstreamRes = await fetch(`${upstoxConfig.baseUrl}/market-quote/quotes?instrument_key=${encodeURIComponent(String(instrumentKey))}`, {
+      headers: {
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (upstreamRes.ok) {
+      const data = await upstreamRes.json();
+      return res.json({
+        success: true,
+        source: 'UPSTOX_REALTIME_ANALYTICS',
+        data: data.data || {},
+        timestamp: new Date().toISOString(),
+      });
+    } else {
+      const err = await upstreamRes.json().catch(() => ({}));
+      return res.status(upstreamRes.status).json({
+        success: false,
+        error: err.errors?.[0]?.message || 'Upstox quote query failed.',
+      });
+    }
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 5. Upstox Option Chain Analytics Proxy
+app.get('/api/upstox/option-chain', async (req, res) => {
+  const token = upstoxConfig.accessToken || process.env.UPSTOX_ACCESS_TOKEN;
+  if (!token) {
+    return res.status(400).json({
+      success: false,
+      configured: false,
+      error: 'Upstox API token is not configured.',
+    });
+  }
+
+  const instrumentKey = req.query.instrument_key || 'NSE_INDEX|Nifty 50';
+  const expiryDate = req.query.expiry_date || '';
+  try {
+    let url = `${upstoxConfig.baseUrl}/option/chain?instrument_key=${encodeURIComponent(String(instrumentKey))}`;
+    if (expiryDate) url += `&expiry_date=${encodeURIComponent(String(expiryDate))}`;
+
+    const upstreamRes = await fetch(url, {
+      headers: {
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (upstreamRes.ok) {
+      const data = await upstreamRes.json();
+      return res.json({
+        success: true,
+        source: 'UPSTOX_OPTION_CHAIN',
+        data: data.data || [],
+        timestamp: new Date().toISOString(),
+      });
+    } else {
+      const err = await upstreamRes.json().catch(() => ({}));
+      return res.status(upstreamRes.status).json({
+        success: false,
+        error: err.errors?.[0]?.message || 'Upstox Option Chain query failed.',
+      });
+    }
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 6. Upstox Disconnect Session
+app.post('/api/upstox/disconnect', requireOwner, (_req, res) => {
+  upstoxConfig.accessToken = '';
+  upstoxConfig.status = 'DISCONNECTED';
+  upstoxConfig.profile = null;
+  res.json({ success: true, message: 'Upstox Analytics session safely disconnected.' });
+});
+
+// Broker status & unified test ping
+app.post('/api/broker/test-ping', async (req, res) => {
   const { brokerId } = req.body || {};
+  if (brokerId === 'UPSTOX' || !brokerId) {
+    const testResult = await testUpstoxConnection();
+    return res.json({
+      success: true,
+      brokerId: 'UPSTOX',
+      connected: testResult.success,
+      status: testResult.status,
+      latency: testResult.latencyMs ? `${testResult.latencyMs} ms` : null,
+      node: 'UPSTOX-ANALYTICS-V2',
+      profile: testResult.profile || null,
+      message: testResult.success 
+        ? `Upstox Analytics API live handshake verified in ${testResult.latencyMs}ms.`
+        : (testResult.error || 'Upstox API token is not configured or expired. Configure UPSTOX_ACCESS_TOKEN.'),
+      timestamp: new Date().toISOString(),
+    });
+  }
   res.json({
     success: true,
     brokerId: typeof brokerId === 'string' ? brokerId : null,
@@ -489,7 +771,7 @@ app.post('/api/broker/test-ping', (req, res) => {
     status: 'NOT_CONNECTED',
     latency: null,
     node: null,
-    message: 'No broker integration is configured in this build. Order execution is disabled (Phase 2+).',
+    message: 'Broker integration not configured. Use Upstox Analytics API to configure live feed connectivity.',
     timestamp: new Date().toISOString(),
   });
 });

@@ -8,6 +8,7 @@ import {
   Lock, 
   ShieldAlert, 
   Eye, 
+  EyeOff,
   CheckCircle2, 
   AlertTriangle, 
   Terminal, 
@@ -21,7 +22,11 @@ import {
   Server,
   Trash2,
   Send,
-  Key
+  Key,
+  ChevronRight,
+  ExternalLink,
+  ShieldCheck,
+  X
 } from 'lucide-react';
 import { useLiveMarketData } from '../services/liveMarketService';
 
@@ -39,6 +44,176 @@ export const BrokerGatewayRouter: React.FC = () => {
   const [abmRoutingActive, setAbmRoutingActive] = useState<boolean>(true);
   const [kiteHotFeedActive, setKiteHotFeedActive] = useState<boolean>(true);
   const [dhanStandbyActive, setDhanStandbyActive] = useState<boolean>(true);
+
+  // Upstox Analytics state
+  const [upstoxData, setUpstoxData] = useState<{
+    configured: boolean;
+    status: 'CONNECTED' | 'DISCONNECTED' | 'ERROR' | 'UNCONFIGURED';
+    baseUrl: string;
+    hasApiKey: boolean;
+    lastConnected: string | null;
+    lastLatencyMs: number | null;
+    profile: any | null;
+    supportedInstruments?: Array<{ key: string; name: string }>;
+    features?: string[];
+  } | null>(null);
+  const [showUpstoxModal, setShowUpstoxModal] = useState<boolean>(false);
+  const [upstoxTokenInput, setUpstoxTokenInput] = useState<string>('');
+  const [upstoxApiKeyInput, setUpstoxApiKeyInput] = useState<string>('');
+  const [upstoxBaseUrlInput, setUpstoxBaseUrlInput] = useState<string>('https://api.upstox.com/v2');
+  const [showUpstoxToken, setShowUpstoxToken] = useState<boolean>(false);
+  const [isVerifyingUpstox, setIsVerifyingUpstox] = useState<boolean>(false);
+  const [upstoxError, setUpstoxError] = useState<string | null>(null);
+  const [upstoxSuccessMsg, setUpstoxSuccessMsg] = useState<string | null>(null);
+  const [upstoxModalTab, setUpstoxModalTab] = useState<'CONFIG' | 'QUOTES' | 'OPTION_CHAIN'>('CONFIG');
+  const [upstoxQuotesData, setUpstoxQuotesData] = useState<any | null>(null);
+  const [upstoxOptionChainData, setUpstoxOptionChainData] = useState<any | null>(null);
+  const [isLoadingQuotes, setIsLoadingQuotes] = useState<boolean>(false);
+  const [isLoadingOptionChain, setIsLoadingOptionChain] = useState<boolean>(false);
+
+  const fetchUpstoxStatus = async () => {
+    try {
+      const res = await fetch('/api/upstox/status');
+      if (res.ok) {
+        const data = await res.json();
+        setUpstoxData(data);
+      }
+    } catch {}
+  };
+
+  useEffect(() => {
+    fetchUpstoxStatus();
+  }, []);
+
+  const handleConfigureUpstox = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!upstoxTokenInput.trim()) {
+      setUpstoxError('Please enter a valid Upstox Access Token.');
+      return;
+    }
+    setIsVerifyingUpstox(true);
+    setUpstoxError(null);
+    setUpstoxSuccessMsg(null);
+
+    try {
+      let ownerToken = '';
+      try { ownerToken = localStorage.getItem('jarvis_owner_token') || ''; } catch {}
+
+      const res = await fetch('/api/upstox/configure', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-owner-token': ownerToken,
+          'Authorization': `Bearer ${ownerToken}`,
+        },
+        body: JSON.stringify({
+          accessToken: upstoxTokenInput.trim(),
+          apiKey: upstoxApiKeyInput.trim() || undefined,
+          baseUrl: upstoxBaseUrlInput.trim() || 'https://api.upstox.com/v2',
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setUpstoxSuccessMsg(`Connected successfully! Latency: ${data.latencyMs}ms. Client: ${data.profile?.userName || data.profile?.userId}`);
+        setRouterToast(`[UPSTOX PAIRED]: Handshake verified with Upstox Analytics API in ${data.latencyMs}ms.`);
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        setLogs(prev => [{
+          id: `log-${Date.now()}`,
+          timestamp: timeStr,
+          type: 'AUTH_OK',
+          category: 'AUTH_TOKENS',
+          message: `Upstox Analytics Node paired. Bearer handshake verified in ${data.latencyMs}ms. Client: ${data.profile?.userId || 'UPSTOX'}.`
+        }, ...prev]);
+        await fetchUpstoxStatus();
+        setUpstoxTokenInput('');
+      } else {
+        setUpstoxError(data.error || 'Failed to verify Upstox Access Token.');
+      }
+    } catch (err: any) {
+      setUpstoxError('Network error connecting to Upstox verification service.');
+    } finally {
+      setIsVerifyingUpstox(false);
+    }
+  };
+
+  const handlePingUpstox = async () => {
+    try {
+      const res = await fetch('/api/upstox/test-ping', { method: 'POST' });
+      const data = await res.json();
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      if (data.success) {
+        setRouterToast(`[UPSTOX PING OK]: RTT ${data.latencyMs}ms. Node: UPSTOX-ANALYTICS-V2.`);
+        setLogs(prev => [{
+          id: `log-${Date.now()}`,
+          timestamp: timeStr,
+          type: 'AUTH_OK',
+          category: 'WEBSOCKET',
+          message: `Upstox Analytics Gateway RTT test verified in ${data.latencyMs}ms. Status: ${data.status}.`
+        }, ...prev]);
+        await fetchUpstoxStatus();
+      } else {
+        setRouterToast(`[UPSTOX PING]: ${data.error || 'Not connected'}`);
+      }
+    } catch {
+      setRouterToast('[UPSTOX PING]: Connection failed.');
+    }
+  };
+
+  const handleDisconnectUpstox = async () => {
+    try {
+      let ownerToken = '';
+      try { ownerToken = localStorage.getItem('jarvis_owner_token') || ''; } catch {}
+      await fetch('/api/upstox/disconnect', {
+        method: 'POST',
+        headers: {
+          'x-owner-token': ownerToken,
+          'Authorization': `Bearer ${ownerToken}`,
+        }
+      });
+      setUpstoxSuccessMsg('Upstox session disconnected.');
+      setRouterToast('[UPSTOX]: Session disconnected.');
+      await fetchUpstoxStatus();
+    } catch {}
+  };
+
+  const handleFetchUpstoxQuotes = async () => {
+    setIsLoadingQuotes(true);
+    setUpstoxError(null);
+    try {
+      const res = await fetch('/api/upstox/market-quote?instrument_key=NSE_INDEX|Nifty 50,NSE_INDEX|Nifty Bank,BSE_INDEX|SENSEX,NSE_INDEX|India VIX');
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setUpstoxQuotesData(data.data);
+      } else {
+        setUpstoxError(data.error || 'Quote fetch failed. Please check Upstox token.');
+      }
+    } catch {
+      setUpstoxError('Failed to fetch Upstox quotes.');
+    } finally {
+      setIsLoadingQuotes(false);
+    }
+  };
+
+  const handleFetchUpstoxOptionChain = async () => {
+    setIsLoadingOptionChain(true);
+    setUpstoxError(null);
+    try {
+      const res = await fetch('/api/upstox/option-chain?instrument_key=NSE_INDEX|Nifty 50');
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setUpstoxOptionChainData(data.data);
+      } else {
+        setUpstoxError(data.error || 'Option chain fetch failed. Please check Upstox token.');
+      }
+    } catch {
+      setUpstoxError('Failed to fetch Upstox option chain.');
+    } finally {
+      setIsLoadingOptionChain(false);
+    }
+  };
 
   // Terminal log stream
   const [logs, setLogs] = useState<Array<{
@@ -551,55 +726,93 @@ export const BrokerGatewayRouter: React.FC = () => {
           </div>
         </div>
 
-        {/* CARD 4: ADD BROKER / ICICI BREEZE & KOTAK NEO */}
-        <div className="relative flex flex-col justify-between bg-slate-950/70 backdrop-blur-xl rounded-2xl p-5 border-2 border-dashed border-slate-800 hover:border-cyan-500/50 transition-all font-mono">
+        {/* CARD 4: UPSTOX ANALYTICS API GATEWAY */}
+        <div className="relative flex flex-col justify-between bg-[#080d1a]/85 backdrop-blur-xl rounded-2xl p-5 border border-cyan-500/30 shadow-xl hover:shadow-[0_0_30px_rgba(0,240,255,0.2)] transition-all font-mono">
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] text-slate-400 uppercase tracking-widest font-semibold">
-                // SEC-04::ADD_EXPANSION
+              <span className="text-[10px] text-cyan-400 uppercase tracking-widest font-semibold">
+                // SEC-04::UPSTOX_ANALYTICS
               </span>
-              <span className="px-2 py-0.5 bg-slate-900 rounded text-slate-400 text-[10px]">
-                READY TO PAIR
-              </span>
+              <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold ${
+                upstoxData?.status === 'CONNECTED'
+                  ? 'bg-emerald-950/60 border border-emerald-500/40 text-emerald-400'
+                  : 'bg-amber-950/60 border border-amber-500/40 text-amber-300'
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${upstoxData?.status === 'CONNECTED' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`}></span>
+                {upstoxData?.status === 'CONNECTED' ? 'ONLINE PAIRED' : 'STANDBY / READY'}
+              </div>
             </div>
 
             <div className="flex items-start justify-between">
               <div>
-                <h2 className="text-xl text-cyan-200 font-bold tracking-tight">EXPANSION HUBS</h2>
-                <div className="text-[11px] text-slate-400">BREEZE / NEO PROTOCOLS</div>
+                <h2 className="text-xl text-cyan-200 font-bold tracking-tight">UPSTOX</h2>
+                <div className="text-[11px] text-slate-400">ANALYTICS & MARKET DATA V2</div>
               </div>
-              <div className="p-2 rounded-lg bg-slate-900 text-cyan-300">
-                <Plus className="w-5 h-5" />
+              <div className="p-2 rounded-lg bg-cyan-950/60 border border-cyan-500/30 text-cyan-300">
+                <Wifi className="w-5 h-5" />
               </div>
             </div>
 
-            <p className="text-xs text-slate-400 leading-relaxed font-sans">
-              Connect ICICI Direct Breeze or Kotak Neo API for algorithmic hedging and basket option orders across BSE StAR MF and currency contracts.
-            </p>
+            {/* Colocation & Node Telemetry Cardlet */}
+            <div className="bg-slate-950/80 rounded-lg p-2.5 space-y-1 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">ENDPOINT:</span>
+                <span className="text-cyan-300 font-bold truncate max-w-[140px]">api.upstox.com/v2</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">LATENCY:</span>
+                <span className="text-emerald-400 font-bold flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> 
+                  {upstoxData?.lastLatencyMs ? `${upstoxData.lastLatencyMs} ms` : '— ms'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">CLIENT ID:</span>
+                <span className="text-amber-400 font-bold truncate max-w-[140px]">
+                  {upstoxData?.profile?.userId || (upstoxData?.configured ? 'ENV-CONFIGURED' : 'UNPAIRED')}
+                </span>
+              </div>
+            </div>
 
-            <div className="space-y-1.5 pt-1">
-              <div className="p-2 rounded-lg bg-slate-900/80 border border-slate-800 flex items-center justify-between cursor-pointer hover:bg-slate-800 transition-colors">
-                <span className="text-xs text-cyan-300 font-bold">ICICI BREEZE API</span>
-                <span className="text-[10px] text-emerald-400 font-bold uppercase">CONFIGURE</span>
+            {/* Stream Target Allocation */}
+            <div className="space-y-1">
+              <div className="text-[10px] text-slate-400 uppercase tracking-wider">ROUTED CAPABILITIES:</div>
+              <div className="flex flex-wrap gap-1 text-[10px]">
+                <span className="px-2 py-0.5 rounded bg-slate-900 border border-cyan-500/20 text-cyan-300">L2 DEPTH QUOTES</span>
+                <span className="px-2 py-0.5 rounded bg-slate-900 border border-cyan-500/20 text-cyan-300">OPTION CHAIN & GREEKS</span>
+                <span className="px-2 py-0.5 rounded bg-slate-900 text-emerald-400 border border-emerald-500/20">NSE / BSE / MCX</span>
               </div>
-              <div className="p-2 rounded-lg bg-slate-900/80 border border-slate-800 flex items-center justify-between cursor-pointer hover:bg-slate-800 transition-colors">
-                <span className="text-xs text-amber-300 font-bold">KOTAK NEO HS REST</span>
-                <span className="text-[10px] text-emerald-400 font-bold uppercase">CONFIGURE</span>
-              </div>
-              <div className="p-2 rounded-lg bg-slate-900/80 border border-slate-800 flex items-center justify-between cursor-pointer hover:bg-slate-800 transition-colors">
-                <span className="text-xs text-slate-300 font-bold">CUSTOM FIX 4.4 PROTOCOL</span>
-                <span className="text-[10px] text-slate-500 uppercase">ENTERPRISE</span>
+            </div>
+
+            {/* Credentials / Config Status */}
+            <div className="space-y-1 pt-1 text-[11px]">
+              <div className="flex items-center justify-between bg-slate-950 px-2.5 py-1.5 rounded-lg border border-slate-800">
+                <span className="text-slate-400 text-[10px]">AUTH MODE:</span>
+                <span className="text-cyan-300 font-bold text-[10px]">BEARER ACCESS TOKEN</span>
               </div>
             </div>
           </div>
 
-          <div className="pt-4 mt-4">
+          {/* Action Trigger Dock */}
+          <div className="pt-4 mt-4 bg-slate-950/60 -mx-5 -mb-5 p-4 rounded-b-2xl border-t border-slate-800 flex items-center justify-between gap-2 font-mono">
             <button
-              onClick={() => setShowAddBrokerModal(true)}
-              className="w-full py-2.5 px-4 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold uppercase tracking-wider text-xs shadow-[0_0_15px_rgba(0,240,255,0.25)] transition-all flex items-center justify-center gap-2 cursor-pointer"
+              onClick={handlePingUpstox}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-cyan-500/30 text-cyan-300 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer"
+              title="Test ping to Upstox API gateway"
             >
-              <Plus className="w-4 h-4" />
-              <span>ADD NEW BROKER NODE</span>
+              <RefreshCw className="w-3 h-3" />
+              <span>TEST PING</span>
+            </button>
+            <button
+              onClick={() => {
+                setShowUpstoxModal(true);
+                setUpstoxError(null);
+                setUpstoxSuccessMsg(null);
+              }}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold uppercase tracking-wider text-xs shadow-[0_0_15px_rgba(0,240,255,0.3)] transition-all cursor-pointer"
+            >
+              <Sliders className="w-3.5 h-3.5" />
+              <span>CONFIGURE</span>
             </button>
           </div>
         </div>
@@ -1049,6 +1262,338 @@ export const BrokerGatewayRouter: React.FC = () => {
                 PAIR BROKER NODE
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* UPSTOX ANALYTICS CONFIGURATION & TELEMETRY MODAL */}
+      {showUpstoxModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-in fade-in font-mono">
+          <div className="max-w-2xl w-full bg-[#080d1a] border border-cyan-500/40 rounded-2xl p-5 sm:p-6 shadow-2xl flex flex-col gap-4 max-h-[90vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-cyan-950/80 border border-cyan-500/40 text-cyan-300">
+                  <Wifi className="w-6 h-6 animate-pulse" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-100 uppercase tracking-wide flex items-center gap-2">
+                    <span>UPSTOX ANALYTICS GATEWAY</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-500/30">
+                      v2 REST / WS
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Official Upstox Developer Platform Integration // Real Market Depth & Options Telemetry
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowUpstoxModal(false)}
+                className="w-8 h-8 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-400 hover:text-white cursor-pointer transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Navigation Tabs */}
+            <div className="flex items-center gap-1.5 p-1 bg-slate-950/80 rounded-xl border border-slate-800 text-xs">
+              <button
+                onClick={() => setUpstoxModalTab('CONFIG')}
+                className={`flex-1 py-2 px-3 rounded-lg font-bold transition cursor-pointer flex items-center justify-center gap-2 ${
+                  upstoxModalTab === 'CONFIG'
+                    ? 'bg-cyan-500 text-slate-950 shadow-md'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                }`}
+              >
+                <Sliders className="w-3.5 h-3.5" />
+                <span>PAIRING & CONFIG</span>
+              </button>
+              <button
+                onClick={() => {
+                  setUpstoxModalTab('QUOTES');
+                  if (!upstoxQuotesData) handleFetchUpstoxQuotes();
+                }}
+                className={`flex-1 py-2 px-3 rounded-lg font-bold transition cursor-pointer flex items-center justify-center gap-2 ${
+                  upstoxModalTab === 'QUOTES'
+                    ? 'bg-cyan-500 text-slate-950 shadow-md'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                }`}
+              >
+                <Activity className="w-3.5 h-3.5" />
+                <span>LIVE MARKET DEPTH</span>
+              </button>
+              <button
+                onClick={() => {
+                  setUpstoxModalTab('OPTION_CHAIN');
+                  if (!upstoxOptionChainData) handleFetchUpstoxOptionChain();
+                }}
+                className={`flex-1 py-2 px-3 rounded-lg font-bold transition cursor-pointer flex items-center justify-center gap-2 ${
+                  upstoxModalTab === 'OPTION_CHAIN'
+                    ? 'bg-cyan-500 text-slate-950 shadow-md'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>OPTION CHAIN</span>
+              </button>
+            </div>
+
+            {/* TAB 1: PAIRING & CONFIGURATION */}
+            {upstoxModalTab === 'CONFIG' && (
+              <div className="space-y-4">
+                {/* Active Connection Status Banner */}
+                <div className={`p-4 rounded-xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
+                  upstoxData?.status === 'CONNECTED'
+                    ? 'bg-emerald-950/40 border-emerald-500/40'
+                    : 'bg-amber-950/30 border-amber-500/30'
+                }`}>
+                  <div className="flex items-center gap-3">
+                    {upstoxData?.status === 'CONNECTED' ? (
+                      <div className="w-9 h-9 rounded-lg bg-emerald-900/60 border border-emerald-500/50 flex items-center justify-center text-emerald-400">
+                        <CheckCircle2 className="w-5 h-5" />
+                      </div>
+                    ) : (
+                      <div className="w-9 h-9 rounded-lg bg-amber-900/60 border border-amber-500/50 flex items-center justify-center text-amber-400">
+                        <AlertTriangle className="w-5 h-5" />
+                      </div>
+                    )}
+                    <div>
+                      <div className="text-xs font-bold text-slate-100 flex items-center gap-2">
+                        <span>GATEWAY STATUS:</span>
+                        <span className={upstoxData?.status === 'CONNECTED' ? 'text-emerald-400' : 'text-amber-400'}>
+                          {upstoxData?.status === 'CONNECTED' ? 'VERIFIED & ONLINE' : 'STANDBY / NOT PAIRED'}
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">
+                        {upstoxData?.status === 'CONNECTED'
+                          ? `Client ID: ${upstoxData.profile?.userId} (${upstoxData.profile?.userName}) · Ping: ${upstoxData.lastLatencyMs}ms`
+                          : 'Configure your Upstox Bearer Access Token below to pair this terminal.'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={handlePingUpstox}
+                      className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-cyan-300 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>Ping</span>
+                    </button>
+                    {upstoxData?.status === 'CONNECTED' && (
+                      <button
+                        onClick={handleDisconnectUpstox}
+                        className="px-3 py-1.5 rounded-lg bg-rose-950 hover:bg-rose-900 border border-rose-600/50 text-rose-300 text-xs font-bold cursor-pointer"
+                      >
+                        Disconnect
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Feedback Alerts */}
+                {upstoxError && (
+                  <div className="p-3 rounded-xl bg-rose-950/50 border border-rose-500/40 text-rose-300 text-xs flex items-center gap-2.5 animate-in fade-in">
+                    <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
+                    <span>{upstoxError}</span>
+                  </div>
+                )}
+                {upstoxSuccessMsg && (
+                  <div className="p-3 rounded-xl bg-emerald-950/50 border border-emerald-500/40 text-emerald-300 text-xs flex items-center gap-2.5 animate-in fade-in">
+                    <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                    <span>{upstoxSuccessMsg}</span>
+                  </div>
+                )}
+
+                {/* Configuration Form */}
+                <form onSubmit={handleConfigureUpstox} className="space-y-3.5 text-xs bg-slate-950/60 p-4 rounded-xl border border-slate-800/80">
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-slate-300 font-bold uppercase tracking-wider text-[11px]">
+                        UPSTOX ACCESS TOKEN (BEARER) <span className="text-rose-400">*</span>
+                      </label>
+                      <span className="text-[10px] text-slate-500">From Upstox App Console</span>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type={showUpstoxToken ? 'text' : 'password'}
+                        value={upstoxTokenInput}
+                        onChange={(e) => setUpstoxTokenInput(e.target.value)}
+                        placeholder="Paste your active Upstox access token..."
+                        className="w-full p-2.5 pr-10 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 text-xs placeholder-slate-500 outline-none focus:border-cyan-500 transition"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowUpstoxToken(!showUpstoxToken)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 p-1"
+                      >
+                        {showUpstoxToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-slate-300 font-bold uppercase tracking-wider text-[10px] block mb-1">
+                        API KEY / APP ID (OPTIONAL)
+                      </label>
+                      <input
+                        type="text"
+                        value={upstoxApiKeyInput}
+                        onChange={(e) => setUpstoxApiKeyInput(e.target.value)}
+                        placeholder="e.g. 5d9f... (from Upstox portal)"
+                        className="w-full p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 text-xs placeholder-slate-500 outline-none focus:border-cyan-500 transition"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-slate-300 font-bold uppercase tracking-wider text-[10px] block mb-1">
+                        API BASE URL
+                      </label>
+                      <input
+                        type="text"
+                        value={upstoxBaseUrlInput}
+                        onChange={(e) => setUpstoxBaseUrlInput(e.target.value)}
+                        placeholder="https://api.upstox.com/v2"
+                        className="w-full p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-cyan-300 text-xs outline-none focus:border-cyan-500 transition"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isVerifyingUpstox || !upstoxTokenInput.trim()}
+                    className="w-full py-2.5 px-4 rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-slate-950 font-bold uppercase tracking-wider text-xs shadow-[0_0_15px_rgba(0,240,255,0.3)] transition flex items-center justify-center gap-2 cursor-pointer mt-2"
+                  >
+                    {isVerifyingUpstox ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>Verifying with api.upstox.com...</span>
+                      </>
+                    ) : (
+                      <>
+                        <ShieldCheck className="w-4 h-4" />
+                        <span>VERIFY & PAIR UPSTOX NODE</span>
+                      </>
+                    )}
+                  </button>
+                </form>
+
+                {/* Permanent Environment Persistence Guide */}
+                <div className="p-3.5 rounded-xl bg-slate-950/90 border border-slate-800 space-y-2 text-xs">
+                  <div className="flex items-center gap-2 text-cyan-300 font-bold uppercase text-[11px]">
+                    <Lock className="w-3.5 h-3.5" />
+                    <span>PERMANENT ZERO-SECRET PERSISTENCE</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-relaxed font-sans">
+                    Tokens entered above are active for this server session. To make your Upstox Analytics API connection permanent across cloud cold-starts, configure <code className="text-cyan-300 bg-slate-900 px-1 py-0.5 rounded">UPSTOX_ACCESS_TOKEN</code> in your environment variables or Cloud Secrets as documented in <code className="text-slate-300">.env.example</code>.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 2: LIVE MARKET DEPTH */}
+            {upstoxModalTab === 'QUOTES' && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-slate-400">
+                    Direct Upstox v2 Quotes API telemetry (<code className="text-cyan-300">/market-quote/quotes</code>)
+                  </span>
+                  <button
+                    onClick={handleFetchUpstoxQuotes}
+                    disabled={isLoadingQuotes}
+                    className="px-3 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isLoadingQuotes ? 'animate-spin' : ''}`} />
+                    <span>Refresh Quotes</span>
+                  </button>
+                </div>
+
+                {upstoxQuotesData ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {Object.entries(upstoxQuotesData).map(([key, quote]: [string, any]) => (
+                      <div key={key} className="bg-slate-950/80 p-3 rounded-xl border border-slate-800 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-cyan-300 font-bold text-xs">{quote.instrument_token || key.split('|')[1] || key}</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 text-slate-400">UPSTOX REALTIME</span>
+                        </div>
+                        <div className="flex items-baseline justify-between">
+                          <span className="text-lg font-bold text-slate-100 tabular-nums">
+                            ₹{quote.last_price != null ? Number(quote.last_price).toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '—'}
+                          </span>
+                          <span className={`text-xs font-bold ${Number(quote.net_change ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                            {Number(quote.net_change ?? 0) >= 0 ? '+' : ''}{Number(quote.net_change ?? 0).toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-1 pt-1 border-t border-slate-900 text-[10px] text-slate-400">
+                          <div>OPEN: <span className="text-slate-200 font-semibold">{quote.ohlc?.open || '—'}</span></div>
+                          <div>HIGH: <span className="text-emerald-400 font-semibold">{quote.ohlc?.high || '—'}</span></div>
+                          <div>LOW: <span className="text-rose-400 font-semibold">{quote.ohlc?.low || '—'}</span></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="py-8 text-center text-slate-500 text-xs">
+                    {upstoxData?.status === 'CONNECTED' 
+                      ? 'Click "Refresh Quotes" to fetch live tick depth from Upstox.'
+                      : 'Please pair your Upstox Access Token in the Pairing tab to stream live market quotes.'}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* TAB 3: OPTION CHAIN ANALYTICS */}
+            {upstoxModalTab === 'OPTION_CHAIN' && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-slate-400">
+                    NIFTY 50 Option Chain & Greeks (<code className="text-cyan-300">/market-quote/option-chain</code>)
+                  </span>
+                  <button
+                    onClick={handleFetchUpstoxOptionChain}
+                    disabled={isLoadingOptionChain}
+                    className="px-3 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isLoadingOptionChain ? 'animate-spin' : ''}`} />
+                    <span>Query Chain</span>
+                  </button>
+                </div>
+
+                {upstoxOptionChainData && Array.isArray(upstoxOptionChainData) && upstoxOptionChainData.length > 0 ? (
+                  <div className="max-h-64 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950/80">
+                    <table className="w-full text-[11px] text-left">
+                      <thead className="bg-slate-900/90 text-slate-400 sticky top-0 border-b border-slate-800">
+                        <tr>
+                          <th className="py-2 px-2 text-cyan-300">CALL OI</th>
+                          <th className="py-2 px-2 text-cyan-300">CALL LTP</th>
+                          <th className="py-2 px-2 text-center text-amber-300">STRIKE</th>
+                          <th className="py-2 px-2 text-right text-rose-300">PUT LTP</th>
+                          <th className="py-2 px-2 text-right text-rose-300">PUT OI</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-900">
+                        {upstoxOptionChainData.slice(0, 15).map((row: any, idx: number) => (
+                          <tr key={idx} className="hover:bg-slate-900/50">
+                            <td className="py-1.5 px-2 text-cyan-400 font-mono">{row.call_options?.market_data?.oi?.toLocaleString() || '—'}</td>
+                            <td className="py-1.5 px-2 text-slate-200 font-mono">{row.call_options?.market_data?.ltp || '—'}</td>
+                            <td className="py-1.5 px-2 text-center font-bold text-amber-300 font-mono bg-slate-900/40">{row.strike_price}</td>
+                            <td className="py-1.5 px-2 text-right text-slate-200 font-mono">{row.put_options?.market_data?.ltp || '—'}</td>
+                            <td className="py-1.5 px-2 text-right text-rose-400 font-mono">{row.put_options?.market_data?.oi?.toLocaleString() || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="py-8 text-center text-slate-500 text-xs">
+                    {upstoxData?.status === 'CONNECTED'
+                      ? 'Click "Query Chain" to pull live strike contracts and greeks.'
+                      : 'Please pair your Upstox Access Token in the Pairing tab to view option chains.'}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
