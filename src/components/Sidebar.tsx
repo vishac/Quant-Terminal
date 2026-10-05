@@ -120,7 +120,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
             return (
               <button
                 key={item.id}
-                onClick={() => setActiveTab(item.id)}
+                onClick={() => {
+                  setActiveTab(item.id);
+                  onToggle?.();
+                }}
                 className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs uppercase tracking-wide transition-all text-left cursor-pointer ${
                   isActive
                     ? 'bg-cyan-500 text-slate-950 font-bold shadow-[0_0_15px_rgba(0,240,255,0.35)]'

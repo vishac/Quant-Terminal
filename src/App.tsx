@@ -73,7 +73,7 @@ function AppInner() {
   const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
   const [isCircuitBreakerOpen, setIsCircuitBreakerOpen] = useState<boolean>(false);
   const [systemAlertMessage, setSystemAlertMessage] = useState<string | null>(null);
-  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
 
   // Global Keyboard Shortcut: Press 'c' or 'C' to toggle left panel
   useEffect(() => {
@@ -146,21 +146,34 @@ function AppInner() {
     <div className="min-h-screen bg-[#060913] text-slate-100 flex antialiased selection:bg-cyan-500/30 selection:text-cyan-200">
       {/* Fixed Left Sidebar: Only displayed in Admin / Operations mode, collapsible via 'c' or breadcrumb button */}
       {userRole === 'admin' && (
-        <div 
-          className={`fixed left-0 top-0 h-full z-50 transition-transform duration-300 ease-in-out ${
-            isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
-          }`}
-        >
-          <Sidebar 
-            activeTab={activeTab} 
-            setActiveTab={setActiveTab} 
-            isOpen={isSidebarOpen}
-            onToggle={() => setIsSidebarOpen(false)}
-          />
-        </div>
+        <>
+          {/* Backdrop overlay when sidebar panel is manually opened */}
+          {isSidebarOpen && (
+            <div 
+              onClick={() => setIsSidebarOpen(false)}
+              className="fixed inset-0 bg-black/60 backdrop-blur-xs z-40 transition-opacity cursor-pointer animate-in fade-in duration-200"
+              title="Click outside to close panel"
+            />
+          )}
+          <div 
+            className={`fixed left-0 top-0 h-full z-50 transition-transform duration-300 ease-in-out ${
+              isSidebarOpen ? 'translate-x-0 shadow-[0_0_50px_rgba(0,0,0,0.8)]' : '-translate-x-full'
+            }`}
+          >
+            <Sidebar 
+              activeTab={activeTab} 
+              setActiveTab={(tab) => {
+                setActiveTab(tab);
+                setIsSidebarOpen(false); // Close panel when an option is clicked
+              }} 
+              isOpen={isSidebarOpen}
+              onToggle={() => setIsSidebarOpen(false)}
+            />
+          </div>
+        </>
       )}
 
-      {/* Main Workspace Frame (Smoothly offsets by 64 on desktop when in admin mode AND sidebar is open) */}
+      {/* Main Workspace Frame (Full viewport width; panel is an overlay drawer until manually opened) */}
       <div className={`flex-1 flex flex-col min-w-0 transition-all duration-300 ease-in-out ${
         userRole === 'admin' && isSidebarOpen ? 'lg:pl-64' : 'lg:pl-0'
       }`}>
