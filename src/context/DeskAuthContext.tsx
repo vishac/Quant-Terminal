@@ -55,7 +55,10 @@ export const DeskAuthProvider: React.FC<{ children: ReactNode }> = ({ children }
   const [seats, setSeats] = useState<DeskTraderSeat[]>(() => {
     try {
       const saved = localStorage.getItem('jarvis_desk_seats');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
     } catch {}
     return INITIAL_20_DESK_SEATS;
   });
@@ -63,7 +66,10 @@ export const DeskAuthProvider: React.FC<{ children: ReactNode }> = ({ children }
   const [currentSeatNumber, setCurrentSeatNumber] = useState<number>(() => {
     try {
       const saved = localStorage.getItem('jarvis_current_seat_number');
-      if (saved) return parseInt(saved, 10);
+      if (saved) {
+        const num = parseInt(saved, 10);
+        if (!isNaN(num) && num >= 1 && num <= 20) return num;
+      }
     } catch {}
     return 1; // Default to Seat 1 (Admin)
   });
@@ -72,15 +78,18 @@ export const DeskAuthProvider: React.FC<{ children: ReactNode }> = ({ children }
   const [recentOrders, setRecentOrders] = useState<DeskOrderRecord[]>(() => {
     try {
       const saved = localStorage.getItem('jarvis_desk_orders');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
     } catch {}
     return INITIAL_DESK_ORDERS;
   });
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
 
-  // Derive current seat
-  const currentSeat = seats.find((s) => s.seatNumber === currentSeatNumber) || seats[0] || INITIAL_20_DESK_SEATS[0];
+  // Derive current seat safely
+  const currentSeat = (Array.isArray(seats) && seats.find((s) => s.seatNumber === currentSeatNumber)) || (Array.isArray(seats) && seats[0]) || INITIAL_20_DESK_SEATS[0];
 
   // Persist seat state to localStorage cache
   useEffect(() => {

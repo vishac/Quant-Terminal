@@ -214,8 +214,8 @@ export const Header: React.FC<HeaderProps> = ({
             title="Active Quant Floor Seat. Click to switch between 20 trader seats or authenticate"
           >
             <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse shrink-0" />
-            <span className="text-[10px] text-cyan-300 font-bold shrink-0">SEAT {String(currentSeat.seatNumber).padStart(2, '0')}:</span>
-            <span className="text-xs font-bold text-white max-w-[85px] sm:max-w-[120px] truncate">{currentSeat.name.split(' ')[0]}</span>
+            <span className="text-[10px] text-cyan-300 font-bold shrink-0">SEAT {String(currentSeat?.seatNumber ?? 1).padStart(2, '0')}:</span>
+            <span className="text-xs font-bold text-white max-w-[85px] sm:max-w-[120px] truncate">{(currentSeat?.name || 'Operator').split(' ')[0]}</span>
           </button>
 
           {/* The Single Unified Mobile App Install Button (Kept prominent here) */}

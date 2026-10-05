@@ -19,13 +19,16 @@ import { OwnerGate } from './components/OwnerGate';
 import { DeskAuthProvider, useDeskAuth } from './context/DeskAuthContext';
 import { MultiUserDesk } from './components/MultiUserDesk';
 import { FirebaseAuthModal } from './components/FirebaseAuthModal';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { Radio, Eye, Shield } from 'lucide-react';
 
 export default function App() {
   return (
-    <DeskAuthProvider>
-      <AppInner />
-    </DeskAuthProvider>
+    <ErrorBoundary>
+      <DeskAuthProvider>
+        <AppInner />
+      </DeskAuthProvider>
+    </ErrorBoundary>
   );
 }
 

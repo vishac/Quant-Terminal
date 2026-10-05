@@ -955,10 +955,11 @@ async function startServer() {
     }
   }, 2500);
 
+  const isProduction = process.env.NODE_ENV === 'production';
   const distPath = path.resolve(__dirname, 'dist');
   const hasDist = fs.existsSync(path.resolve(distPath, 'index.html'));
 
-  if (process.env.NODE_ENV === 'production' || hasDist) {
+  if (isProduction && hasDist) {
     app.use(express.static(distPath));
     app.get('*', (_req, res) => res.sendFile(path.resolve(distPath, 'index.html')));
   } else {
@@ -967,8 +968,10 @@ async function startServer() {
       app.use(vite.middlewares);
     } catch (viteErr) {
       console.warn('[Vite Middleware] Could not load Vite dev server, serving dist:', viteErr);
-      app.use(express.static(distPath));
-      app.get('*', (_req, res) => res.sendFile(path.resolve(distPath, 'index.html')));
+      if (hasDist) {
+        app.use(express.static(distPath));
+        app.get('*', (_req, res) => res.sendFile(path.resolve(distPath, 'index.html')));
+      }
     }
   }
 
