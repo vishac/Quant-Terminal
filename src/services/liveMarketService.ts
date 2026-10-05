@@ -19,7 +19,7 @@ export interface MarketQuote {
 
 export interface LiveMarketState {
   quotes: Record<string, MarketQuote>;
-  latencyMs: number;
+  latencyMs: number | null;
   isLive: boolean;
   provider: string;
   lastUpdated: string;
@@ -91,13 +91,13 @@ export function useLiveMarketData(pollingIntervalMs = 5000) {
   });
 
   const initialSession = getIndianMarketSession();
-  const [packetsSaved, setPacketsSaved] = useState<number>(1420);
+  const [packetsSaved, setPacketsSaved] = useState<number>(0);
 
   const [state, setState] = useState<LiveMarketState>({
     quotes: DEFAULT_QUOTES,
-    latencyMs: 2.1,
-    isLive: true,
-    provider: 'NSE_BSE_EXCHANGE_TICK_ROUTER',
+    latencyMs: null,
+    isLive: false,
+    provider: 'AWAITING_TICK',
     lastUpdated: initialSession.istTimeString,
     error: null,
     geminiCreditsUsed: 0,
@@ -107,7 +107,7 @@ export function useLiveMarketData(pollingIntervalMs = 5000) {
     intervalMs: pollingIntervalMs,
     marketSession: initialSession,
     isPacketSaverActive: !initialSession.shouldSync && !forceSyncOverride,
-    packetsSavedCount: 1420,
+    packetsSavedCount: 0,
     forceSyncOverride,
   });
 
@@ -139,9 +139,9 @@ export function useLiveMarketData(pollingIntervalMs = 5000) {
         const isSaving = !session.shouldSync && !shouldForce;
         setState({
           quotes: data.quotes,
-          latencyMs: data.latencyMs || +(1.5 + Math.random() * 1.5).toFixed(2),
+          latencyMs: data.latencyMs ?? null,
           isLive: true,
-          provider: data.provider || 'NSE_BSE_EXCHANGE_TICK_ROUTER',
+          provider: data.provider || 'YAHOO_DELAYED_UNOFFICIAL',
           lastUpdated: data.timestamp || session.istTimeString,
           error: null,
           geminiCreditsUsed: 0,
@@ -160,8 +160,9 @@ export function useLiveMarketData(pollingIntervalMs = 5000) {
       const session = getIndianMarketSession();
       setState(prev => ({
         ...prev,
-        isLive: true,
-        latencyMs: +(2.0 + Math.random() * 0.8).toFixed(2),
+        isLive: false,
+        error: err?.message ? `Data unavailable: ${err.message}` : 'Data unavailable',
+        latencyMs: null,
         lastUpdated: session.istTimeString,
         lastTickTimestamp: Date.now(),
         marketSession: session,

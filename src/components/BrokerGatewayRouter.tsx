@@ -95,7 +95,7 @@ export const BrokerGatewayRouter: React.FC = () => {
   // Tick rate fluctuation simulation
   useEffect(() => {
     const timer = setInterval(() => {
-      setTickRate(prev => Math.floor(2800 + Math.random() * 80));
+      setTickRate(0); // No live tick feed is connected — do not fabricate a tick rate.
     }, 1500);
     return () => clearInterval(timer);
   }, []);

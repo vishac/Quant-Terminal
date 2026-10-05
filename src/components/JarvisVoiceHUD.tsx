@@ -701,7 +701,7 @@ export const JarvisVoiceHUD: React.FC<JarvisVoiceHUDProps> = ({
             <div className="p-2.5 rounded-xl bg-cyan-950/20 border border-cyan-500/30 flex items-center justify-between text-[11px] text-cyan-200 font-mono">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0" />
-                <span>DATA INTEGRITY: 100% Real Live Exchange Ticks (/api/market-data). Zero demo/dummy data.</span>
+                <span>DATA INTEGRITY: quotes are DELAYED &amp; UNOFFICIAL (/api/market-data). Option-chain, greeks &amp; OI shown elsewhere are CALCULATED models, not live exchange data.</span>
               </div>
               <span className="text-[10px] text-slate-400 hidden sm:inline">POLLED DIRECTLY FROM EXCHANGES</span>
             </div>

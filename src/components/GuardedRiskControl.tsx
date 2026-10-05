@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { ShieldAlert, Power, Save, RefreshCw, CheckCircle2, XCircle, AlertTriangle, Calculator } from 'lucide-react';
+import { ShieldAlert, Power, Save, RefreshCw, CheckCircle2, XCircle, AlertTriangle, Calculator, Loader2 } from 'lucide-react';
 
 interface RiskConfig {
   capitalInr: number; maxDailyLossInr: number; maxOpenPositions: number;

@@ -128,10 +128,12 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
   const trentQuote = quotes['TRENT.NS'];
   const ltQuote = quotes['LT.NS'];
 
-  // Real-time market spot and strikes pegged to live WebSocket feed
-  const niftySpot = niftyQuote?.price ?? 22421.95;
+  // Spot/VIX pegged strictly to the delayed feed. No hardcoded fallbacks — if the
+  // feed is unavailable these are null and the model chain is flagged DATA_UNAVAILABLE.
+  const hasLiveSpot = niftyQuote?.price != null;
+  const niftySpot = niftyQuote?.price ?? 0;
   const atmStrike = Math.round(niftySpot / 50) * 50;
-  const vixVal = vixQuote?.price ?? 14.46;
+  const vixVal = vixQuote?.price ?? 0;
 
   // Primary Decision Engine View Modes:
   // 1. OPTION_CHAIN (Default real decision maker with Open Interest buildup & signals)
@@ -272,7 +274,7 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
         straddleLtp,
         strikePcr,
         ceLtp,
-        ceChangePct: Math.round((((niftyQuote?.changePct ?? 0.25) * (ceDelta / 0.5)) + (Math.random() * 0.2 - 0.1)) * 10) / 10,
+        ceChangePct: Math.round(((niftyQuote?.changePct ?? 0) * (ceDelta / 0.5)) * 10) / 10,
         ceOi: ceBaseOi,
         ceOiChangePct,
         ceVolume: Math.round(ceBaseOi * 0.62),
@@ -282,7 +284,7 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
         ceBuildup,
         ceSignal,
         peLtp,
-        peChangePct: Math.round(((-(niftyQuote?.changePct ?? 0.25) * (Math.abs(peDelta) / 0.5)) + (Math.random() * 0.2 - 0.1)) * 10) / 10,
+        peChangePct: Math.round((-(niftyQuote?.changePct ?? 0) * (Math.abs(peDelta) / 0.5)) * 10) / 10,
         peOi: peBaseOi,
         peOiChangePct,
         peVolume: Math.round(peBaseOi * 0.58),
@@ -677,11 +679,11 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-bold uppercase tracking-wide text-cyan-200">
-                      DECISION_MAKER // LIVE_OPTION_CHAIN & SIGNALS
+                      DECISION_MAKER // MODEL OPTION CHAIN (CALCULATED)
                     </span>
-                    <span className="px-1.5 py-0.5 bg-emerald-500/20 rounded text-[9px] text-emerald-300 font-semibold tracking-widest border border-emerald-500/40 flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      LIVE OI
+                    <span className="px-1.5 py-0.5 bg-amber-500/20 rounded text-[9px] text-amber-300 font-semibold tracking-widest border border-amber-500/40 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                      CALCULATED
                     </span>
                     <div className="relative">
                       <button
@@ -702,15 +704,17 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
                           <p className="text-[11px] text-slate-300 font-sans">
                             Strikes are calculated in real time around the active spot price. Open Interest (OI) buildup classifies market behavior into <strong>Long Buildup</strong>, <strong>Short Buildup</strong>, <strong>Short Covering</strong>, and <strong>Long Unwinding</strong> with sub-millisecond pre-trade SPAN + Exposure margin verification.
                           </p>
-                          <div className="mt-2 pt-2 border-t border-slate-800/80 text-[10px] text-emerald-400">
-                            ✓ Direct exchange tick feeds · Zero mock telemetry
+                          <div className="mt-2 pt-2 border-t border-slate-800/80 text-[10px] text-amber-400">
+                            ⚠ MODEL / CALCULATED values derived from the delayed spot — NOT live exchange OI, IV or greeks. A real option-chain feed is a Phase 2 item.
                           </div>
                         </div>
                       )}
                     </div>
                   </div>
                   <p className="text-[10px] text-slate-400 tracking-wider uppercase mt-0.5">
-                    PEGGED TO NIFTY SPOT ₹{niftySpot.toLocaleString('en-IN', { minimumFractionDigits: 2 })} • ATM: {atmStrike} • VIX: {vixVal.toFixed(2)}
+                    {hasLiveSpot
+                      ? `MODEL PEGGED TO DELAYED NIFTY ₹${niftySpot.toLocaleString('en-IN', { minimumFractionDigits: 2 })} • ATM: ${atmStrike} • VIX: ${vixVal.toFixed(2)}`
+                      : 'DATA UNAVAILABLE — awaiting delayed NIFTY spot; model option chain is not meaningful until a quote loads.'}
                   </p>
                 </div>
               </div>
