@@ -68,7 +68,7 @@ export const InstitutionalEquityRadar: React.FC = () => {
 
   // Daily Daemon status
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string>(
-    'Today at 15:45:00 IST (Daily Post-Market Engine)'
+    'Static illustrative list — scores not time-stamped'
   );
 
   const handleManualRefresh = () => {
@@ -76,9 +76,9 @@ export const InstitutionalEquityRadar: React.FC = () => {
     refetch();
     setTimeout(() => {
       const now = new Date();
-      setLastRefreshedAt(`${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })} IST (Live Exchange Sync)`);
+      setLastRefreshedAt(`Delayed prices re-synced ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })} IST (scores are static)`);
       setIsRefreshing(false);
-      setToastMessage('Daily Institutional Alpha Engine: Synchronized 15 liquid equity candidates with real-time NSE/BSE tick feeds.');
+      setToastMessage('Re-synced delayed LTP / change% for the 15-name watchlist. Conviction scores, targets & fundamentals are static illustrative placeholders — not live or computed.');
       setTimeout(() => setToastMessage(null), 4500);
     }, 700);
   };
@@ -346,6 +346,11 @@ export const InstitutionalEquityRadar: React.FC = () => {
               5s (Turbo Sync)
             </button>
           </div>
+        </div>
+
+        {/* Data-integrity banner: the list + scores are static; only prices are delayed-live */}
+        <div className="mt-4 p-2.5 rounded-xl bg-amber-950/40 border border-amber-500/40 text-amber-200 text-[11px] leading-relaxed" data-testid="radar-static-banner">
+          <strong>STATIC ILLUSTRATIVE RESEARCH LIST.</strong> These 15 names and every conviction score, factor breakdown, entry/stop/target and fundamental (ROCE, ROE, delivery %) below are fixed model placeholders — <strong>not live, not computed, not verified</strong>. Only LTP, change % and 52-week values update from the delayed, unofficial feed. Genuine screening/scoring requires a licensed fundamentals + delivery/OI data feed (Phase 2).
         </div>
 
         {/* 5-Strategy Factor Model Summary Cards */}
