@@ -20,7 +20,34 @@ import { DeskAuthProvider, useDeskAuth } from './context/DeskAuthContext';
 import { MultiUserDesk } from './components/MultiUserDesk';
 import { FirebaseAuthModal } from './components/FirebaseAuthModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { Radio, Eye, Shield } from 'lucide-react';
+import { Radio } from 'lucide-react';
+
+// ---------------------------------------------------------------------------
+// Mobile bottom nav tab definitions — single source of truth, never repeated
+// ---------------------------------------------------------------------------
+
+const MOBILE_NAV_TABS: { id: ActiveTab; icon: string; label: string }[] = [
+  { id: 'quant_bot',         icon: 'monitoring',       label: 'Quant'    },
+  { id: 'autonomous_agents', icon: 'group_work',       label: '5-Agents' },
+  { id: 'equity_radar',      icon: 'candlestick_chart',label: 'Radar'    },
+  { id: 'risk_engine',       icon: 'security',         label: 'Risk'     },
+  { id: 'sync_hub',          icon: 'hub',              label: 'Sync'     },
+  { id: 'risk_guard',        icon: 'gpp_maybe',        label: 'Guard'    },
+  { id: 'backtest_lab',      icon: 'query_stats',      label: 'Backtest' },
+  { id: 'voice_hud',         icon: 'mic',              label: 'Voice'    },
+];
+
+// ---------------------------------------------------------------------------
+// Time-aware greeting helper
+// ---------------------------------------------------------------------------
+
+function getTimeBasedGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour >= 5 && hour < 12)  return 'Good morning Sir.';
+  if (hour >= 12 && hour < 17) return 'Good afternoon Sir.';
+  if (hour >= 17 && hour < 21) return 'Good evening Sir.';
+  return 'Good evening Sir.';
+}
 
 export default function App() {
   return (
@@ -44,30 +71,45 @@ function AppInner() {
 
   const [gateOpen, setGateOpen] = useState<boolean>(false);
 
-  const setUserRole = (role: UserRole) => {
+  /**
+   * Switching to admin now verifies with the server (which checks the
+   * HttpOnly session cookie). We no longer read/write the raw token from
+   * localStorage — that is handled entirely by the server and OwnerGate.
+   */
+  const setUserRole = async (role: UserRole) => {
     if (role === 'admin') {
-      let hasToken = false;
-      try { hasToken = !!localStorage.getItem('jarvis_owner_token'); } catch {}
-      if (!hasToken) {
+      // Ask the server whether the current session cookie is valid
+      try {
+        const res = await fetch('/api/owner/status', { credentials: 'include' });
+        const data = await res.json();
+        if (!data.configured) {
+          // Server has no token configured — no point opening the gate
+          setUserRoleState(role);
+          return;
+        }
+      } catch { /* network error — fall through to gate */ }
+
+      // Check if the session cookie is already valid
+      try {
+        const res = await fetch('/api/owner/verify', { credentials: 'include' });
+        if (!res.ok) {
+          // Not yet authenticated — open the gate to collect the token
+          setGateOpen(true);
+          return;
+        }
+      } catch {
         setGateOpen(true);
         return;
       }
     }
     setUserRoleState(role);
-    try {
-      localStorage.setItem('jarvis_user_role', role);
-    } catch {
-      // ignore
-    }
+    try { localStorage.setItem('jarvis_user_role', role); } catch { /* ignore */ }
   };
 
-  const handleGateSuccess = (token: string) => {
-    try {
-      localStorage.setItem('jarvis_owner_token', token);
-      localStorage.setItem('jarvis_user_role', 'admin');
-    } catch {
-      // ignore
-    }
+  const handleGateSuccess = (_token: string) => {
+    // The server has already set the HttpOnly cookie in /api/owner/verify.
+    // We only update the local role state; the raw token is never stored in JS.
+    try { localStorage.setItem('jarvis_user_role', 'admin'); } catch { /* ignore */ }
     setUserRoleState('admin');
     setGateOpen(false);
   };
@@ -88,9 +130,7 @@ function AppInner() {
       ) {
         return;
       }
-      if (e.key === 'c' || e.key === 'C') {
-        setIsSidebarOpen((prev) => !prev);
-      }
+      if (e.key === 'c' || e.key === 'C') setIsSidebarOpen((prev) => !prev);
     };
     const handleOpenGate = () => setGateOpen(true);
 
@@ -113,13 +153,16 @@ function AppInner() {
       window.speechSynthesis.cancel();
       setIsSpeaking(false);
     } else {
-      const summary = `Good morning Sir. Live market telemetry is active. All autonomous risk circuits are armed and fully compliant with SEBI peak margin rules.`;
+      const greeting = getTimeBasedGreeting();
+      const summary = `${greeting} Live market telemetry is active. All autonomous risk circuits are armed and fully compliant with SEBI peak margin rules.`;
       const utterance = new SpeechSynthesisUtterance(summary);
       utterance.rate = 1.05;
       utterance.pitch = 0.95;
 
       const voices = window.speechSynthesis.getVoices();
-      const preferredVoice = voices.find(v => v.lang.includes('en-GB') || v.name.includes('UK') || v.name.includes('Daniel'));
+      const preferredVoice = voices.find(
+        (v) => v.lang.includes('en-GB') || v.name.includes('UK') || v.name.includes('Daniel'),
+      );
       if (preferredVoice) utterance.voice = preferredVoice;
 
       utterance.onstart = () => setIsSpeaking(true);
@@ -131,44 +174,37 @@ function AppInner() {
   };
 
   const handleExecuteCircuitBreaker = (tier: string) => {
-    window.dispatchEvent(new CustomEvent('jarvis:circuit-breaker', {
-      detail: { tier, timestamp: Date.now() }
-    }));
-    try {
-      localStorage.setItem('jarvis_bots_armed_state', 'false');
-    } catch {
-      // Ignore
-    }
-    setSystemAlertMessage(`Statutory Circuit Breaker Routine [${tier.toUpperCase()}] executed. Portfolio delta neutralized across NSE/MCX.`);
-    setTimeout(() => {
-      setSystemAlertMessage(null);
-    }, 6000);
+    window.dispatchEvent(new CustomEvent('jarvis:circuit-breaker', { detail: { tier, timestamp: Date.now() } }));
+    try { localStorage.setItem('jarvis_bots_armed_state', 'false'); } catch { /* ignore */ }
+    setSystemAlertMessage(
+      `Statutory Circuit Breaker Routine [${tier.toUpperCase()}] executed. Portfolio delta neutralized across NSE/MCX.`,
+    );
+    setTimeout(() => setSystemAlertMessage(null), 6000);
   };
 
   return (
     <div className="min-h-screen bg-[#060913] text-slate-100 flex antialiased selection:bg-cyan-500/30 selection:text-cyan-200">
-      {/* Fixed Left Sidebar: Only displayed in Admin / Operations mode, collapsible via 'c' or breadcrumb button */}
+      {/* Fixed Left Sidebar: Only displayed in Admin / Operations mode */}
       {userRole === 'admin' && (
         <>
-          {/* Backdrop overlay when sidebar panel is manually opened */}
           {isSidebarOpen && (
-            <div 
+            <div
               onClick={() => setIsSidebarOpen(false)}
               className="fixed inset-0 bg-black/60 backdrop-blur-xs z-40 transition-opacity cursor-pointer animate-in fade-in duration-200"
               title="Click outside to close panel"
             />
           )}
-          <div 
+          <div
             className={`fixed left-0 top-0 h-full z-50 transition-transform duration-300 ease-in-out ${
               isSidebarOpen ? 'translate-x-0 shadow-[0_0_50px_rgba(0,0,0,0.8)]' : '-translate-x-full'
             }`}
           >
-            <Sidebar 
-              activeTab={activeTab} 
+            <Sidebar
+              activeTab={activeTab}
               setActiveTab={(tab) => {
                 setActiveTab(tab);
-                setIsSidebarOpen(false); // Close panel when an option is clicked
-              }} 
+                setIsSidebarOpen(false);
+              }}
               isOpen={isSidebarOpen}
               onToggle={() => setIsSidebarOpen(false)}
             />
@@ -176,11 +212,12 @@ function AppInner() {
         </>
       )}
 
-      {/* Main Workspace Frame (Full viewport width; panel is an overlay drawer until manually opened) */}
-      <div className={`flex-1 flex flex-col min-w-0 transition-all duration-300 ease-in-out ${
-        userRole === 'admin' && isSidebarOpen ? 'lg:pl-64' : 'lg:pl-0'
-      }`}>
-        {/* Fixed Top Telemetry Ribbon Header with Role Switcher & Breadcrumb Toggle */}
+      {/* Main Workspace Frame */}
+      <div
+        className={`flex-1 flex flex-col min-w-0 transition-all duration-300 ease-in-out ${
+          userRole === 'admin' && isSidebarOpen ? 'lg:pl-64' : 'lg:pl-0'
+        }`}
+      >
         <Header
           activeTab={activeTab}
           setActiveTab={setActiveTab}
@@ -190,7 +227,7 @@ function AppInner() {
           userRole={userRole}
           setUserRole={setUserRole}
           isSidebarOpen={isSidebarOpen}
-          onToggleSidebar={() => setIsSidebarOpen(prev => !prev)}
+          onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
         />
 
         {/* System Alert Banner */}
@@ -210,15 +247,16 @@ function AppInner() {
         )}
 
         {/* Viewport Content */}
-        <main className={`flex-1 w-full max-w-[1720px] mx-auto px-3.5 sm:px-6 pt-20 ${userRole === 'viewer' ? 'pb-8' : 'pb-24 lg:pb-8'}`}>
+        <main
+          className={`flex-1 w-full max-w-[1720px] mx-auto px-3.5 sm:px-6 pt-20 ${
+            userRole === 'viewer' ? 'pb-8' : 'pb-24 lg:pb-8'
+          }`}
+        >
           {userRole === 'viewer' ? (
-            /* VIEWER MODE: Clean, lightweight, instant, 100% authentic market numbers */
             <ViewerDashboard />
           ) : (
-            /* OWNER / ADMIN MODE: Advanced operational quant desks, broker sync & risk engine */
             <>
               {activeTab === 'multi_user_desk' && <MultiUserDesk />}
-
               {activeTab === 'voice_hud' && (
                 <JarvisVoiceHUD
                   isSpeaking={isSpeaking}
@@ -226,134 +264,44 @@ function AppInner() {
                   onOpenCircuitBreaker={() => setIsCircuitBreakerOpen(true)}
                 />
               )}
-
               {activeTab === 'quant_bot' && (
                 <QuantTerminal3D onNavigateToAgents={() => setActiveTab('autonomous_agents')} />
               )}
-
               {activeTab === 'autonomous_agents' && (
                 <AutonomousAgentsDesk onOpenCircuitBreaker={() => setIsCircuitBreakerOpen(true)} />
               )}
-
               {activeTab === 'equity_radar' && <InstitutionalEquityRadar />}
-
               {activeTab === 'deep_thesis' && <MacroPolicyThesis />}
-
               {activeTab === 'sync_hub' && <BrokerGatewayRouter />}
-
               {activeTab === 'risk_engine' && (
                 <RiskEngineTerminal onOpenCircuitBreaker={() => setIsCircuitBreakerOpen(true)} />
               )}
-
               {activeTab === 'risk_guard' && <GuardedRiskControl />}
-
               {activeTab === 'backtest_lab' && <BacktestLab />}
-
               {activeTab === 'settings' && <SettingsTerminal />}
             </>
           )}
         </main>
       </div>
 
-      {/* Mobile Bottom Navigation Bar (Operational tabs for Owner/Admin only) */}
+      {/* Mobile Bottom Navigation Bar — rendered from MOBILE_NAV_TABS, never copy-pasted */}
       {userRole === 'admin' && (
         <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 h-16 bg-[#090e19]/95 backdrop-blur-2xl border-t border-cyan-500/20 shadow-[0_-4px_24px_rgba(0,0,0,0.8)] flex items-center justify-around px-2 font-mono">
           <div className="flex items-center justify-around w-full overflow-x-auto no-scrollbar py-1">
-            <button
-              onClick={() => setActiveTab('quant_bot')}
-              className={`flex flex-col items-center justify-center min-w-[50px] h-12 rounded-xl transition-all ${
-                activeTab === 'quant_bot'
-                  ? 'text-cyan-300 bg-cyan-950/40 border border-cyan-500/40 font-bold'
-                  : 'text-slate-400'
-              }`}
-            >
-              <span className="material-symbols-outlined text-[18px]">monitoring</span>
-              <span className="text-[8px] uppercase tracking-wider mt-0.5">Quant</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('autonomous_agents')}
-              className={`flex flex-col items-center justify-center min-w-[50px] h-12 rounded-xl transition-all ${
-                activeTab === 'autonomous_agents'
-                  ? 'text-cyan-300 bg-cyan-950/40 border border-cyan-500/40 font-bold'
-                  : 'text-slate-400'
-              }`}
-            >
-              <span className="material-symbols-outlined text-[18px]">group_work</span>
-              <span className="text-[8px] uppercase tracking-wider mt-0.5">5-Agents</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('equity_radar')}
-              className={`flex flex-col items-center justify-center min-w-[50px] h-12 rounded-xl transition-all ${
-                activeTab === 'equity_radar'
-                  ? 'text-cyan-300 bg-cyan-950/40 border border-cyan-500/40 font-bold'
-                  : 'text-slate-400'
-              }`}
-            >
-              <span className="material-symbols-outlined text-[18px]">candlestick_chart</span>
-              <span className="text-[8px] uppercase tracking-wider mt-0.5">Radar</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('risk_engine')}
-              className={`flex flex-col items-center justify-center min-w-[50px] h-12 rounded-xl transition-all ${
-                activeTab === 'risk_engine'
-                  ? 'text-cyan-300 bg-cyan-950/40 border border-cyan-500/40 font-bold'
-                  : 'text-slate-400'
-              }`}
-            >
-              <span className="material-symbols-outlined text-[18px]">security</span>
-              <span className="text-[8px] uppercase tracking-wider mt-0.5">Risk</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('sync_hub')}
-              className={`flex flex-col items-center justify-center min-w-[50px] h-12 rounded-xl transition-all ${
-                activeTab === 'sync_hub'
-                  ? 'text-cyan-300 bg-cyan-950/40 border border-cyan-500/40 font-bold'
-                  : 'text-slate-400'
-              }`}
-            >
-              <span className="material-symbols-outlined text-[18px]">hub</span>
-              <span className="text-[8px] uppercase tracking-wider mt-0.5">Sync</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('risk_guard')}
-              className={`flex flex-col items-center justify-center min-w-[50px] h-12 rounded-xl transition-all ${
-                activeTab === 'risk_guard'
-                  ? 'text-cyan-300 bg-cyan-950/40 border border-cyan-500/40 font-bold'
-                  : 'text-slate-400'
-              }`}
-            >
-              <span className="material-symbols-outlined text-[18px]">gpp_maybe</span>
-              <span className="text-[8px] uppercase tracking-wider mt-0.5">Guard</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('backtest_lab')}
-              className={`flex flex-col items-center justify-center min-w-[50px] h-12 rounded-xl transition-all ${
-                activeTab === 'backtest_lab'
-                  ? 'text-cyan-300 bg-cyan-950/40 border border-cyan-500/40 font-bold'
-                  : 'text-slate-400'
-              }`}
-            >
-              <span className="material-symbols-outlined text-[18px]">query_stats</span>
-              <span className="text-[8px] uppercase tracking-wider mt-0.5">Backtest</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('voice_hud')}
-              className={`flex flex-col items-center justify-center min-w-[50px] h-12 rounded-xl transition-all ${
-                activeTab === 'voice_hud'
-                  ? 'text-cyan-300 bg-cyan-950/40 border border-cyan-500/40 font-bold'
-                  : 'text-slate-400'
-              }`}
-            >
-              <span className="material-symbols-outlined text-[18px]">mic</span>
-              <span className="text-[8px] uppercase tracking-wider mt-0.5">Voice</span>
-            </button>
+            {MOBILE_NAV_TABS.map(({ id, icon, label }) => (
+              <button
+                key={id}
+                onClick={() => setActiveTab(id)}
+                className={`flex flex-col items-center justify-center min-w-[50px] h-12 rounded-xl transition-all ${
+                  activeTab === id
+                    ? 'text-cyan-300 bg-cyan-950/40 border border-cyan-500/40 font-bold'
+                    : 'text-slate-400'
+                }`}
+              >
+                <span className="material-symbols-outlined text-[18px]">{icon}</span>
+                <span className="text-[8px] uppercase tracking-wider mt-0.5">{label}</span>
+              </button>
+            ))}
           </div>
         </nav>
       )}
@@ -365,7 +313,7 @@ function AppInner() {
         onExecuteBreaker={handleExecuteCircuitBreaker}
       />
 
-      {/* Owner Access Gate (Phase 1) */}
+      {/* Owner Access Gate */}
       <OwnerGate isOpen={gateOpen} onClose={() => setGateOpen(false)} onSuccess={handleGateSuccess} />
 
       {/* Multi-User 20-Seat Firebase Auth & Seat Switch Modal */}

@@ -159,4 +159,42 @@ export interface StressScenario {
   recommendedHedge: string;
 }
 
+// ---------------------------------------------------------------------------
+// Market data — single canonical definition shared by server and frontend.
+// ---------------------------------------------------------------------------
 
+export interface MarketQuote {
+  symbol: string;
+  name: string;
+  price: number | null;
+  change: number | null;
+  changePct: number | null;
+  high?: number | null;
+  low?: number | null;
+  prevClose?: number | null;
+  fiftyTwoWeekHigh?: number | null;
+  fiftyTwoWeekLow?: number | null;
+  volume?: number | null;
+  timestamp: string;
+  source: string;
+}
+
+// ---------------------------------------------------------------------------
+// Desk order records — single definition shared by firebase.ts and context.
+// ---------------------------------------------------------------------------
+
+export interface DeskOrderRecord {
+  id: string;
+  userId: string;
+  seatNumber: number;
+  traderName: string;
+  symbol: string;
+  side: 'BUY' | 'SELL';
+  productType: string;
+  qty: number;
+  price: number;
+  status: 'FILLED' | 'REJECTED' | 'CANCELLED';
+  riskCheckPassed: boolean;
+  rejectReason?: string | null;
+  timestamp: string;
+}

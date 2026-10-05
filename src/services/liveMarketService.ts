@@ -1,25 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getIndianMarketSession, MarketSessionInfo } from '../utils/marketHours';
+import { MarketQuote } from '../types/quant';
+import { TRACKED_SYMBOLS } from '../data/symbols';
 
-export interface MarketQuote {
-  symbol: string;
-  name: string;
-  price: number | null;
-  change: number | null;
-  changePct: number | null;
-  high?: number | null;
-  low?: number | null;
-  prevClose?: number | null;
-  fiftyTwoWeekHigh?: number | null;
-  fiftyTwoWeekLow?: number | null;
-  volume?: number | null;
-  timestamp: string;
-  source: string;
-}
+export type { MarketQuote };
+export { TRACKED_SYMBOLS };
 
 export interface LiveMarketState {
   quotes: Record<string, MarketQuote>;
-  latencyMs: number;
+  /** Null until first successful fetch; never a hardcoded fake value. */
+  latencyMs: number | null;
   isLive: boolean;
   provider: string;
   lastUpdated: string;
@@ -32,34 +22,12 @@ export interface LiveMarketState {
   // Market Hours & Smart Data Packet Saver Telemetry
   marketSession: MarketSessionInfo;
   isPacketSaverActive: boolean;
+  /** Starts at 0; incremented from real server responses — never faked. */
   packetsSavedCount: number;
   forceSyncOverride: boolean;
 }
 
-// Initial state has NO hardcoded demo quotes - strictly awaits authentic exchange ticks with null initial fields
-const TRACKED_SYMBOLS: { symbol: string; name: string }[] = [
-  { symbol: '^NSEI', name: 'NIFTY 50' },
-  { symbol: '^BSESN', name: 'BSE SENSEX' },
-  { symbol: '^NSEBANK', name: 'BANK NIFTY' },
-  { symbol: '^INDIAVIX', name: 'INDIA VIX' },
-  { symbol: 'RELIANCE.NS', name: 'Reliance Industries' },
-  { symbol: 'TCS.NS', name: 'Tata Consultancy Services' },
-  { symbol: 'HDFCBANK.NS', name: 'HDFC Bank Ltd' },
-  { symbol: 'INFY.NS', name: 'Infosys Limited' },
-  { symbol: 'ICICIBANK.NS', name: 'ICICI Bank Ltd' },
-  { symbol: 'SBIN.NS', name: 'State Bank of India' },
-  { symbol: 'BHARTIARTL.NS', name: 'Bharti Airtel' },
-  { symbol: 'LT.NS', name: 'Larsen & Toubro' },
-  { symbol: 'TRENT.NS', name: 'Trent Ltd' },
-  { symbol: 'BEL.NS', name: 'Bharat Electronics' },
-  { symbol: 'HAL.NS', name: 'Hindustan Aeronautics' },
-  { symbol: 'DIXON.NS', name: 'Dixon Technologies' },
-  { symbol: 'POLYCAB.NS', name: 'Polycab India' },
-  { symbol: 'SOLARINDS.NS', name: 'Solar Industries' },
-  { symbol: 'COCHINSHIP.NS', name: 'Cochin Shipyard' },
-  { symbol: 'NTPC.NS', name: 'NTPC Limited' },
-];
-
+// Initial state — null prices, zero counters, no faked numbers
 const DEFAULT_QUOTES: Record<string, MarketQuote> = {};
 TRACKED_SYMBOLS.forEach(({ symbol, name }) => {
   DEFAULT_QUOTES[symbol] = {
@@ -91,13 +59,12 @@ export function useLiveMarketData(pollingIntervalMs = 5000) {
   });
 
   const initialSession = getIndianMarketSession();
-  const [packetsSaved, setPacketsSaved] = useState<number>(1420);
 
   const [state, setState] = useState<LiveMarketState>({
     quotes: DEFAULT_QUOTES,
-    latencyMs: 2.1,
-    isLive: true,
-    provider: 'NSE_BSE_EXCHANGE_TICK_ROUTER',
+    latencyMs: null,        // null until first real fetch — not a fake number
+    isLive: false,          // false until first successful response
+    provider: 'YAHOO_DELAYED_UNOFFICIAL',
     lastUpdated: initialSession.istTimeString,
     error: null,
     geminiCreditsUsed: 0,
@@ -106,42 +73,44 @@ export function useLiveMarketData(pollingIntervalMs = 5000) {
     lastTickTimestamp: Date.now(),
     intervalMs: pollingIntervalMs,
     marketSession: initialSession,
-    isPacketSaverActive: !initialSession.shouldSync && !forceSyncOverride,
-    packetsSavedCount: 1420,
-    forceSyncOverride,
+    isPacketSaverActive: !initialSession.shouldSync && !false,
+    packetsSavedCount: 0,   // starts at 0; real value comes from server
+    forceSyncOverride: false,
   });
 
   const setForceSyncOverride = useCallback((enabled: boolean) => {
     try {
       localStorage.setItem('jarvis_force_sync_override', String(enabled));
-    } catch {}
+    } catch { /* ignore */ }
     setForceSyncOverrideState(enabled);
   }, []);
 
   const toggleForceSyncOverride = useCallback(() => {
-    setForceSyncOverrideState(prev => {
+    setForceSyncOverrideState((prev) => {
       const nextVal = !prev;
-      try {
-        localStorage.setItem('jarvis_force_sync_override', String(nextVal));
-      } catch {}
+      try { localStorage.setItem('jarvis_force_sync_override', String(nextVal)); }
+      catch { /* ignore */ }
       return nextVal;
     });
   }, []);
 
   const fetchQuotes = useCallback(async (isForced = false) => {
+    const fetchStart = Date.now();
     try {
       const session = getIndianMarketSession();
       const shouldForce = isForced || forceSyncOverride;
       const res = await fetch(`/api/market-data${shouldForce ? '?force=true' : ''}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
+      const latencyMs = Date.now() - fetchStart;
+
       if (data.success && data.quotes) {
         const isSaving = !session.shouldSync && !shouldForce;
         setState({
           quotes: data.quotes,
-          latencyMs: data.latencyMs || +(1.5 + Math.random() * 1.5).toFixed(2),
+          latencyMs,
           isLive: true,
-          provider: data.provider || 'NSE_BSE_EXCHANGE_TICK_ROUTER',
+          provider: data.provider || 'YAHOO_DELAYED_UNOFFICIAL',
           lastUpdated: data.timestamp || session.istTimeString,
           error: null,
           geminiCreditsUsed: 0,
@@ -151,17 +120,18 @@ export function useLiveMarketData(pollingIntervalMs = 5000) {
           intervalMs: pollingIntervalMs,
           marketSession: session,
           isPacketSaverActive: isSaving,
-          packetsSavedCount: data.packetsSavedToday || packetsSaved,
+          packetsSavedCount: data.packetsSavedToday ?? 0,
           forceSyncOverride: shouldForce,
         });
         setCountdown(Math.max(1, Math.round(pollingIntervalMs / 1000)));
       }
     } catch (err: any) {
       const session = getIndianMarketSession();
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
-        isLive: true,
-        latencyMs: +(2.0 + Math.random() * 0.8).toFixed(2),
+        // Correctly signal that the live feed is DOWN so the UI can warn the user
+        isLive: false,
+        error: err.message || 'Failed to fetch market data',
         lastUpdated: session.istTimeString,
         lastTickTimestamp: Date.now(),
         marketSession: session,
@@ -169,30 +139,24 @@ export function useLiveMarketData(pollingIntervalMs = 5000) {
       }));
       setCountdown(Math.max(1, Math.round(pollingIntervalMs / 1000)));
     }
-  }, [pollingIntervalMs, forceSyncOverride, packetsSaved]);
+  }, [pollingIntervalMs, forceSyncOverride]);
 
-  // Market Session Monitor & Adaptive Polling:
-  // Starts syncing ticks when market opens at 09:15 IST and stops when market closes at 15:30 IST.
+  // Market Session Monitor & Adaptive Polling
   useEffect(() => {
-    // 1. Initial single fetch upon mounting so all latest closing prices are loaded
+    // Initial fetch on mount so closing prices load immediately
     fetchQuotes(false);
 
     const session = getIndianMarketSession();
     const isStreamingActive = session.shouldSync || forceSyncOverride;
 
     if (isStreamingActive) {
-      // Regular Market Session (09:15 - 15:30 IST) -> Rapid Live Polling
-      const interval = setInterval(() => {
-        fetchQuotes(false);
-      }, pollingIntervalMs);
+      // Regular Market Session (09:15 - 15:30 IST) — rapid live polling
+      const interval = setInterval(() => fetchQuotes(false), pollingIntervalMs);
       return () => clearInterval(interval);
     } else {
-      // Market Closed -> Packet Saver Mode Active!
-      // Halt rapid polling to save network packets.
-      // Increment saved packets counter and softly check if market has opened every 5s.
+      // Market Closed — packet saver mode; check every 5 s if market opens
       const standbyInterval = setInterval(() => {
         const currentSession = getIndianMarketSession();
-        setPacketsSaved(prev => prev + 1);
         if (currentSession.shouldSync) {
           fetchQuotes(false);
         }
@@ -207,7 +171,9 @@ export function useLiveMarketData(pollingIntervalMs = 5000) {
     if (!session.shouldSync && !forceSyncOverride) return;
 
     const timer = setInterval(() => {
-      setCountdown(prev => (prev > 1 ? prev - 1 : Math.max(1, Math.round(pollingIntervalMs / 1000))));
+      setCountdown((prev) =>
+        prev > 1 ? prev - 1 : Math.max(1, Math.round(pollingIntervalMs / 1000)),
+      );
     }, 1000);
     return () => clearInterval(timer);
   }, [pollingIntervalMs, forceSyncOverride]);
@@ -224,9 +190,8 @@ export function useLiveMarketData(pollingIntervalMs = 5000) {
 
 /**
  * Dedicated hook for Institutional Equity Radar stocks LTP stream.
- * Defaults to 10 seconds (10000ms) with 0 Gemini Credits.
+ * Defaults to 10 seconds with 0 Gemini Credits.
  */
 export function useRadarStocksLtpData(intervalMs = 10000) {
   return useLiveMarketData(intervalMs);
 }
-

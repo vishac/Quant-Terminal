@@ -94,3 +94,7 @@ android-sdk/
 credentials.json
 *.key
 .credentials
+
+# Seed scripts with real PII — copy locally, fill in, run, then discard
+scripts/seedDeskSeats.local.ts
+scripts/*.local.ts

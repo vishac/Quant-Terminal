@@ -1,27 +1,26 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { 
-  db, 
-  auth, 
-  INITIAL_20_DESK_SEATS, 
-  INITIAL_DESK_ORDERS, 
-  DeskOrderRecord 
+import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
+import {
+  db,
+  auth,
+  INITIAL_20_DESK_SEATS,
+  INITIAL_DESK_ORDERS,
 } from '../services/firebase';
-import { DeskTraderSeat, UserDeskRole } from '../types/quant';
-import { 
-  collection, 
-  doc, 
-  getDocs, 
-  setDoc, 
-  updateDoc, 
-  onSnapshot, 
-  addDoc 
+import { DeskTraderSeat, UserDeskRole, DeskOrderRecord } from '../types/quant';
+import {
+  collection,
+  doc,
+  getDocs,
+  setDoc,
+  updateDoc,
+  onSnapshot,
+  addDoc,
 } from 'firebase/firestore';
-import { 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
-  signOut, 
-  onAuthStateChanged, 
-  User as FirebaseUser 
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  User as FirebaseUser,
 } from 'firebase/auth';
 
 interface DeskAuthContextType {
@@ -59,7 +58,7 @@ export const DeskAuthProvider: React.FC<{ children: ReactNode }> = ({ children }
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
-    } catch {}
+    } catch { /* ignore */ }
     return INITIAL_20_DESK_SEATS;
   });
 
@@ -70,7 +69,7 @@ export const DeskAuthProvider: React.FC<{ children: ReactNode }> = ({ children }
         const num = parseInt(saved, 10);
         if (!isNaN(num) && num >= 1 && num <= 20) return num;
       }
-    } catch {}
+    } catch { /* ignore */ }
     return 1; // Default to Seat 1 (Admin)
   });
 
@@ -82,82 +81,92 @@ export const DeskAuthProvider: React.FC<{ children: ReactNode }> = ({ children }
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) return parsed;
       }
-    } catch {}
+    } catch { /* ignore */ }
     return INITIAL_DESK_ORDERS;
   });
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
 
   // Derive current seat safely
-  const currentSeat = (Array.isArray(seats) && seats.find((s) => s.seatNumber === currentSeatNumber)) || (Array.isArray(seats) && seats[0]) || INITIAL_20_DESK_SEATS[0];
+  const currentSeat =
+    (Array.isArray(seats) && seats.find((s) => s.seatNumber === currentSeatNumber)) ||
+    (Array.isArray(seats) && seats[0]) ||
+    INITIAL_20_DESK_SEATS[0];
 
-  // Persist seat state to localStorage cache
+  // ----- Ref used by Firebase auth listener to avoid re-subscribing on every seats change -----
+  const seatsRef = useRef(seats);
+  useEffect(() => { seatsRef.current = seats; }, [seats]);
+
+  // ----- Persist seat state to localStorage -----
   useEffect(() => {
-    try {
-      localStorage.setItem('jarvis_desk_seats', JSON.stringify(seats));
-    } catch {}
+    try { localStorage.setItem('jarvis_desk_seats', JSON.stringify(seats)); }
+    catch { /* ignore */ }
   }, [seats]);
 
   useEffect(() => {
     try {
       localStorage.setItem('jarvis_current_seat_number', String(currentSeatNumber));
-      // Also sync user role for existing components
       const role = currentSeat.role === 'admin' ? 'admin' : 'viewer';
       localStorage.setItem('jarvis_user_role', role);
-    } catch {}
+    } catch { /* ignore */ }
   }, [currentSeatNumber, currentSeat]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem('jarvis_desk_orders', JSON.stringify(recentOrders));
-    } catch {}
+    try { localStorage.setItem('jarvis_desk_orders', JSON.stringify(recentOrders)); }
+    catch { /* ignore */ }
   }, [recentOrders]);
 
-  // Sync with Firebase Auth state
+  // ----- Firebase Auth state — stable subscription (seatsRef avoids re-subscribe) -----
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setFirebaseUser(user);
-      if (user && user.email) {
-        // Find if this email matches one of the 20 seats
-        const matched = seats.find((s) => s.email.toLowerCase() === user.email?.toLowerCase());
-        if (matched) {
-          setCurrentSeatNumber(matched.seatNumber);
-        }
+      if (user?.email) {
+        const matched = seatsRef.current.find(
+          (s) => s.email.toLowerCase() === user.email?.toLowerCase(),
+        );
+        if (matched) setCurrentSeatNumber(matched.seatNumber);
       }
     });
     return () => unsubscribe();
-  }, [seats]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // intentionally empty — seatsRef keeps seats current without re-subscribing
 
-  // Firestore real-time listeners for desk config and seats
+  // ----- Firestore real-time listeners -----
   useEffect(() => {
-    // Listen to desk master config
-    const unsubscribeDesk = onSnapshot(doc(db, 'desk_config', 'master'), (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.data();
-        if (typeof data.globalKillSwitch === 'boolean') {
-          setGlobalKillSwitch(data.globalKillSwitch);
+    const unsubscribeDesk = onSnapshot(
+      doc(db, 'desk_config', 'master'),
+      (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          if (typeof data.globalKillSwitch === 'boolean') {
+            setGlobalKillSwitch(data.globalKillSwitch);
+          }
         }
-      }
-    }, (err) => {
-      // Offline or initial collection uncreated
-    });
+      },
+      (err) => {
+        console.warn('[DeskAuth] desk_config listener error:', err.message);
+      },
+    );
 
-    // Listen to orders
-    const unsubscribeOrders = onSnapshot(collection(db, 'orders'), (snapshot) => {
-      if (!snapshot.empty) {
-        const remoteOrders: DeskOrderRecord[] = [];
-        snapshot.forEach((d) => {
-          const o = d.data() as DeskOrderRecord;
-          remoteOrders.push({ ...o, id: d.id });
-        });
-        remoteOrders.sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
-        if (remoteOrders.length > 0) {
-          setRecentOrders(remoteOrders.slice(0, 30));
+    const unsubscribeOrders = onSnapshot(
+      collection(db, 'orders'),
+      (snapshot) => {
+        if (!snapshot.empty) {
+          const remoteOrders: DeskOrderRecord[] = [];
+          snapshot.forEach((d) => {
+            const o = d.data() as DeskOrderRecord;
+            remoteOrders.push({ ...o, id: d.id });
+          });
+          remoteOrders.sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
+          if (remoteOrders.length > 0) {
+            setRecentOrders(remoteOrders.slice(0, 30));
+          }
         }
-      }
-    }, (err) => {
-      // Local fallback in effect
-    });
+      },
+      (err) => {
+        console.warn('[DeskAuth] orders listener error:', err.message);
+      },
+    );
 
     return () => {
       unsubscribeDesk();
@@ -165,84 +174,119 @@ export const DeskAuthProvider: React.FC<{ children: ReactNode }> = ({ children }
     };
   }, []);
 
+  // ----- Seat actions -----
+
   const switchSeat = (seatNumber: number) => {
-    if (seatNumber >= 1 && seatNumber <= 20) {
-      setCurrentSeatNumber(seatNumber);
-    }
+    if (seatNumber >= 1 && seatNumber <= 20) setCurrentSeatNumber(seatNumber);
   };
 
   const updateSeatCapital = async (seatNumber: number, newCapitalINR: number) => {
     setSeats((prev) =>
-      prev.map((s) => (s.seatNumber === seatNumber ? { ...s, allocatedCapitalINR: newCapitalINR } : s))
+      prev.map((s) => (s.seatNumber === seatNumber ? { ...s, allocatedCapitalINR: newCapitalINR } : s)),
     );
-    try {
-      const targetSeat = seats.find((s) => s.seatNumber === seatNumber);
-      if (targetSeat) {
-        await setDoc(doc(db, 'users', targetSeat.id), {
-          ...targetSeat,
-          allocatedCapitalINR: newCapitalINR,
-          updatedAt: new Date().toISOString(),
-        }, { merge: true });
+    const targetSeat = seats.find((s) => s.seatNumber === seatNumber);
+    if (targetSeat) {
+      try {
+        await setDoc(
+          doc(db, 'users', targetSeat.id),
+          { ...targetSeat, allocatedCapitalINR: newCapitalINR, updatedAt: new Date().toISOString() },
+          { merge: true },
+        );
+      } catch (err: any) {
+        console.error('[DeskAuth] updateSeatCapital Firestore write failed:', err.message);
+        throw err; // propagate so callers can surface the error in the UI
       }
-    } catch {}
+    }
   };
 
+  /**
+   * Toggles the kill-switch for a specific seat.
+   * Fix: nextActive is computed once from the current seats array BEFORE the
+   * React state update, ensuring the Firestore write uses the correct value
+   * rather than a stale closure value.
+   */
   const toggleSeatKillSwitch = async (seatNumber: number, reason?: string) => {
+    const targetSeat = seats.find((s) => s.seatNumber === seatNumber);
+    if (!targetSeat) return;
+
+    // Compute the toggled value synchronously before any async work
+    const nextActive = !targetSeat.killSwitchActive;
+    const nextReason = nextActive ? (reason || 'Manual Risk Officer Trip') : null;
+
+    // Optimistic UI update
     setSeats((prev) =>
-      prev.map((s) => {
-        if (s.seatNumber === seatNumber) {
-          const nextActive = !s.killSwitchActive;
-          return {
-            ...s,
-            killSwitchActive: nextActive,
-            killSwitchReason: nextActive ? (reason || 'Manual Risk Officer Trip') : null,
-          };
-        }
-        return s;
-      })
+      prev.map((s) =>
+        s.seatNumber === seatNumber
+          ? { ...s, killSwitchActive: nextActive, killSwitchReason: nextReason }
+          : s,
+      ),
     );
 
+    // Firestore write uses the pre-computed nextActive — no stale closure risk
     try {
-      const targetSeat = seats.find((s) => s.seatNumber === seatNumber);
-      if (targetSeat) {
-        const nextActive = !targetSeat.killSwitchActive;
-        await setDoc(doc(db, 'trader_states', targetSeat.id), {
+      await setDoc(
+        doc(db, 'trader_states', targetSeat.id),
+        {
           userId: targetSeat.id,
           killSwitchActive: nextActive,
-          killSwitchReason: nextActive ? (reason || 'Manual Trip') : null,
+          killSwitchReason: nextReason,
           updatedAt: new Date().toISOString(),
-        }, { merge: true });
-      }
-    } catch {}
+        },
+        { merge: true },
+      );
+    } catch (err: any) {
+      console.error('[DeskAuth] toggleSeatKillSwitch Firestore write failed:', err.message);
+      // Revert optimistic update on failure
+      setSeats((prev) =>
+        prev.map((s) =>
+          s.seatNumber === seatNumber
+            ? { ...s, killSwitchActive: targetSeat.killSwitchActive, killSwitchReason: targetSeat.killSwitchReason ?? null }
+            : s,
+        ),
+      );
+      throw err;
+    }
   };
 
   const toggleGlobalDeskKillSwitch = async (active: boolean) => {
     setGlobalKillSwitch(active);
     try {
-      await setDoc(doc(db, 'desk_config', 'master'), {
-        globalKillSwitch: active,
-        maxDeskLossInr: 2500000,
-        maxActiveSeats: 20,
-        defaultTraderCapitalInr: 5000000,
-        updatedAt: new Date().toISOString(),
-        updatedBy: currentSeat.name,
-      }, { merge: true });
-    } catch {}
+      await setDoc(
+        doc(db, 'desk_config', 'master'),
+        {
+          globalKillSwitch: active,
+          maxDeskLossInr: 2500000,
+          maxActiveSeats: 20,
+          defaultTraderCapitalInr: 5000000,
+          updatedAt: new Date().toISOString(),
+          updatedBy: currentSeat.name,
+        },
+        { merge: true },
+      );
+    } catch (err: any) {
+      console.error('[DeskAuth] toggleGlobalDeskKillSwitch Firestore write failed:', err.message);
+      setGlobalKillSwitch(!active); // revert
+      throw err;
+    }
   };
 
   const updateSeatRole = async (seatNumber: number, newRole: UserDeskRole) => {
     setSeats((prev) =>
-      prev.map((s) => (s.seatNumber === seatNumber ? { ...s, role: newRole } : s))
+      prev.map((s) => (s.seatNumber === seatNumber ? { ...s, role: newRole } : s)),
     );
-    try {
-      const targetSeat = seats.find((s) => s.seatNumber === seatNumber);
-      if (targetSeat) {
-        await setDoc(doc(db, 'users', targetSeat.id), {
-          role: newRole,
-          updatedAt: new Date().toISOString(),
-        }, { merge: true });
+    const targetSeat = seats.find((s) => s.seatNumber === seatNumber);
+    if (targetSeat) {
+      try {
+        await setDoc(
+          doc(db, 'users', targetSeat.id),
+          { role: newRole, updatedAt: new Date().toISOString() },
+          { merge: true },
+        );
+      } catch (err: any) {
+        console.error('[DeskAuth] updateSeatRole Firestore write failed:', err.message);
+        throw err;
       }
-    } catch {}
+    }
   };
 
   const placeDeskOrder = async (orderInput: {
@@ -256,19 +300,34 @@ export const DeskAuthProvider: React.FC<{ children: ReactNode }> = ({ children }
       return { success: false, error: 'GLOBAL DESK KILL-SWITCH ACTIVE: All execution halted.' };
     }
     if (currentSeat.killSwitchActive) {
-      return { success: false, error: `SEAT-${currentSeat.seatNumber} KILL-SWITCH ACTIVE: ${currentSeat.killSwitchReason || 'Halted by Risk'}` };
+      return {
+        success: false,
+        error: `SEAT-${currentSeat.seatNumber} KILL-SWITCH ACTIVE: ${currentSeat.killSwitchReason || 'Halted by Risk'}`,
+      };
     }
 
     const orderNotional = orderInput.qty * orderInput.price;
-    const estMargin = orderInput.productType.includes('OPT_BUY') ? orderNotional : Math.round(orderNotional * 0.15);
+    const estMargin = orderInput.productType.includes('OPT_BUY')
+      ? orderNotional
+      : Math.round(orderNotional * 0.15);
 
-    if (currentSeat.allocatedCapitalINR > 0 && currentSeat.marginUsedINR + estMargin > currentSeat.allocatedCapitalINR) {
-      return { success: false, error: `Margin limit breached: Requires ₹${estMargin.toLocaleString()}, available ₹${Math.max(0, currentSeat.allocatedCapitalINR - currentSeat.marginUsedINR).toLocaleString()}` };
+    if (
+      currentSeat.allocatedCapitalINR > 0 &&
+      currentSeat.marginUsedINR + estMargin > currentSeat.allocatedCapitalINR
+    ) {
+      return {
+        success: false,
+        error: `Margin limit breached: Requires ₹${estMargin.toLocaleString()}, available ₹${Math.max(
+          0,
+          currentSeat.allocatedCapitalINR - currentSeat.marginUsedINR,
+        ).toLocaleString()}`,
+      };
     }
 
     const now = new Date();
     const timeStr = now.toLocaleTimeString('en-IN', { hour12: false });
-    const orderId = `ord-${Date.now().toString().slice(-4)}`;
+    // Use crypto.randomUUID() for collision-free order IDs
+    const orderId = `ord-${crypto.randomUUID().slice(0, 8)}`;
 
     const newOrder: DeskOrderRecord = {
       id: orderId,
@@ -287,7 +346,6 @@ export const DeskAuthProvider: React.FC<{ children: ReactNode }> = ({ children }
 
     setRecentOrders((prev) => [newOrder, ...prev.slice(0, 29)]);
 
-    // Update current seat's margin & active positions
     setSeats((prev) =>
       prev.map((s) => {
         if (s.seatNumber === currentSeat.seatNumber) {
@@ -299,16 +357,17 @@ export const DeskAuthProvider: React.FC<{ children: ReactNode }> = ({ children }
           };
         }
         return s;
-      })
+      }),
     );
 
-    // Save order to Firestore
+    // Persist to Firestore — errors are logged but do not block the UI
     try {
-      await addDoc(collection(db, 'orders'), {
-        ...newOrder,
-        timestampISO: now.toISOString(),
-      });
-    } catch {}
+      await addDoc(collection(db, 'orders'), { ...newOrder, timestampISO: now.toISOString() });
+    } catch (err: any) {
+      console.error('[DeskAuth] placeDeskOrder Firestore write failed:', err.message);
+      // Order is still recorded locally; alert user that cloud sync failed
+      return { success: true, order: newOrder, error: 'Order placed locally but cloud sync failed. Check network.' };
+    }
 
     return { success: true, order: newOrder };
   };
@@ -317,17 +376,17 @@ export const DeskAuthProvider: React.FC<{ children: ReactNode }> = ({ children }
     await signInWithEmailAndPassword(auth, email, pass);
   };
 
-  const signUpWithCredentials = async (email: string, pass: string, displayName: string, seatNumber: number) => {
+  const signUpWithCredentials = async (
+    email: string,
+    pass: string,
+    displayName: string,
+    seatNumber: number,
+  ) => {
     const res = await createUserWithEmailAndPassword(auth, email, pass);
     if (res.user) {
       const targetSeat = seats.find((s) => s.seatNumber === seatNumber);
       if (targetSeat) {
-        const updatedSeat: DeskTraderSeat = {
-          ...targetSeat,
-          id: res.user.uid,
-          name: displayName,
-          email,
-        };
+        const updatedSeat: DeskTraderSeat = { ...targetSeat, id: res.user.uid, name: displayName, email };
         setSeats((prev) => prev.map((s) => (s.seatNumber === seatNumber ? updatedSeat : s)));
         try {
           await setDoc(doc(db, 'users', res.user.uid), {
@@ -341,7 +400,9 @@ export const DeskAuthProvider: React.FC<{ children: ReactNode }> = ({ children }
             allocatedCapitalInr: targetSeat.allocatedCapitalINR,
             createdAt: new Date().toISOString(),
           });
-        } catch {}
+        } catch (err: any) {
+          console.error('[DeskAuth] signUpWithCredentials Firestore write failed:', err.message);
+        }
       }
     }
   };
@@ -378,8 +439,6 @@ export const DeskAuthProvider: React.FC<{ children: ReactNode }> = ({ children }
 
 export const useDeskAuth = () => {
   const context = useContext(DeskAuthContext);
-  if (!context) {
-    throw new Error('useDeskAuth must be used within a DeskAuthProvider');
-  }
+  if (!context) throw new Error('useDeskAuth must be used within a DeskAuthProvider');
   return context;
 };
