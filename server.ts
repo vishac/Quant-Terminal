@@ -103,13 +103,13 @@ app.get('/api/owner/status', (_req, res) => {
 let packetsSavedServerCount = 0;
 
 // Warm up quotes cache on boot
-syncMarketQuotes().catch(() => {});
+syncMarketQuotes().catch(() => { });
 
 // Server-side polling: rapid during market hours, slow standby otherwise
 setInterval(() => {
   const session = checkIsMarketHours();
   if (session.isOpen) {
-    syncMarketQuotes().catch(() => {});
+    syncMarketQuotes().catch(() => { });
   } else {
     packetsSavedServerCount += 1;
   }
@@ -532,8 +532,8 @@ function computeMarketDerivedMacro(reason?: string) {
   const headline = vix < 13.0
     ? `Subdued Volatility Regime (VIX ${vix.toFixed(2)}): Gamma Carry & Mean Reversion Favorable`
     : vix < 17.5
-    ? `Balanced Macro Regime (VIX ${vix.toFixed(2)}): Defined-Risk Hedging Advised`
-    : `Elevated Volatility Regime (VIX ${vix.toFixed(2)}): Tail-Risk Mitigation Active`;
+      ? `Balanced Macro Regime (VIX ${vix.toFixed(2)}): Defined-Risk Hedging Advised`
+      : `Elevated Volatility Regime (VIX ${vix.toFixed(2)}): Tail-Risk Mitigation Active`;
 
   const summary = `Quantitative macro threat regime computed directly from live NSE/BSE tick feeds. India VIX is at ${vix.toFixed(2)} (${vixChange != null ? (vixChange >= 0 ? '+' : '') + vixChange.toFixed(2) + '%' : 'flat'}), indicating a ${threatRegime.replace('_', ' ')} posture. NIFTY 50 is trading near ${currentNifty ? '₹' + currentNifty.toLocaleString('en-IN') : '(unavailable)'} with BankNIFTY at ${currentBankNifty ? '₹' + currentBankNifty.toLocaleString('en-IN') : '(unavailable)'}.`;
 

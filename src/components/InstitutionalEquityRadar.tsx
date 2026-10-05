@@ -1,26 +1,26 @@
 import React, { useState, useMemo } from 'react';
-import { 
-  INSTITUTIONAL_STOCK_PICKS, 
+import {
+  INSTITUTIONAL_STOCK_PICKS,
   InstitutionalStockPick,
   QUANTITATIVE_STRATEGY_FRAMEWORK_WEIGHTS,
 } from '../data/institutionalEquityData';
 import { useLiveMarketData } from '../services/liveMarketService';
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  ShieldCheck, 
-  Zap, 
-  Activity, 
-  Search, 
-  Download, 
-  RefreshCw, 
-  Layers, 
-  CheckCircle2, 
-  Clock, 
-  Target, 
-  AlertCircle, 
-  BarChart3, 
-  Building2, 
+import {
+  TrendingUp,
+  TrendingDown,
+  ShieldCheck,
+  Zap,
+  Activity,
+  Search,
+  Download,
+  RefreshCw,
+  Layers,
+  CheckCircle2,
+  Clock,
+  Target,
+  AlertCircle,
+  BarChart3,
+  Building2,
   ArrowUpRight,
   ExternalLink,
   Table as TableIcon,
@@ -86,16 +86,16 @@ export const InstitutionalEquityRadar: React.FC = () => {
   // Filtered & Sorted stocks
   const filteredStocks = useMemo(() => {
     const list = INSTITUTIONAL_STOCK_PICKS.filter(stock => {
-      const matchesHorizon = 
-        horizonFilter === 'ALL' || 
-        stock.horizon === horizonFilter || 
+      const matchesHorizon =
+        horizonFilter === 'ALL' ||
+        stock.horizon === horizonFilter ||
         stock.horizon === 'BOTH';
 
-      const matchesSector = 
-        sectorFilter === 'ALL' || 
+      const matchesSector =
+        sectorFilter === 'ALL' ||
         stock.sector === sectorFilter;
 
-      const matchesSearch = 
+      const matchesSearch =
         searchQuery === '' ||
         stock.ticker.toLowerCase().includes(searchQuery.toLowerCase()) ||
         stock.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -249,22 +249,20 @@ export const InstitutionalEquityRadar: React.FC = () => {
             <div className="flex items-center p-1 bg-slate-950/90 border border-cyan-500/30 rounded-xl text-xs">
               <button
                 onClick={() => setViewMode('TABLE_MATRIX')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
-                  viewMode === 'TABLE_MATRIX'
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${viewMode === 'TABLE_MATRIX'
                     ? 'bg-cyan-500 text-slate-950 shadow-[0_0_12px_rgba(0,240,255,0.4)]'
                     : 'text-slate-400 hover:text-slate-200'
-                }`}
+                  }`}
               >
                 <TableIcon className="w-3.5 h-3.5" />
                 <span>STRATEGY MATRIX (TABLE)</span>
               </button>
               <button
                 onClick={() => setViewMode('SPLIT_DOSSIER')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
-                  viewMode === 'SPLIT_DOSSIER'
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${viewMode === 'SPLIT_DOSSIER'
                     ? 'bg-cyan-500 text-slate-950 shadow-[0_0_12px_rgba(0,240,255,0.4)]'
                     : 'text-slate-400 hover:text-slate-200'
-                }`}
+                  }`}
               >
                 <LayoutGrid className="w-3.5 h-3.5" />
                 <span>QUANT DOSSIER (SPLIT)</span>
@@ -323,11 +321,10 @@ export const InstitutionalEquityRadar: React.FC = () => {
                 setToastMessage('Radar Stocks LTP cadence set to 10 seconds (0 Gemini Credits used).');
                 setTimeout(() => setToastMessage(null), 3000);
               }}
-              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
-                radarPollingIntervalMs === 10000
+              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${radarPollingIntervalMs === 10000
                   ? 'bg-cyan-500 text-slate-950 shadow-[0_0_10px_rgba(0,240,255,0.4)]'
                   : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800'
-              }`}
+                }`}
             >
               10s (LTP Default)
             </button>
@@ -337,11 +334,10 @@ export const InstitutionalEquityRadar: React.FC = () => {
                 setToastMessage('Radar Stocks LTP cadence set to 5 seconds (0 Gemini Credits used).');
                 setTimeout(() => setToastMessage(null), 3000);
               }}
-              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
-                radarPollingIntervalMs === 5000
+              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${radarPollingIntervalMs === 5000
                   ? 'bg-cyan-500 text-slate-950 shadow-[0_0_10px_rgba(0,240,255,0.4)]'
                   : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800'
-              }`}
+                }`}
             >
               5s (Turbo Sync)
             </button>
@@ -360,8 +356,8 @@ export const InstitutionalEquityRadar: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
             {QUANTITATIVE_STRATEGY_FRAMEWORK_WEIGHTS.map(factor => (
-              <div 
-                key={factor.id} 
+              <div
+                key={factor.id}
                 className="p-2.5 rounded-xl bg-slate-950/70 border border-slate-800/80 hover:border-cyan-500/40 transition-all text-xs"
               >
                 <div className="flex items-center justify-between mb-1">
@@ -410,31 +406,28 @@ export const InstitutionalEquityRadar: React.FC = () => {
           <div className="flex items-center gap-1 p-1 bg-slate-950 border border-slate-800 rounded-xl text-xs">
             <button
               onClick={() => setHorizonFilter('ALL')}
-              className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${
-                horizonFilter === 'ALL'
+              className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${horizonFilter === 'ALL'
                   ? 'bg-cyan-500 text-slate-950 shadow-[0_0_10px_rgba(0,240,255,0.3)]'
                   : 'text-slate-400 hover:text-slate-200'
-              }`}
+                }`}
             >
               ALL (15)
             </button>
             <button
               onClick={() => setHorizonFilter('SHORT_TERM')}
-              className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${
-                horizonFilter === 'SHORT_TERM'
+              className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${horizonFilter === 'SHORT_TERM'
                   ? 'bg-cyan-500 text-slate-950 shadow-[0_0_10px_rgba(0,240,255,0.3)]'
                   : 'text-slate-400 hover:text-slate-200'
-              }`}
+                }`}
             >
               SHORT-TERM SWING (5-20D)
             </button>
             <button
               onClick={() => setHorizonFilter('LONG_TERM')}
-              className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${
-                horizonFilter === 'LONG_TERM'
+              className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${horizonFilter === 'LONG_TERM'
                   ? 'bg-cyan-500 text-slate-950 shadow-[0_0_10px_rgba(0,240,255,0.3)]'
                   : 'text-slate-400 hover:text-slate-200'
-              }`}
+                }`}
             >
               LONG-TERM COMPOUNDERS (1-3Y)
             </button>
@@ -536,7 +529,7 @@ export const InstitutionalEquityRadar: React.FC = () => {
                   const isHighTier = q.compositeScore >= 93;
 
                   return (
-                    <tr 
+                    <tr
                       key={stock.id}
                       onClick={() => {
                         setSelectedStockId(stock.id);
@@ -559,16 +552,14 @@ export const InstitutionalEquityRadar: React.FC = () => {
                       {/* Conviction Score & Tier Badge */}
                       <td className="py-3.5 px-3 text-center">
                         <div className="inline-flex flex-col items-center">
-                          <div className={`px-2.5 py-1 rounded-xl font-bold font-mono text-sm shadow-sm ${
-                            isHighTier 
-                              ? 'bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.25)]' 
+                          <div className={`px-2.5 py-1 rounded-xl font-bold font-mono text-sm shadow-sm ${isHighTier
+                              ? 'bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.25)]'
                               : 'bg-cyan-950/80 border border-cyan-500/50 text-cyan-300 shadow-[0_0_12px_rgba(0,240,255,0.2)]'
-                          }`}>
+                            }`}>
                             {q.compositeScore} / 100
                           </div>
-                          <span className={`text-[9px] font-bold uppercase mt-1 ${
-                            isHighTier ? 'text-emerald-400' : 'text-cyan-400'
-                          }`}>
+                          <span className={`text-[9px] font-bold uppercase mt-1 ${isHighTier ? 'text-emerald-400' : 'text-cyan-400'
+                            }`}>
                             {q.convictionTier.replace(/_/g, ' ')}
                           </span>
                         </div>
@@ -582,10 +573,9 @@ export const InstitutionalEquityRadar: React.FC = () => {
                               <div key={f.id} className="flex flex-col items-center">
                                 <span className="text-slate-400 text-[8px]">{f.id === 'ORDER_FLOW' ? 'O' : f.id === 'MOMENTUM_CANSLIM' ? 'M' : f.id === 'FUNDAMENTAL_QARP' ? 'Q' : f.id === 'RISK_REWARD' ? 'R' : 'S'}</span>
                                 <div className="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden mt-0.5">
-                                  <div 
-                                    className={`h-full rounded-full ${
-                                      f.score >= 95 ? 'bg-emerald-400' : f.score >= 90 ? 'bg-cyan-400' : 'bg-amber-400'
-                                    }`}
+                                  <div
+                                    className={`h-full rounded-full ${f.score >= 95 ? 'bg-emerald-400' : f.score >= 90 ? 'bg-cyan-400' : 'bg-amber-400'
+                                      }`}
                                     style={{ width: `${f.score}%` }}
                                   />
                                 </div>
@@ -709,11 +699,10 @@ export const InstitutionalEquityRadar: React.FC = () => {
                   <div
                     key={stock.id}
                     onClick={() => setSelectedStockId(stock.id)}
-                    className={`p-4 rounded-xl border transition-all cursor-pointer relative overflow-hidden ${
-                      isSelected
+                    className={`p-4 rounded-xl border transition-all cursor-pointer relative overflow-hidden ${isSelected
                         ? 'bg-slate-900 border-cyan-400 shadow-[0_0_20px_rgba(0,240,255,0.18)]'
                         : 'bg-[#080d1a]/85 border-slate-800/80 hover:border-cyan-500/40 hover:bg-slate-900/40'
-                    }`}
+                      }`}
                   >
                     {isSelected && (
                       <div className="absolute top-0 left-0 bottom-0 w-1 bg-cyan-400 shadow-[0_0_8px_#00f0ff]" />
@@ -723,11 +712,10 @@ export const InstitutionalEquityRadar: React.FC = () => {
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="text-base font-bold text-slate-100 font-sans">{stock.ticker}</span>
-                          <span className={`text-[9px] px-1.5 py-0.2 rounded font-bold uppercase ${
-                            stock.horizon === 'LONG_TERM' ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-500/30' :
-                            stock.horizon === 'SHORT_TERM' ? 'bg-cyan-950/60 text-cyan-300 border border-cyan-500/30' :
-                            'bg-amber-950/60 text-amber-300 border border-amber-500/30'
-                          }`}>
+                          <span className={`text-[9px] px-1.5 py-0.2 rounded font-bold uppercase ${stock.horizon === 'LONG_TERM' ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-500/30' :
+                              stock.horizon === 'SHORT_TERM' ? 'bg-cyan-950/60 text-cyan-300 border border-cyan-500/30' :
+                                'bg-amber-950/60 text-amber-300 border border-amber-500/30'
+                            }`}>
                             {stock.horizon === 'BOTH' ? 'SWING + COMPOUND' : stock.horizon}
                           </span>
                         </div>
@@ -758,11 +746,10 @@ export const InstitutionalEquityRadar: React.FC = () => {
                     {/* Prominent Conviction Score & Factor Mini-Bar */}
                     <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between text-[11px]">
                       <div className="flex items-center gap-1.5">
-                        <span className={`px-2 py-0.5 rounded-lg font-bold font-mono text-xs ${
-                          isHighTier 
-                            ? 'bg-emerald-950/90 border border-emerald-500/40 text-emerald-300' 
+                        <span className={`px-2 py-0.5 rounded-lg font-bold font-mono text-xs ${isHighTier
+                            ? 'bg-emerald-950/90 border border-emerald-500/40 text-emerald-300'
                             : 'bg-cyan-950/90 border border-cyan-500/40 text-cyan-300'
-                        }`}>
+                          }`}>
                           CONVICTION: {q.compositeScore}/100
                         </span>
                       </div>
@@ -845,9 +832,9 @@ export const InstitutionalEquityRadar: React.FC = () => {
                 {pctFrom52Low !== null ? (
                   <>
                     <div className="w-full bg-slate-900 h-2.5 rounded-full overflow-hidden flex relative">
-                      <div 
-                        className="bg-gradient-to-r from-cyan-600 via-cyan-400 to-emerald-400 h-full rounded-full shadow-[0_0_10px_#00f0ff]" 
-                        style={{ width: `${Math.min(100, Math.max(5, pctFrom52Low))}%` }} 
+                      <div
+                        className="bg-gradient-to-r from-cyan-600 via-cyan-400 to-emerald-400 h-full rounded-full shadow-[0_0_10px_#00f0ff]"
+                        style={{ width: `${Math.min(100, Math.max(5, pctFrom52Low))}%` }}
                       />
                     </div>
                     <div className="flex items-center justify-between text-[11px] text-slate-400">
@@ -882,8 +869,8 @@ export const InstitutionalEquityRadar: React.FC = () => {
                     const weightedContrib = (factor.score * factor.weight).toFixed(1);
 
                     return (
-                      <div 
-                        key={factor.id} 
+                      <div
+                        key={factor.id}
                         className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 hover:border-cyan-500/30 transition-all text-xs"
                       >
                         <div className="flex items-center justify-between gap-2 mb-1.5">
@@ -895,11 +882,10 @@ export const InstitutionalEquityRadar: React.FC = () => {
                           </div>
 
                           <div className="flex items-center gap-2">
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded font-mono ${
-                              factor.verdict === 'EXEMPLARY' ? 'bg-emerald-950/70 border border-emerald-500/40 text-emerald-300' :
-                              factor.verdict === 'STRONG' ? 'bg-cyan-950/70 border border-cyan-500/40 text-cyan-300' :
-                              'bg-amber-950/70 border border-amber-500/40 text-amber-300'
-                            }`}>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded font-mono ${factor.verdict === 'EXEMPLARY' ? 'bg-emerald-950/70 border border-emerald-500/40 text-emerald-300' :
+                                factor.verdict === 'STRONG' ? 'bg-cyan-950/70 border border-cyan-500/40 text-cyan-300' :
+                                  'bg-amber-950/70 border border-amber-500/40 text-amber-300'
+                              }`}>
                               {factor.verdict}
                             </span>
                             <span className="text-sm font-bold text-cyan-300 font-mono">
@@ -913,12 +899,11 @@ export const InstitutionalEquityRadar: React.FC = () => {
 
                         {/* Factor Progress Bar */}
                         <div className="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden mb-2">
-                          <div 
-                            className={`h-full rounded-full transition-all duration-500 ${
-                              factor.score >= 95 ? 'bg-emerald-400 shadow-[0_0_8px_#10b981]' :
-                              factor.score >= 90 ? 'bg-cyan-400 shadow-[0_0_8px_#00f0ff]' :
-                              'bg-amber-400'
-                            }`}
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${factor.score >= 95 ? 'bg-emerald-400 shadow-[0_0_8px_#10b981]' :
+                                factor.score >= 90 ? 'bg-cyan-400 shadow-[0_0_8px_#00f0ff]' :
+                                  'bg-amber-400'
+                              }`}
                             style={{ width: `${factor.score}%` }}
                           />
                         </div>
@@ -1192,11 +1177,11 @@ export const InstitutionalEquityRadar: React.FC = () => {
 
       {/* QUICK FULL THESIS & DOSSIER MODAL */}
       {modalStock && (
-        <div 
+        <div
           onClick={() => setModalStockId(null)}
           className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in"
         >
-          <div 
+          <div
             onClick={(e) => e.stopPropagation()}
             className="w-full max-w-4xl max-h-[90vh] overflow-y-auto bg-[#080d1a] border border-cyan-500/40 rounded-2xl shadow-2xl p-6 font-mono relative"
           >
