@@ -21,7 +21,7 @@ import {
   quotesCache, syncMarketQuotes, fetchDelayedYahooQuote,
   checkIsMarketHours, DATA_SOURCE, DATA_DISCLAIMER, TRACKED_SYMBOLS,
 } from './src/server/marketData.ts';
-import { MarketQuote } from './src/types/quant.ts';
+import type { MarketQuote } from './src/types/quant.ts';
 
 export type { MarketQuote };
 
@@ -911,7 +911,8 @@ async function startServer() {
     }
   }, 2500);
 
-  const isProduction = process.env.NODE_ENV === 'production';
+  const isDevScript = process.env.npm_lifecycle_event === 'dev';
+  const isProduction = process.env.NODE_ENV === 'production' || !isDevScript;
   const distPath = path.resolve(__dirname, 'dist');
   const hasDist = fs.existsSync(path.resolve(distPath, 'index.html'));
 
@@ -929,7 +930,7 @@ async function startServer() {
     next();
   });
 
-  if (isProduction && hasDist) {
+  if ((isProduction || !isDevScript) && hasDist) {
     app.use(express.static(distPath));
     app.get('*', (_req, res) => res.sendFile(path.resolve(distPath, 'index.html')));
   } else {

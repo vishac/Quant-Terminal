@@ -4,8 +4,8 @@
  * Not a licensed real-time exchange feed. For information only.
  */
 
-import { MarketQuote } from '../../src/types/quant.js';
-import { TRACKED_SYMBOLS } from '../../src/data/symbols.js';
+import type { MarketQuote } from '../types/quant.ts';
+import { TRACKED_SYMBOLS } from '../data/symbols.ts';
 
 export { TRACKED_SYMBOLS };
 
