@@ -1,12 +1,11 @@
-// J.A.R.V.I.S. Institutional Quant Terminal - Ultra-Reliable Universal Service Worker
-// Fully compliant with Android WebAPK, Samsung Internet (One UI), Chrome, and iOS Safari PWA standards.
+// J.A.R.V.I.S. Institutional Quant Terminal - Resilient Network-First Service Worker
+// Version: jarvis-quant-v2.1.0-recovery
 
-const CACHE_NAME = 'jarvis-quant-v1.2.0';
+const CACHE_NAME = 'jarvis-quant-v2.1.0-recovery';
 const OFFLINE_URL = '/';
 
 const PRECACHE_ASSETS = [
   '/',
-  '/index.html',
   '/manifest.json',
   '/manifest.webmanifest',
   '/icon.svg',
@@ -18,28 +17,26 @@ const PRECACHE_ASSETS = [
   '/pwa-maskable-512x512.png',
 ];
 
-// Install event: cache core app shell and immediately activate
+// Install event: immediate activation without waiting
 self.addEventListener('install', (event) => {
+  self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE_NAME).then(async (cache) => {
-      await Promise.allSettled(
-        PRECACHE_ASSETS.map((asset) =>
-          cache.add(asset).catch((err) => {
-            console.warn('[PWA SW] Precache warning for:', asset, err);
-          })
-        )
-      );
-    }).then(() => self.skipWaiting())
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.addAll(PRECACHE_ASSETS).catch((err) => {
+        console.warn('[PWA SW] Precache warning:', err);
+      });
+    })
   );
 });
 
-// Activate event: purge outdated caches and take immediate control of clients
+// Activate event: instantly purge ALL previous caches and take control
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((name) => {
           if (name !== CACHE_NAME) {
+            console.log('[PWA SW] Purging obsolete cache:', name);
             return caches.delete(name);
           }
         })
@@ -48,58 +45,71 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch event: Network-first for dynamic API routes, Stale-while-revalidate for static assets
+// Fetch event
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Skip cross-origin or non-GET requests
+  // Skip non-GET requests
   if (event.request.method !== 'GET') return;
 
-  // Real-time market data or API endpoints: Network-first with cache fallback
+  // Never intercept Vite dev server internal endpoints or hot reloads
+  if (
+    url.pathname.startsWith('/@') ||
+    url.pathname.startsWith('/src/') ||
+    url.pathname.startsWith('/node_modules/') ||
+    url.pathname.startsWith('/ws')
+  ) {
+    return;
+  }
+
+  // API requests: Network-only with offline JSON fallback
   if (url.pathname.startsWith('/api/')) {
+    event.respondWith(
+      fetch(event.request).catch(() => {
+        return new Response(JSON.stringify({
+          success: true,
+          offline: true,
+          provider: 'OFFLINE_CACHE_FALLBACK',
+          timestamp: new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' }) + ' IST'
+        }), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      })
+    );
+    return;
+  }
+
+  // Navigation requests (HTML pages): NETWORK FIRST, cache only when offline
+  if (event.request.mode === 'navigate' || url.pathname === '/' || url.pathname.endsWith('.html')) {
     event.respondWith(
       fetch(event.request)
         .then((response) => {
+          if (response && response.status === 200) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          }
           return response;
         })
         .catch(() => {
-          return caches.match(event.request).then((cached) => {
-            return cached || new Response(JSON.stringify({ 
-              success: true, 
-              offline: true, 
-              provider: 'OFFLINE_CACHE_FALLBACK',
-              timestamp: new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' }) + ' IST'
-            }), {
-              headers: { 'Content-Type': 'application/json' }
-            });
-          });
+          return caches.match(OFFLINE_URL) || caches.match('/index.html');
         })
     );
     return;
   }
 
-  // App Shell & Static Assets: Stale-While-Revalidate
+  // Static Assets (/assets/*, images, fonts): Cache-first with network fallback
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      const fetchPromise = fetch(event.request)
-        .then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
-            const responseToCache = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(event.request, responseToCache);
-            });
-          }
-          return networkResponse;
-        })
-        .catch(() => {
-          // If offline and requesting navigation, return index.html
-          if (event.request.mode === 'navigate') {
-            return caches.match(OFFLINE_URL);
-          }
-          return cachedResponse;
-        });
-
-      return cachedResponse || fetchPromise;
+    caches.match(event.request).then((cached) => {
+      if (cached) return cached;
+      return fetch(event.request).then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseToCache);
+          });
+        }
+        return networkResponse;
+      });
     })
   );
 });

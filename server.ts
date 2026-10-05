@@ -1241,6 +1241,25 @@ async function startServer() {
   const distPath = path.resolve(__dirname, 'dist');
   const hasDist = fs.existsSync(path.resolve(distPath, 'index.html'));
 
+  // Stale asset hash self-healing router: ensures any previously cached index.html finds a working bundle
+  app.get('/assets/index-*.js', (req, res, next) => {
+    if (hasDist) {
+      const requestedFile = path.resolve(distPath, 'assets', path.basename(req.path));
+      if (fs.existsSync(requestedFile)) {
+        return res.sendFile(requestedFile);
+      }
+      try {
+        const assetsDir = path.resolve(distPath, 'assets');
+        const files = fs.readdirSync(assetsDir);
+        const latestBundle = files.find(f => f.startsWith('index-') && f.endsWith('.js'));
+        if (latestBundle) {
+          return res.sendFile(path.resolve(assetsDir, latestBundle));
+        }
+      } catch {}
+    }
+    next();
+  });
+
   if (isProduction && hasDist) {
     app.use(express.static(distPath));
     app.get('*', (_req, res) => res.sendFile(path.resolve(distPath, 'index.html')));
@@ -1248,6 +1267,21 @@ async function startServer() {
     try {
       const vite = await createViteServer({ server: { middlewareMode: true, hmr: false }, appType: 'spa' });
       app.use(vite.middlewares);
+      app.use('*', async (req, res, next) => {
+        const url = req.originalUrl;
+        try {
+          const indexPath = path.resolve(__dirname, 'index.html');
+          if (fs.existsSync(indexPath)) {
+            let template = fs.readFileSync(indexPath, 'utf-8');
+            template = await vite.transformIndexHtml(url, template);
+            return res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
+          }
+          next();
+        } catch (e: any) {
+          vite.ssrFixStacktrace(e);
+          next(e);
+        }
+      });
     } catch (viteErr) {
       console.warn('[Vite Middleware] Could not load Vite dev server, serving dist:', viteErr);
       if (hasDist) {
