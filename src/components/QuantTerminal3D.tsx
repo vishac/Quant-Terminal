@@ -628,6 +628,11 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
                 ? `₹${sensexQuote.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
                 : '—'}
             </span>
+            {sensexQuote?.changePct != null && (
+              <span className={`text-[10px] font-bold flex items-center ${(sensexQuote.changePct ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {(sensexQuote.changePct ?? 0) >= 0 ? '+' : ''}{sensexQuote.changePct.toFixed(2)}%
+              </span>
+            )}
           </div>
         </div>
 
