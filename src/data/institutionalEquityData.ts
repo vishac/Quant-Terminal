@@ -26,6 +26,7 @@ export interface InstitutionalStockPick {
   marketCapINR: string;
   horizon: 'SHORT_TERM' | 'LONG_TERM' | 'BOTH';
   ltp?: number;
+  changeVal?: number;
   changePct?: number;
   volume?: number;
   capCategory?: string;

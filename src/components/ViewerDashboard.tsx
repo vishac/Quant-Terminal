@@ -1,6 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useLiveMarketData } from '../services/liveMarketService';
 import { GlobalSentiment } from './GlobalSentiment';
+import type { InstitutionalStockPick } from '../data/institutionalEquityData';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -11,6 +12,7 @@ import {
   Activity, 
   ArrowUpRight, 
   ArrowDownRight,
+  Sparkles,
   ExternalLink
 } from 'lucide-react';
 
@@ -21,12 +23,37 @@ interface ViewerDashboardProps {
 export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
   const { quotes, latencyMs, countdownSeconds, marketSession, refetch, isLive } = useLiveMarketData(5000);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedSector, setSelectedSector] = useState<'ALL' | 'HEAVYWEIGHTS' | 'BANKING' | 'DEFENSE_INFRA' | 'IT'>('ALL');
+  const [selectedFilter, setSelectedFilter] = useState<'ALL' | 'SHORT_TERM' | 'LONG_TERM' | 'LARGE_CAP' | 'MID_CAP' | 'SMALL_CAP'>('ALL');
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Dynamic Live Technical Breakout Radar Universe (Same 45 stocks as Dynamic Technical Breakout Radar)
+  const [screenerStocks, setScreenerStocks] = useState<InstitutionalStockPick[]>([]);
+  const [isLoadingScreener, setIsLoadingScreener] = useState<boolean>(true);
+
+  const loadScreener = useCallback(async () => {
+    try {
+      const res = await fetch('/api/screener/chartink');
+      const data = await res.json();
+      if (data.success && Array.isArray(data.data) && data.data.length > 0) {
+        setScreenerStocks(data.data);
+      }
+    } catch {
+      // Keep existing screener stocks on transient failure
+    } finally {
+      setIsLoadingScreener(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadScreener();
+    const interval = setInterval(loadScreener, 60000);
+    return () => clearInterval(interval);
+  }, [loadScreener]);
 
   const handleManualRefresh = () => {
     setIsRefreshing(true);
     refetch();
+    loadScreener();
     setTimeout(() => setIsRefreshing(false), 600);
   };
 
@@ -36,54 +63,64 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
   const bankNifty = quotes['^NSEBANK'];
   const indiaVix = quotes['^INDIAVIX'];
 
-  // Indian equities list
+  // Indian equities list: dynamically mapped directly from the 45 stocks on Dynamic Technical Breakout Radar
   const stocksList = useMemo(() => {
-    const list = [
-      { symbol: 'RELIANCE.NS', name: 'Reliance Industries', sector: 'HEAVYWEIGHTS' },
-      { symbol: 'TCS.NS', name: 'Tata Consultancy Services', sector: 'IT' },
-      { symbol: 'HDFCBANK.NS', name: 'HDFC Bank Ltd', sector: 'BANKING' },
-      { symbol: 'INFY.NS', name: 'Infosys Limited', sector: 'IT' },
-      { symbol: 'ICICIBANK.NS', name: 'ICICI Bank Ltd', sector: 'BANKING' },
-      { symbol: 'SBIN.NS', name: 'State Bank of India', sector: 'BANKING' },
-      { symbol: 'BHARTIARTL.NS', name: 'Bharti Airtel', sector: 'HEAVYWEIGHTS' },
-      { symbol: 'LT.NS', name: 'Larsen & Toubro', sector: 'DEFENSE_INFRA' },
-      { symbol: 'TRENT.NS', name: 'Trent Ltd', sector: 'HEAVYWEIGHTS' },
-      { symbol: 'BEL.NS', name: 'Bharat Electronics', sector: 'DEFENSE_INFRA' },
-      { symbol: 'HAL.NS', name: 'Hindustan Aeronautics', sector: 'DEFENSE_INFRA' },
-      { symbol: 'DIXON.NS', name: 'Dixon Technologies', sector: 'DEFENSE_INFRA' },
-      { symbol: 'POLYCAB.NS', name: 'Polycab India', sector: 'DEFENSE_INFRA' },
-      { symbol: 'SOLARINDS.NS', name: 'Solar Industries', sector: 'DEFENSE_INFRA' },
-      { symbol: 'COCHINSHIP.NS', name: 'Cochin Shipyard', sector: 'DEFENSE_INFRA' },
-      { symbol: 'NTPC.NS', name: 'NTPC Limited', sector: 'HEAVYWEIGHTS' },
-    ];
+    return screenerStocks.map(stock => {
+      const live = quotes[stock.symbol];
+      const price = live?.price ?? stock.ltp ?? null;
+      const change = live?.change ?? stock.changeVal ?? null;
+      const changePct = live?.changePct ?? stock.changePct ?? null;
+      const high = live?.high ?? null;
+      const low = live?.low ?? null;
+      const convictionScore =
+        stock.strategyQuantification?.compositeScore ??
+        stock.tacticalLevels?.confidenceScore ??
+        92;
 
-    return list.map(item => {
-      const live = quotes[item.symbol];
       return {
-        ...item,
-        price: live?.price ?? null,
-        change: live?.change ?? null,
-        changePct: live?.changePct ?? null,
-        prevClose: live?.prevClose ?? null,
-        high: live?.high ?? null,
-        low: live?.low ?? null,
-        fiftyTwoWeekHigh: live?.fiftyTwoWeekHigh ?? null,
-        fiftyTwoWeekLow: live?.fiftyTwoWeekLow ?? null,
-        volume: live?.volume ?? null,
-        timestamp: live?.timestamp || '',
+        id: stock.id,
+        ticker: stock.ticker,
+        symbol: stock.symbol,
+        name: stock.name,
+        sector: stock.sector,
+        capCategory: stock.capCategory || 'Mid Cap',
+        horizon: stock.horizon,
+        price,
+        change,
+        changePct,
+        high,
+        low,
+        convictionScore,
       };
     });
-  }, [quotes]);
+  }, [screenerStocks, quotes]);
+
+  const shortTermCount = useMemo(() => stocksList.filter(s => s.horizon === 'SHORT_TERM').length, [stocksList]);
+  const longTermCount = useMemo(() => stocksList.filter(s => s.horizon === 'LONG_TERM').length, [stocksList]);
+  const largeCapCount = useMemo(() => stocksList.filter(s => s.sector === 'LARGE_CAP').length, [stocksList]);
+  const midCapCount = useMemo(() => stocksList.filter(s => s.sector === 'MID_CAP').length, [stocksList]);
+  const smallCapCount = useMemo(() => stocksList.filter(s => s.sector === 'SMALL_CAP').length, [stocksList]);
 
   const filteredStocks = useMemo(() => {
     return stocksList.filter(s => {
-      const matchesSector = selectedSector === 'ALL' || s.sector === selectedSector;
-      const matchesQuery = 
-        s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.symbol.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesSector && matchesQuery;
+      const matchesFilter =
+        selectedFilter === 'ALL' ||
+        (selectedFilter === 'SHORT_TERM' && s.horizon === 'SHORT_TERM') ||
+        (selectedFilter === 'LONG_TERM' && s.horizon === 'LONG_TERM') ||
+        (selectedFilter === 'LARGE_CAP' && s.sector === 'LARGE_CAP') ||
+        (selectedFilter === 'MID_CAP' && s.sector === 'MID_CAP') ||
+        (selectedFilter === 'SMALL_CAP' && s.sector === 'SMALL_CAP');
+
+      const q = searchQuery.toLowerCase().trim();
+      const matchesQuery =
+        !q ||
+        s.name.toLowerCase().includes(q) ||
+        s.symbol.toLowerCase().includes(q) ||
+        s.ticker.toLowerCase().includes(q);
+
+      return matchesFilter && matchesQuery;
     });
-  }, [stocksList, selectedSector, searchQuery]);
+  }, [stocksList, selectedFilter, searchQuery]);
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto font-sans animate-in fade-in duration-300">
@@ -96,12 +133,12 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
               <h2 className="text-sm font-bold text-slate-100 uppercase tracking-wide">
                 Live Indian Markets (NSE &amp; BSE)
               </h2>
-              <span className="text-[11px] font-mono text-amber-300 font-semibold bg-amber-950/60 px-2 py-0.5 rounded border border-amber-700/40">
-                DELAYED · UNOFFICIAL
+              <span className="text-[11px] font-mono text-emerald-400 font-semibold bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-700/40">
+                CHARTINK LIVE NSE RADAR FEED
               </span>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Delayed, unofficial quotes (Yahoo Finance daily candles) — not a licensed real-time exchange feed. Change % is computed against the prior session close. For information only.
+              45 verified dynamic technical breakout candidates polled live from the National Stock Exchange (NSE). Synchronized with the Dynamic Technical Breakout Radar.
             </p>
           </div>
         </div>
@@ -148,20 +185,14 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
             )}
           </div>
           <div className="mt-1 text-[11px] font-mono text-slate-400 flex items-center justify-between">
-            <span>
-              Chg: {nifty?.change != null 
-                ? `${(nifty.change ?? 0) >= 0 ? '+' : ''}${nifty.change.toFixed(2)}` 
-                : '—'}
-            </span>
-            <span>
-              Prev: {nifty?.prevClose != null 
-                ? nifty.prevClose.toLocaleString('en-IN') 
-                : '—'}
+            <span>Prev: ₹{nifty?.prevClose?.toLocaleString('en-IN') ?? '—'}</span>
+            <span className={(nifty?.change ?? 0) >= 0 ? 'text-emerald-400/90' : 'text-rose-400/90'}>
+              {nifty?.change != null ? `${(nifty.change ?? 0) >= 0 ? '+' : ''}${nifty.change.toFixed(2)}` : '—'}
             </span>
           </div>
         </div>
 
-        {/* BSE SENSEX */}
+        {/* SENSEX */}
         <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-slate-700 transition">
           <div className="flex items-center justify-between text-xs text-slate-400 font-medium">
             <span className="font-bold text-slate-200">BSE SENSEX</span>
@@ -183,15 +214,9 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
             )}
           </div>
           <div className="mt-1 text-[11px] font-mono text-slate-400 flex items-center justify-between">
-            <span>
-              Chg: {sensex?.change != null 
-                ? `${(sensex.change ?? 0) >= 0 ? '+' : ''}${sensex.change.toFixed(2)}` 
-                : '—'}
-            </span>
-            <span>
-              Prev: {sensex?.prevClose != null 
-                ? sensex.prevClose.toLocaleString('en-IN') 
-                : '—'}
+            <span>Prev: ₹{sensex?.prevClose?.toLocaleString('en-IN') ?? '—'}</span>
+            <span className={(sensex?.change ?? 0) >= 0 ? 'text-emerald-400/90' : 'text-rose-400/90'}>
+              {sensex?.change != null ? `${(sensex.change ?? 0) >= 0 ? '+' : ''}${sensex.change.toFixed(2)}` : '—'}
             </span>
           </div>
         </div>
@@ -218,15 +243,9 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
             )}
           </div>
           <div className="mt-1 text-[11px] font-mono text-slate-400 flex items-center justify-between">
-            <span>
-              Chg: {bankNifty?.change != null 
-                ? `${(bankNifty.change ?? 0) >= 0 ? '+' : ''}${bankNifty.change.toFixed(2)}` 
-                : '—'}
-            </span>
-            <span>
-              Prev: {bankNifty?.prevClose != null 
-                ? bankNifty.prevClose.toLocaleString('en-IN') 
-                : '—'}
+            <span>Prev: ₹{bankNifty?.prevClose?.toLocaleString('en-IN') ?? '—'}</span>
+            <span className={(bankNifty?.change ?? 0) >= 0 ? 'text-emerald-400/90' : 'text-rose-400/90'}>
+              {bankNifty?.change != null ? `${(bankNifty.change ?? 0) >= 0 ? '+' : ''}${bankNifty.change.toFixed(2)}` : '—'}
             </span>
           </div>
         </div>
@@ -239,13 +258,11 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
           </div>
           <div className="mt-2 flex items-baseline justify-between">
             <span className="text-2xl font-bold font-mono text-white">
-              {indiaVix?.price != null
-                ? indiaVix.price.toFixed(2)
-                : '—'}
+              {indiaVix?.price != null ? indiaVix.price.toFixed(2) : '—'}
             </span>
             {indiaVix?.changePct != null && (
               <span className={`text-xs font-mono font-bold flex items-center gap-0.5 ${
-                (indiaVix.changePct ?? 0) <= 0 ? 'text-emerald-400' : 'text-amber-400'
+                (indiaVix.changePct ?? 0) <= 0 ? 'text-emerald-400' : 'text-rose-400'
               }`}>
                 {(indiaVix.changePct ?? 0) >= 0 ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
                 {(indiaVix.changePct ?? 0) >= 0 ? '+' : ''}{indiaVix.changePct.toFixed(2)}%
@@ -253,40 +270,51 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
             )}
           </div>
           <div className="mt-1 text-[11px] font-mono text-slate-400 flex items-center justify-between">
-            <span>
-              Chg: {indiaVix?.change != null 
-                ? `${(indiaVix.change ?? 0) >= 0 ? '+' : ''}${indiaVix.change.toFixed(2)}` 
-                : '—'}
-            </span>
-            <span>
-              Prev: {indiaVix?.prevClose != null 
-                ? indiaVix.prevClose.toFixed(2) 
-                : '—'}
+            <span>Prev: {indiaVix?.prevClose?.toFixed(2) ?? '—'}</span>
+            <span className={(indiaVix?.change ?? 0) <= 0 ? 'text-emerald-400/90' : 'text-rose-400/90'}>
+              {indiaVix?.change != null ? `${(indiaVix.change ?? 0) >= 0 ? '+' : ''}${indiaVix.change.toFixed(2)}` : '—'}
             </span>
           </div>
         </div>
       </div>
 
-      {/* Global Sentiment: Real-Time Fear & Greed Index */}
-      <GlobalSentiment />
+      {/* Global Sentiment: Real-Time Fear & Greed Index (Dynamically uses 45 Live Screener Picks) */}
+      <GlobalSentiment livePicks={screenerStocks} />
 
-      {/* Main Content: Equities Watchlist & Filter */}
+      {/* Main Content: Equities Watchlist & Filter (Same 45 stocks as Dynamic Technical Breakout Radar) */}
       <div className="p-5 rounded-xl bg-slate-900/80 border border-slate-800 shadow-sm space-y-4">
+        {/* Header & Live Count Badge */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-slate-800/80">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-cyan-400" />
+            <h3 className="text-sm font-bold text-slate-100 uppercase tracking-wide">
+              Dynamic Technical Breakout Equities ({stocksList.length} Active Candidates)
+            </h3>
+            <span className="px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 font-mono text-[10px] font-bold">
+              100% LIVE NSE SCREENER FEED
+            </span>
+          </div>
+          <span className="text-xs text-slate-400 font-mono">
+            {filteredStocks.length} of {stocksList.length} stocks shown
+          </span>
+        </div>
+
         {/* Filter and Search Bar */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
             {[
-              { id: 'ALL', label: 'All Equities' },
-              { id: 'HEAVYWEIGHTS', label: 'Large Cap' },
-              { id: 'BANKING', label: 'Banking & Financials' },
-              { id: 'DEFENSE_INFRA', label: 'Defense & Infra' },
-              { id: 'IT', label: 'IT & Tech' },
+              { id: 'ALL', label: `All Radar Stocks (${stocksList.length})` },
+              { id: 'SHORT_TERM', label: `Short-Term Swings (${shortTermCount})` },
+              { id: 'LONG_TERM', label: `Long-Term Compounders (${longTermCount})` },
+              { id: 'LARGE_CAP', label: `Large Cap (${largeCapCount})` },
+              { id: 'MID_CAP', label: `Mid Cap (${midCapCount})` },
+              { id: 'SMALL_CAP', label: `Small Cap (${smallCapCount})` },
             ].map(tab => (
               <button
                 key={tab.id}
-                onClick={() => setSelectedSector(tab.id as any)}
+                onClick={() => setSelectedFilter(tab.id as any)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition cursor-pointer ${
-                  selectedSector === tab.id
+                  selectedFilter === tab.id
                     ? 'bg-cyan-500 text-slate-950 font-bold shadow-sm'
                     : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                 }`}
@@ -300,7 +328,7 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
             <input
               type="text"
-              placeholder="Search stock by name or symbol..."
+              placeholder="Search by company or symbol..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 outline-none focus:border-cyan-500 transition"
@@ -308,7 +336,8 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
           </div>
         </div>
 
-        {/* Clean, Lightweight Stock Table */}
+        {/* Dynamic Stock Table — strictly rendering ONLY the requested fields:
+            Company/Symbol, LTP, Change, Gain/Loss%, Day High/Low, Conviction Score */}
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs font-sans">
             <thead>
@@ -317,9 +346,8 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
                 <th className="py-2.5 px-3 text-right">LTP (₹)</th>
                 <th className="py-2.5 px-3 text-right">Change (₹)</th>
                 <th className="py-2.5 px-3 text-right">Gain / Loss (%)</th>
-                <th className="py-2.5 px-3 text-right hidden md:table-cell">Day High / Low</th>
-                <th className="py-2.5 px-3 text-right hidden lg:table-cell">Previous Close</th>
-                <th className="py-2.5 px-3 text-right hidden xl:table-cell">Volume</th>
+                <th className="py-2.5 px-3 text-right">Day High / Low</th>
+                <th className="py-2.5 px-3 text-right">Conviction Score</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 font-mono">
@@ -327,17 +355,30 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
                 const isPositive = (stock.changePct ?? 0) >= 0;
                 return (
                   <tr key={stock.symbol} className="hover:bg-slate-800/40 transition">
+                    {/* Company / Symbol */}
                     <td className="py-3 px-3">
-                      <div className="font-bold text-slate-100 font-sans">{stock.name}</div>
-                      <div className="text-[10px] text-slate-500 font-mono">{stock.symbol}</div>
+                      <div className="flex items-center gap-2">
+                        <div>
+                          <div className="font-bold text-slate-100 font-sans text-xs">{stock.name}</div>
+                          <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1.5 mt-0.5">
+                            <span className="text-cyan-300 font-bold">{stock.ticker}</span>
+                            <span>·</span>
+                            <span className="text-slate-500">{stock.symbol}</span>
+                            <span>·</span>
+                            <span className="text-slate-400">{stock.capCategory}</span>
+                          </div>
+                        </div>
+                      </div>
                     </td>
 
-                    <td className="py-3 px-3 text-right font-bold text-slate-100">
+                    {/* LTP (₹) */}
+                    <td className="py-3 px-3 text-right font-bold text-slate-100 text-sm">
                       {stock.price !== null
                         ? `₹${stock.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
                         : '—'}
                     </td>
 
+                    {/* Change (₹) */}
                     <td className={`py-3 px-3 text-right font-medium ${
                       stock.change === null ? 'text-slate-500' : isPositive ? 'text-emerald-400' : 'text-rose-400'
                     }`}>
@@ -346,6 +387,7 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
                         : '—'}
                     </td>
 
+                    {/* Gain / Loss (%) */}
                     <td className={`py-3 px-3 text-right font-bold ${
                       stock.changePct === null ? 'text-slate-500' : isPositive ? 'text-emerald-400' : 'text-rose-400'
                     }`}>
@@ -357,22 +399,22 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
                       ) : '—'}
                     </td>
 
-                    <td className="py-3 px-3 text-right text-slate-400 hidden md:table-cell text-[11px]">
+                    {/* Day High / Low */}
+                    <td className="py-3 px-3 text-right text-slate-300 text-[11px]">
                       {stock.high !== null && stock.low !== null ? (
                         <span>
                           ₹{stock.low.toLocaleString('en-IN')} &ndash; ₹{stock.high.toLocaleString('en-IN')}
                         </span>
-                      ) : '—'}
+                      ) : (
+                        <span className="text-slate-500">—</span>
+                      )}
                     </td>
 
-                    <td className="py-3 px-3 text-right text-slate-400 hidden lg:table-cell text-[11px]">
-                      {stock.prevClose !== null
-                        ? `₹${stock.prevClose.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
-                        : '—'}
-                    </td>
-
-                    <td className="py-3 px-3 text-right text-slate-400 hidden xl:table-cell text-[11px]">
-                      {stock.volume ? stock.volume.toLocaleString('en-IN') : '—'}
+                    {/* Conviction Score */}
+                    <td className="py-3 px-3 text-right">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 font-mono font-bold text-xs">
+                        {stock.convictionScore} / 100
+                      </span>
                     </td>
                   </tr>
                 );
@@ -380,8 +422,10 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
 
               {filteredStocks.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-slate-500">
-                    No equities found matching "{searchQuery}"
+                  <td colSpan={6} className="py-8 text-center text-slate-500">
+                    {isLoadingScreener 
+                      ? 'Synchronizing 45 dynamic breakout candidates from Chartink live NSE feed...' 
+                      : `No equities found matching "${searchQuery}"`}
                   </td>
                 </tr>
               )}

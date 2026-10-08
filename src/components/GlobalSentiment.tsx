@@ -684,7 +684,7 @@ export const GlobalSentiment: React.FC<GlobalSentimentProps> = ({ livePicks }) =
       )}
 
       {/* ========================================================================= */}
-      {/* AUDIT MODAL 2: 16 CORE BENCHMARK BREADTH (12 ADV / 3 DEC / 1 FLAT)       */}
+      {/* AUDIT MODAL 2: BENCHMARK / RADAR BREADTH AUDIT                            */}
       {/* ========================================================================= */}
       {activeAuditModal === 'BREADTH' && (
         <div
@@ -700,7 +700,9 @@ export const GlobalSentiment: React.FC<GlobalSentimentProps> = ({ livePicks }) =
                 <div className="flex items-center gap-2">
                   <Layers className="w-5 h-5 text-cyan-400" />
                   <h4 className="text-sm font-bold text-slate-100 uppercase tracking-wide">
-                    Benchmark Breadth Audit: 16 Core Heavyweights
+                    {sentimentData.isRadarUniverse
+                      ? `Dynamic Radar Breadth Audit: ${sentimentData.constituentList.length} Breakout Stocks`
+                      : 'Benchmark Breadth Audit: 16 Core Heavyweights'}
                   </h4>
                 </div>
                 <span className="text-xs text-slate-400 block mt-0.5">
@@ -715,9 +717,18 @@ export const GlobalSentiment: React.FC<GlobalSentimentProps> = ({ livePicks }) =
             {/* Scope Clarification Alert */}
             <div className="p-3 rounded-xl bg-slate-950 border border-amber-500/30 text-xs text-slate-300 leading-relaxed mb-4">
               <strong className="text-amber-300 font-mono">BREADTH SCOPE DEFINITION:</strong>{' '}
-              The Advance/Decline ratio displayed on this card is computed strictly across the <strong>16 high-liquidity benchmark equities</strong> below. 
-              It is not the total NSE exchange-wide breadth (which comprises ~2,200 listed companies). 
-              A 12:3 ratio signifies that 75% of India&apos;s most influential market heavyweights are trading positive.
+              {sentimentData.isRadarUniverse ? (
+                <>
+                  The Advance/Decline ratio displayed on this card is computed dynamically across the{' '}
+                  <strong>{sentimentData.constituentList.length} verified technical breakout candidates</strong> on the
+                  Dynamic Technical Breakout Radar (100% live from Chartink NSE Screener).
+                </>
+              ) : (
+                <>
+                  The Advance/Decline ratio displayed on this card is computed strictly across the{' '}
+                  <strong>16 high-liquidity benchmark equities</strong> below. It is not the total NSE exchange-wide breadth.
+                </>
+              )}
             </div>
 
             {/* Constituent Table */}
