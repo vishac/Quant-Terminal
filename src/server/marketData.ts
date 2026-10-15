@@ -146,6 +146,214 @@ async function getChartinkCSRF() {
   };
 }
 
+function computeDynamicStrategyQuantification(
+  ticker: string,
+  priceBase: number,
+  changePct: number,
+  vol: number,
+  cap: string,
+  isShortTerm: boolean
+) {
+  // 1. ORDER FLOW (Weight 20%) - Evaluates institutional volume footprint on NSE
+  let orderFlowScore = 70;
+  let orderFlowVerdict: 'EXEMPLARY' | 'STRONG' | 'OPTIMAL' | 'ACCEPTABLE' = 'ACCEPTABLE';
+  let orderFlowRationale = `Traded volume of ${(vol / 1000).toFixed(0)}K shares meets baseline 100K liquidity scan threshold.`;
+  if (vol >= 2000000) {
+    orderFlowScore = 95;
+    orderFlowVerdict = 'EXEMPLARY';
+    orderFlowRationale = `Massive institutional turnover of ${(vol / 1000000).toFixed(2)}M shares on NSE with heavy block absorption.`;
+  } else if (vol >= 1000000) {
+    orderFlowScore = 90;
+    orderFlowVerdict = 'STRONG';
+    orderFlowRationale = `Elevated volume turnover of ${(vol / 1000000).toFixed(2)}M shares indicating active institutional participation.`;
+  } else if (vol >= 500000) {
+    orderFlowScore = 84;
+    orderFlowVerdict = 'STRONG';
+    orderFlowRationale = `Solid volume expansion of ${(vol / 1000).toFixed(0)}K shares supporting the technical breakout.`;
+  } else if (vol >= 250000) {
+    orderFlowScore = 78;
+    orderFlowVerdict = 'OPTIMAL';
+    orderFlowRationale = `Healthy mid-tier session liquidity with ${(vol / 1000).toFixed(0)}K shares traded.`;
+  }
+
+  // 2. MOMENTUM & CANSLIM BREAKOUT (Weight 25%) - Evaluates session thrust velocity
+  let momentumScore = 72;
+  let momentumVerdict: 'EXEMPLARY' | 'STRONG' | 'OPTIMAL' | 'ACCEPTABLE' = 'OPTIMAL';
+  let momentumRationale = `Holding above the 200 SMA baseline with flat session drift (${changePct >= 0 ? '+' : ''}${changePct.toFixed(2)}%).`;
+  if (changePct >= 5.0) {
+    momentumScore = 96;
+    momentumVerdict = 'EXEMPLARY';
+    momentumRationale = `Explosive breakout thrust (+${changePct.toFixed(2)}%) clearing intermediate resistance bands.`;
+  } else if (changePct >= 2.5) {
+    momentumScore = 90;
+    momentumVerdict = 'STRONG';
+    momentumRationale = `Strong bullish velocity (+${changePct.toFixed(2)}%) validating the dynamic breakout zone.`;
+  } else if (changePct >= 0.5) {
+    momentumScore = 82;
+    momentumVerdict = 'OPTIMAL';
+    momentumRationale = `Constructive upward drift (+${changePct.toFixed(2)}%) in accumulation territory above 200 SMA.`;
+  } else if (changePct >= 0.0) {
+    momentumScore = 74;
+    momentumVerdict = 'ACCEPTABLE';
+    momentumRationale = `Mild positive consolidation (+${changePct.toFixed(2)}%) holding key baseline moving averages.`;
+  } else if (changePct >= -2.0) {
+    momentumScore = 65;
+    momentumVerdict = 'ACCEPTABLE';
+    momentumRationale = `Intraday mild pullback (${changePct.toFixed(2)}%) retesting breakout pivot support.`;
+  } else {
+    momentumScore = 56;
+    momentumVerdict = 'ACCEPTABLE';
+    momentumRationale = `Session pullback (${changePct.toFixed(2)}%) testing lower breakout band while maintaining long-term 200 SMA structure.`;
+  }
+
+  // 3. FUNDAMENTAL QUALITY / CAP RESILIENCE (Weight 25%)
+  let qarpScore = 76;
+  let qarpVerdict: 'EXEMPLARY' | 'STRONG' | 'OPTIMAL' | 'ACCEPTABLE' = 'ACCEPTABLE';
+  let qarpRationale = 'Small-cap dynamic candidate with higher price elasticity and growth beta.';
+  if (cap === 'Large Cap') {
+    qarpScore = 92;
+    qarpVerdict = 'STRONG';
+    qarpRationale = 'Tier-1 Large-Cap benchmark constituent with institutional depth and balance sheet resilience.';
+  } else if (cap === 'Mid Cap') {
+    qarpScore = 84;
+    qarpVerdict = 'OPTIMAL';
+    qarpRationale = 'Mid-cap sector performer offering balanced upside beta and institutional market capitalization.';
+  }
+
+  // 4. RISK-REWARD & EXECUTION GEOMETRY (Weight 15%)
+  const riskPct = cap === 'Large Cap' ? -4.50 : cap === 'Mid Cap' ? -6.00 : -7.50;
+  const target1Upside = isShortTerm ? 6.00 : 8.00;
+  const target2Upside = isShortTerm ? 12.00 : 16.00;
+  const target3Upside = isShortTerm ? 22.00 : 28.00;
+  const rr = Math.abs(target1Upside / riskPct);
+  const riskRewardRatio = `1:${rr.toFixed(1)}`;
+  
+  let riskRewardScore = rr >= 1.5 ? 90 : 82;
+  let riskRewardVerdict: 'EXEMPLARY' | 'STRONG' | 'OPTIMAL' | 'ACCEPTABLE' = rr >= 1.5 ? 'OPTIMAL' : 'ACCEPTABLE';
+  let riskRewardRationale = `Favorable ${riskRewardRatio} asymmetric payout structure to Target 1 (${target1Upside > 0 ? '+' : ''}${target1Upside}%) vs stop loss (${riskPct}%).`;
+
+  // 5. MACRO MOAT & REGIME ALIGNMENT (Weight 15%)
+  let macroScore = 74;
+  let macroVerdict: 'EXEMPLARY' | 'STRONG' | 'OPTIMAL' | 'ACCEPTABLE' = 'ACCEPTABLE';
+  let macroRationale = 'Sustaining position above 200-day moving average in dynamic regime.';
+  if (changePct > 0 && vol >= 500000) {
+    macroScore = 91;
+    macroVerdict = 'STRONG';
+    macroRationale = 'Strong regime synergy: positive intraday expansion reinforced by >500K institutional volume turnover.';
+  } else if (changePct >= 0) {
+    macroScore = 83;
+    macroVerdict = 'OPTIMAL';
+    macroRationale = 'Positive session price structure aligned with constructive sector regime.';
+  }
+
+  // Composite Weighted Calculation
+  const compositeScore = Math.round(
+    (orderFlowScore * 0.20) +
+    (momentumScore * 0.25) +
+    (qarpScore * 0.25) +
+    (riskRewardScore * 0.15) +
+    (macroScore * 0.15)
+  );
+
+  let convictionTier: 'VERY_HIGH_CONVICTION' | 'HIGH_CONVICTION' | 'MODERATE_CONVICTION' = 'MODERATE_CONVICTION';
+  let tierLabel = 'Tier 3 Emerging Breakout';
+  if (compositeScore >= 90) {
+    convictionTier = 'VERY_HIGH_CONVICTION';
+    tierLabel = 'Tier 1 Prime Momentum Breakout';
+  } else if (compositeScore >= 80) {
+    convictionTier = 'HIGH_CONVICTION';
+    tierLabel = 'Tier 2 Strong Technical Breakout';
+  }
+
+  const stopLossPrice = Math.round(priceBase * (1 + riskPct / 100) * 100) / 100;
+  const target1Price = Math.round(priceBase * (1 + target1Upside / 100) * 100) / 100;
+  const target2Price = Math.round(priceBase * (1 + target2Upside / 100) * 100) / 100;
+  const target3Price = Math.round(priceBase * (1 + target3Upside / 100) * 100) / 100;
+
+  return {
+    tacticalLevels: {
+      entryMin: Math.round(priceBase * 0.99 * 100) / 100,
+      entryMax: Math.round(priceBase * 1.01 * 100) / 100,
+      stopLoss: stopLossPrice,
+      riskPct: riskPct,
+      support1: Math.round(priceBase * 0.96 * 100) / 100,
+      support2: Math.round(priceBase * 0.92 * 100) / 100,
+      resistance1: Math.round(priceBase * 1.05 * 100) / 100,
+      resistance2: Math.round(priceBase * 1.10 * 100) / 100,
+      target1: { price: target1Price, upsidePct: target1Upside, label: `Target 1 (+${target1Upside}%)` },
+      target2: { price: target2Price, upsidePct: target2Upside, label: `Target 2 (+${target2Upside}%)` },
+      target3: { price: target3Price, upsidePct: target3Upside, label: `Target 3 (+${target3Upside}%)` },
+      riskRewardRatio: riskRewardRatio,
+      confidenceScore: compositeScore,
+      institutionalRating: compositeScore >= 80 ? 'TECHNICAL_BREAKOUT_PASS' : 'THRESHOLD_MOMENTUM_WATCH'
+    },
+    strategyQuantification: {
+      compositeScore,
+      convictionTier,
+      tierLabel,
+      primaryDriver: isShortTerm ? 'Intraday Momentum Thrust' : 'Long-Term 200 SMA Accumulation',
+      coreRationale: `Dynamic score computed from verified NSE inputs: Traded Vol (${(vol/1000).toFixed(0)}K shares), Return (${changePct >= 0 ? '+' : ''}${changePct.toFixed(2)}%), and ${cap} structure.`,
+      factorBreakdown: [
+        {
+          id: 'ORDER_FLOW',
+          name: 'Order Flow & Institutional Footprint',
+          weight: 0.20,
+          weightLabel: '20%',
+          score: orderFlowScore,
+          metricLabel: `${(vol / 1000).toFixed(0)}K Traded Vol`,
+          verdict: orderFlowVerdict,
+          rationale: orderFlowRationale
+        },
+        {
+          id: 'MOMENTUM_CANSLIM',
+          name: 'Momentum & Trend Breakout',
+          weight: 0.25,
+          weightLabel: '25%',
+          score: momentumScore,
+          metricLabel: `${changePct >= 0 ? '+' : ''}${changePct.toFixed(2)}% Session Thrust`,
+          verdict: momentumVerdict,
+          rationale: momentumRationale
+        },
+        {
+          id: 'FUNDAMENTAL_QARP',
+          name: 'Fundamental Quality / Cap Resilience',
+          weight: 0.25,
+          weightLabel: '25%',
+          score: qarpScore,
+          metricLabel: `${cap} Resilience`,
+          verdict: qarpVerdict,
+          rationale: qarpRationale
+        },
+        {
+          id: 'RISK_REWARD',
+          name: 'Risk-Reward Asymmetry',
+          weight: 0.15,
+          weightLabel: '15%',
+          score: riskRewardScore,
+          metricLabel: `${riskRewardRatio} R:R Ratio`,
+          verdict: riskRewardVerdict,
+          rationale: riskRewardRationale
+        },
+        {
+          id: 'MACRO_MOAT',
+          name: 'Macro Moat & 200-SMA Regime',
+          weight: 0.15,
+          weightLabel: '15%',
+          score: macroScore,
+          metricLabel: '200 SMA Uptrend Alignment',
+          verdict: macroVerdict,
+          rationale: macroRationale
+        }
+      ],
+      qualificationChecklist: [
+        { rule: 'Price > 200 SMA', category: 'Trend', passed: true, actualMetric: 'Confirmed Bullish' },
+        { rule: 'Volume > 100,000 shares', category: 'Liquidity', passed: true, actualMetric: `${(vol/1000).toFixed(0)}K shares` },
+        { rule: 'Dynamic Zone Breakout', category: 'Momentum', passed: true, actualMetric: `${changePct >= 0 ? '+' : ''}${changePct.toFixed(2)}%` }
+      ]
+    }
+  };
+}
+
 let cachedScreenerList: any = null;
 let lastScreenerFetch = 0;
 const SCREENER_CACHE_TTL = 300000; // 5 minutes
@@ -222,6 +430,8 @@ export async function fetchDynamicZonesScreener() {
         source: 'CHARTINK_LIVE_NSE',
       };
 
+      const quant = computeDynamicStrategyQuantification(stock.nsecode, priceBase, changePct, vol, cap, isShortTerm);
+
       const p = {
         id: `dynamic-${stock.nsecode}`,
         ticker: stock.nsecode,
@@ -255,22 +465,7 @@ export async function fetchDynamicZonesScreener() {
           thesis: `LIVE MATCH: ${stock.nsecode} detected on NSE by live screener. Trading at ₹${priceBase.toLocaleString('en-IN')} (${changePct >= 0 ? '+' : ''}${changePct}%) with session volume of ${vol.toLocaleString('en-IN')} shares above 200 SMA.`,
           invalidationCondition: 'Price closes below the 200 SMA or session low.'
         },
-        tacticalLevels: {
-          entryMin: Math.round(priceBase * 0.99 * 100) / 100,
-          entryMax: Math.round(priceBase * 1.01 * 100) / 100,
-          stopLoss: Math.round(priceBase * 0.94 * 100) / 100,
-          riskPct: -6.00,
-          support1: Math.round(priceBase * 0.96 * 100) / 100,
-          support2: Math.round(priceBase * 0.92 * 100) / 100,
-          resistance1: Math.round(priceBase * 1.05 * 100) / 100,
-          resistance2: Math.round(priceBase * 1.10 * 100) / 100,
-          target1: { price: Math.round(priceBase * 1.06 * 100) / 100, upsidePct: 6.00, label: 'Target 1 (+6%)' },
-          target2: { price: Math.round(priceBase * 1.12 * 100) / 100, upsidePct: 12.00, label: 'Target 2 (+12%)' },
-          target3: { price: Math.round(priceBase * 1.25 * 100) / 100, upsidePct: 25.00, label: 'Target 3 (+25%)' },
-          riskRewardRatio: '1:2.4',
-          confidenceScore: 92,
-          institutionalRating: 'TECHNICAL_BREAKOUT_PASS'
-        },
+        tacticalLevels: quant.tacticalLevels,
         volumeAnalysis: {
           sessionVolume: vol,
           avgVolume20D: `${(vol / 1000).toFixed(1)}K (Session Vol)`,
@@ -285,70 +480,7 @@ export async function fetchDynamicZonesScreener() {
           operationalHighlight: 'Technical momentum play.'
         },
         valuation: { trailingPE: 0, median5YPE: 0, priceToBook: 0, evToEbitda: 0 },
-        strategyQuantification: {
-          compositeScore: 92,
-          convictionTier: 'VERY_HIGH_CONVICTION',
-          tierLabel: 'Tier 1 Prime Momentum Breakout',
-          primaryDriver: 'Momentum Breakout & Volume Surge',
-          coreRationale: `Real-time Chartink technical breakout matching dynamic zones scanner with heavy volume expansion.`,
-          factorBreakdown: [
-            {
-              id: 'ORDER_FLOW',
-              name: 'Order Flow & Institutional Footprint',
-              weight: 0.20,
-              weightLabel: '20%',
-              score: 93,
-              metricLabel: 'High Volume Expansion',
-              verdict: 'STRONG',
-              rationale: 'Volume surge > 100k shares on daily breakout.'
-            },
-            {
-              id: 'MOMENTUM_CANSLIM',
-              name: 'Momentum & Trend Breakout',
-              weight: 0.25,
-              weightLabel: '25%',
-              score: 95,
-              metricLabel: 'Price > 200 SMA Dynamic Zone',
-              verdict: 'EXEMPLARY',
-              rationale: 'Sustained price thrust clearing intermediate moving averages.'
-            },
-            {
-              id: 'FUNDAMENTAL_QARP',
-              name: 'Fundamental Quality at Reasonable Price',
-              weight: 0.25,
-              weightLabel: '25%',
-              score: 90,
-              metricLabel: 'Screener Technical Filter Passed',
-              verdict: 'STRONG',
-              rationale: 'Positive price action above long-term baseline.'
-            },
-            {
-              id: 'RISK_REWARD',
-              name: 'Risk-Reward Asymmetry',
-              weight: 0.15,
-              weightLabel: '15%',
-              score: 92,
-              metricLabel: '1:2.4 R:R Ratio',
-              verdict: 'OPTIMAL',
-              rationale: 'Defined stop loss at breakout base with multi-stage upside targets.'
-            },
-            {
-              id: 'MACRO_MOAT',
-              name: 'Sovereign Macro & Competitive Moat',
-              weight: 0.15,
-              weightLabel: '15%',
-              score: 90,
-              metricLabel: 'Liquid Momentum Leader',
-              verdict: 'STRONG',
-              rationale: 'High relative strength in current market regime.'
-            }
-          ],
-          qualificationChecklist: [
-            { rule: 'Price > 200 SMA', category: 'Trend', passed: true, actualMetric: 'Confirmed Bullish' },
-            { rule: 'Volume > 100,000 shares', category: 'Liquidity', passed: true, actualMetric: 'Liquid' },
-            { rule: 'Dynamic Zone Breakout', category: 'Momentum', passed: true, actualMetric: 'Triggered' }
-          ]
-        }
+        strategyQuantification: quant.strategyQuantification
       };
       allPicks.push(p);
     }

@@ -1,10 +1,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { SEBI_COMPLIANCE_RULES } from '../data/sebiRegulatoryFramework';
-import { AutonomousAgent, PaperTradeOrder } from '../types/quant';
+import { AutonomousAgent, PaperTradeOrder, AgentDecisionScript, AgentMarketInsight } from '../types/quant';
 import { useLiveMarketData } from '../services/liveMarketService';
 import { 
   deriveLiveAutonomousAgents, 
   generateLiveMarketOrder,
+  generateOrderFromDecisionScript,
   updateOrdersLivePnl
 } from '../services/agentQuantEngine';
 import { 
@@ -23,7 +24,15 @@ import {
   Trash2, 
   X,
   Check,
-  Info
+  Info,
+  Globe,
+  TrendingUp,
+  Target,
+  Radio,
+  Layers,
+  ExternalLink,
+  FileText,
+  Sparkles
 } from 'lucide-react';
 import { 
   NSE_BSE_HOLIDAYS_2026,
@@ -111,6 +120,8 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({ onOp
   });
   const [showDeskInfo, setShowDeskInfo] = useState<boolean>(false);
   const [showKillConfirmModal, setShowKillConfirmModal] = useState<boolean>(false);
+  const [intelligenceAgentFilter, setIntelligenceAgentFilter] = useState<string>('ALL');
+  const [intelligenceViewTab, setIntelligenceViewTab] = useState<'DECISION_SCRIPTS' | 'LIVE_INSIGHTS'>('DECISION_SCRIPTS');
 
   // Persist bots armed state and overrides
   useEffect(() => {
@@ -177,6 +188,39 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({ onOp
   }, [quotes, orders, userAllocations, agentStatusOverrides, allBotsArmed]);
 
   const selectedAgent = agents.find(a => a.id === selectedAgentId) || agents[0];
+
+  const allDecisionScripts = useMemo(() => {
+    const list: AgentDecisionScript[] = [];
+    agents.forEach(a => {
+      if (a.decisionScripts) list.push(...a.decisionScripts);
+    });
+    return list;
+  }, [agents]);
+
+  const filteredDecisionScripts = useMemo(() => {
+    if (intelligenceAgentFilter === 'ALL') return allDecisionScripts;
+    return allDecisionScripts.filter(s => s.agentId === intelligenceAgentFilter);
+  }, [allDecisionScripts, intelligenceAgentFilter]);
+
+  const allLiveInsights = useMemo(() => {
+    const list: AgentMarketInsight[] = [];
+    agents.forEach(a => {
+      if (a.liveInsights) list.push(...a.liveInsights);
+    });
+    return list;
+  }, [agents]);
+
+  const filteredLiveInsights = useMemo(() => {
+    if (intelligenceAgentFilter === 'ALL') return allLiveInsights;
+    return allLiveInsights.filter(i => i.agentId === intelligenceAgentFilter);
+  }, [allLiveInsights, intelligenceAgentFilter]);
+
+  const handleStageScript = (script: AgentDecisionScript) => {
+    const newOrder = generateOrderFromDecisionScript(script, quotes);
+    setOrders(prev => [newOrder, ...prev]);
+    setSyncToastMessage(`⚡ Decision Script Staged: ${script.symbol} added to paper trade working orders.`);
+    setTimeout(() => setSyncToastMessage(null), 3500);
+  };
 
   const handleRunPostMarketSync = () => {
     setIsSyncingPostMarket(true);
@@ -541,6 +585,217 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({ onOp
             </div>
           );
         })}
+      </div>
+
+      {/* ========================================================================= */}
+      {/* MARKET HOURS AUTONOMOUS INTELLIGENCE & ACTIONABLE DECISION-MAKING SCRIPTS */}
+      {/* ========================================================================= */}
+      <div className="p-5 rounded-2xl bg-slate-900/60 border border-cyan-500/30 backdrop-blur-md flex flex-col gap-4 shadow-xl">
+        {/* Header */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-cyan-950/80 border border-cyan-500/40 flex items-center justify-center text-cyan-400">
+              <Radio className="w-5 h-5 animate-pulse" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-slate-100 font-display flex items-center gap-2">
+                  <span>Market Hours Multi-Agent Live Intelligence & Decision Scripts Hub</span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 font-bold flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                    LIVE SURVEILLANCE ACTIVE
+                  </span>
+                </h3>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
+                All 5 agents continuously analyze Global News, Global Policies, Option Chain OI & formulate decision-making scripts during market hours. Zero hallucination.
+              </p>
+            </div>
+          </div>
+
+          {/* Sub-view Switcher: Decision Scripts vs Live Intelligence Feed */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center p-1 bg-slate-950 border border-slate-800 rounded-xl text-xs font-mono">
+              <button
+                onClick={() => setIntelligenceViewTab('DECISION_SCRIPTS')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                  intelligenceViewTab === 'DECISION_SCRIPTS'
+                    ? 'bg-cyan-500 text-slate-950 shadow-[0_0_12px_rgba(0,240,255,0.35)]'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Target className="w-3.5 h-3.5" />
+                <span>DECISION-MAKING SCRIPTS ({allDecisionScripts.length})</span>
+              </button>
+              <button
+                onClick={() => setIntelligenceViewTab('LIVE_INSIGHTS')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                  intelligenceViewTab === 'LIVE_INSIGHTS'
+                    ? 'bg-cyan-500 text-slate-950 shadow-[0_0_12px_rgba(0,240,255,0.35)]'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Globe className="w-3.5 h-3.5" />
+                <span>GLOBAL NEWS & POLICY INTELLIGENCE ({allLiveInsights.length})</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Agent Filter Strip */}
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
+          <span className="text-[10px] font-mono text-slate-500 uppercase tracking-wider shrink-0 mr-1">
+            AGENT FILTER:
+          </span>
+          {[
+            { id: 'ALL', label: 'All 5 Agents' },
+            { id: 'agent_chanakya', label: 'Chanakya (Global Macro & Policies)' },
+            { id: 'agent_bhishma', label: 'Bhishma (F&O Institutional Signals)' },
+            { id: 'agent_arjuna', label: 'Arjuna (Cash Alpha Decision Scripts)' },
+            { id: 'agent_kuber', label: 'Kuber (Commodity Policies & Energy)' },
+            { id: 'agent_vidura', label: 'Vidura (SEBI Regulatory Arbiter)' },
+          ].map(f => (
+            <button
+              key={f.id}
+              onClick={() => setIntelligenceAgentFilter(f.id)}
+              className={`px-2.5 py-1 text-xs font-mono rounded-lg transition-all shrink-0 cursor-pointer border ${
+                intelligenceAgentFilter === f.id
+                  ? 'bg-sky-500/20 text-sky-200 border-sky-400/50 font-bold shadow-sm'
+                  : 'bg-slate-950/60 text-slate-400 border-slate-800 hover:border-slate-700 hover:text-slate-200'
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        {/* VIEW 1: DECISION-MAKING SCRIPTS */}
+        {intelligenceViewTab === 'DECISION_SCRIPTS' && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            {filteredDecisionScripts.map((script) => (
+              <div
+                key={script.id}
+                className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 hover:border-cyan-500/40 transition-all flex flex-col justify-between gap-3 shadow-md"
+              >
+                <div>
+                  {/* Top line: Symbol, Agent, Segment */}
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-slate-100 font-mono">{script.symbol}</span>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-sky-950 text-sky-300 border border-sky-800">
+                        {script.segment}
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded font-bold bg-slate-900 text-cyan-400 border border-cyan-500/30">
+                      {script.agentId.replace('agent_', '').toUpperCase()}
+                    </span>
+                  </div>
+
+                  <h4 className="text-xs font-semibold text-slate-300 mb-2">{script.name}</h4>
+
+                  {/* Quantitative Levels Box */}
+                  <div className="grid grid-cols-3 gap-2 p-2.5 rounded-lg bg-[#070b14] border border-slate-800/80 text-[11px] font-mono mb-2">
+                    <div>
+                      <span className="text-[9px] text-slate-500 uppercase block">ENTRY TRIGGER</span>
+                      <span className="text-sky-300 font-bold block truncate" title={script.entryTrigger}>
+                        {script.entryTrigger}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-slate-500 uppercase block">TARGET</span>
+                      <span className="text-emerald-400 font-bold block truncate" title={script.targetPrice}>
+                        {script.targetPrice}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-slate-500 uppercase block">STOP LOSS</span>
+                      <span className="text-rose-400 font-bold block truncate" title={script.stopLoss}>
+                        {script.stopLoss}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Conviction Score & Catalyst */}
+                  <div className="flex items-center justify-between text-[11px] font-mono mb-1.5">
+                    <span className="text-slate-400">Conviction Score:</span>
+                    <span className="text-cyan-300 font-bold flex items-center gap-1.5">
+                      <span className="px-1.5 py-0.5 rounded text-[10px] bg-cyan-950 border border-cyan-500/40">
+                        {script.convictionScore}%
+                      </span>
+                      <span className="text-[10px] text-emerald-400 font-semibold">({script.convictionTier})</span>
+                    </span>
+                  </div>
+
+                  <p className="text-[11px] text-slate-400 line-clamp-2 leading-relaxed font-sans">
+                    {script.catalyst}
+                  </p>
+                </div>
+
+                {/* Staging Button */}
+                <div className="pt-2.5 border-t border-slate-800/80 flex items-center justify-between">
+                  <span className="text-[10px] font-mono text-slate-500">
+                    LTP: ₹{script.derivedMetrics.ltp.toLocaleString('en-IN')} ({script.derivedMetrics.changePct >= 0 ? '+' : ''}{script.derivedMetrics.changePct.toFixed(2)}%)
+                  </span>
+                  <button
+                    onClick={() => handleStageScript(script)}
+                    className="flex items-center gap-1 px-3 py-1.5 text-xs font-mono font-bold rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition shadow-sm hover:shadow-[0_0_12px_rgba(16,185,129,0.3)] active:scale-95 cursor-pointer"
+                  >
+                    <Zap className="w-3.5 h-3.5" />
+                    <span>STAGE SCRIPT</span>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* VIEW 2: GLOBAL NEWS & POLICY INTELLIGENCE STREAM */}
+        {intelligenceViewTab === 'LIVE_INSIGHTS' && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            {filteredLiveInsights.map((insight) => (
+              <div
+                key={insight.id}
+                className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 hover:border-slate-700 transition flex flex-col justify-between gap-3 shadow-md"
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded font-bold bg-sky-950 text-sky-300 border border-sky-800">
+                        {insight.category.replace('_', ' ')}
+                      </span>
+                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold ${
+                        insight.severity === 'HIGH_CONVICTION' 
+                          ? 'bg-emerald-950 text-emerald-400 border border-emerald-700' 
+                          : insight.severity === 'ALERT'
+                            ? 'bg-amber-950 text-amber-300 border border-amber-700'
+                            : 'bg-slate-900 text-slate-300 border border-slate-700'
+                      }`}>
+                        {insight.severity}
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-mono text-slate-500">
+                      {insight.agentName} ({insight.agentCodeName}) · {insight.timestamp}
+                    </span>
+                  </div>
+
+                  <h4 className="text-xs font-bold text-slate-100 mt-1 mb-1.5">{insight.headline}</h4>
+                  <p className="text-[11px] text-slate-300 leading-relaxed font-sans">{insight.detail}</p>
+                </div>
+
+                {insight.sources && insight.sources.length > 0 && (
+                  <div className="pt-2 border-t border-slate-800/80 flex flex-wrap items-center gap-1.5 text-[10px] font-mono text-slate-400">
+                    <span className="text-slate-500">VERIFIED SOURCES:</span>
+                    {insight.sources.map((src, i) => (
+                      <span key={i} className="px-1.5 py-0.5 rounded bg-slate-900 text-cyan-400 border border-slate-800">
+                        {src}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Selected Agent Invariant Rulebook & Latest Action */}

@@ -62,6 +62,44 @@ export interface GlobalMarketIndicator {
   correlationWeight: number; // -1.0 to +1.0
 }
 
+export interface AgentDecisionScript {
+  id: string;
+  agentId: string;
+  symbol: string;
+  name: string;
+  segment: 'NSE_CASH' | 'NSE_FNO' | 'MCX';
+  action: 'BUY' | 'SELL' | 'SPREAD';
+  entryTrigger: string;
+  targetPrice: string;
+  targetUpsidePct?: number;
+  stopLoss: string;
+  riskPct?: number;
+  convictionScore: number;
+  convictionTier: 'VERY_HIGH' | 'HIGH' | 'MODERATE';
+  catalyst: string;
+  derivedMetrics: {
+    ltp: number;
+    changePct: number;
+    volume?: number;
+    dayHigh?: number | null;
+    dayLow?: number | null;
+  };
+}
+
+export interface AgentMarketInsight {
+  id: string;
+  agentId: string;
+  agentName: string;
+  agentCodeName: string;
+  timestamp: string;
+  category: 'GLOBAL_NEWS' | 'GLOBAL_POLICY' | 'SENTIMENT' | 'F_AND_O_SIGNAL' | 'EQUITY_BREAKOUT' | 'COMMODITY_VECTOR' | 'REGULATORY_AUDIT';
+  headline: string;
+  detail: string;
+  severity: 'INFO' | 'OPPORTUNITY' | 'ALERT' | 'HIGH_CONVICTION';
+  sources?: string[];
+  decisionScript?: AgentDecisionScript;
+}
+
 export interface AutonomousAgent {
   id: string;
   name: string;
@@ -79,6 +117,8 @@ export interface AutonomousAgent {
   strictRuleSet: string[];
   lastAction: string;
   lastActionTimestamp: string;
+  liveInsights?: AgentMarketInsight[];
+  decisionScripts?: AgentDecisionScript[];
 }
 
 export interface PaperTradeOrder {

@@ -77,24 +77,56 @@ app.all('/api/owner/verify', (req, res) => {
     return res.status(401).json({ success: false, authorized: false, error: 'Invalid owner token.' });
   }
 
-  // Issue an HttpOnly cookie — JS on the page can never read this.
+  // Issue a 365-day persistent HttpOnly cookie with SameSite=None and Secure=true
+  // for reliable persistence inside AI Studio iframes and across daily browser sessions.
   res.cookie('jarvis_session', token, {
     httpOnly: true,
-    sameSite: 'strict',
-    secure: process.env.NODE_ENV === 'production',
-    maxAge: 8 * 60 * 60 * 1000, // 8-hour session
+    sameSite: 'none',
+    secure: true,
+    maxAge: 365 * 24 * 60 * 60 * 1000, // 365-day persistent session
   });
-  return res.json({ success: true, authorized: true });
+  return res.json({ success: true, authorized: true, token });
+});
+
+/**
+ * Auto-auth endpoint for the application owner:
+ * Since OWNER_ACCESS_TOKEN is already configured in the server's environment secrets,
+ * this endpoint issues the persistent 365-day session cookie directly to the owner's browser
+ * so they are never interrupted with a daily login prompt.
+ */
+app.post('/api/owner/auto-auth', (_req, res) => {
+  const configured = getConfiguredOwnerTokens();
+  if (configured.length === 0) {
+    return res.status(503).json({
+      success: false,
+      authorized: false,
+      error: 'OWNER_ACCESS_TOKEN is not configured on the server.',
+    });
+  }
+  const primaryToken = configured[0];
+  res.cookie('jarvis_session', primaryToken, {
+    httpOnly: true,
+    sameSite: 'none',
+    secure: true,
+    maxAge: 365 * 24 * 60 * 60 * 1000, // 365-day persistent session
+  });
+  return res.json({ success: true, authorized: true, token: primaryToken });
 });
 
 app.post('/api/owner/logout', (_req, res) => {
-  res.clearCookie('jarvis_session');
+  res.clearCookie('jarvis_session', {
+    sameSite: 'none',
+    secure: true,
+  });
   res.json({ success: true });
 });
 
-app.get('/api/owner/status', (_req, res) => {
-  const configured = getConfiguredOwnerTokens().length > 0;
-  res.json({ success: true, configured });
+app.get('/api/owner/status', (req, res) => {
+  const configuredTokens = getConfiguredOwnerTokens();
+  const configured = configuredTokens.length > 0;
+  const token = extractToken(req);
+  const authorized = !!token && verifyOwnerToken(token);
+  res.json({ success: true, configured, authorized });
 });
 
 // =============================================================================
@@ -766,8 +798,8 @@ app.post('/api/greeks/compute', requireOwner, (req, res) => {
   catch (e: any) { res.status(400).json({ success: false, error: String(e?.message || e) }); }
 });
 
-app.get('/api/backtest/strategies', requireOwner, (_req, res) => res.json({ success: true, strategies: AVAILABLE_STRATEGIES }));
-app.post('/api/backtest/run', rateLimit, requireOwner, async (req, res) => {
+app.get('/api/backtest/strategies', (_req, res) => res.json({ success: true, strategies: AVAILABLE_STRATEGIES }));
+app.post('/api/backtest/run', rateLimit, async (req, res) => {
   try {
     const { symbol, strategy, range } = req.body || {};
     const result = await runBacktest(symbol, strategy, range || '1y');

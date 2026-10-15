@@ -43,11 +43,11 @@ type ViewMode = 'TABLE_MATRIX' | 'SPLIT_DOSSIER';
 type SortField = 'CONVICTION' | 'LTP_HIGH' | 'LTP_LOW' | 'CHANGE_PCT' | 'VOLUME' | 'UPSIDE_T1';
 
 const DEFAULT_STRATEGY_QUANT: StrategyQuantification = {
-  compositeScore: 92,
-  convictionTier: 'VERY_HIGH_CONVICTION',
-  tierLabel: 'Tier 1 Prime Conviction',
-  primaryDriver: 'Momentum Breakout & Volume Surge',
-  coreRationale: 'Quantitative technical breakout criteria met with robust volume expansion on NSE.',
+  compositeScore: 75,
+  convictionTier: 'MODERATE_CONVICTION',
+  tierLabel: 'Tier 3 Baseline Breakout',
+  primaryDriver: 'Momentum Breakout & Volume Expansion',
+  coreRationale: 'Quantitative technical breakout criteria met with volume expansion on NSE.',
   factorBreakdown: [],
   qualificationChecklist: [],
 };

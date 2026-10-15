@@ -1394,9 +1394,20 @@ export const BrokerGatewayRouter: React.FC = () => {
 
                 {/* Feedback Alerts */}
                 {upstoxError && (
-                  <div className="p-3 rounded-xl bg-rose-950/50 border border-rose-500/40 text-rose-300 text-xs flex items-center gap-2.5 animate-in fade-in">
-                    <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
-                    <span>{upstoxError}</span>
+                  <div className="p-3.5 rounded-xl bg-rose-950/60 border border-rose-500/50 text-rose-200 text-xs flex flex-col gap-1.5 animate-in fade-in">
+                    <div className="flex items-center gap-2 font-bold text-rose-300">
+                      <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
+                      <span>{upstoxError.includes('static IP') ? 'Upstox Developer Account: Static IP Restriction' : 'Upstox Handshake Notice'}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-300 leading-relaxed font-sans">
+                      {upstoxError}
+                    </p>
+                    {upstoxError.includes('static IP') && (
+                      <div className="mt-1 p-2 rounded-lg bg-slate-900/90 border border-slate-800 text-[10px] text-slate-300 font-mono space-y-1">
+                        <div>💡 <span className="text-cyan-300 font-bold">Why this happens:</span> In your Upstox Developer Console (app settings), you have enabled &quot;Static IP Whitelisting&quot;.</div>
+                        <div>🔧 <span className="text-amber-300 font-bold">Resolution:</span> In your Upstox App configuration, either disable &quot;IP Whitelisting&quot; or add your cloud container IP (<code className="text-emerald-300 font-bold">34.34.254.191</code>).</div>
+                      </div>
+                    )}
                   </div>
                 )}
                 {upstoxSuccessMsg && (
