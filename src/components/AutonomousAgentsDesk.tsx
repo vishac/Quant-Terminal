@@ -8,6 +8,7 @@ import {
   generateOrderFromDecisionScript,
   updateOrdersLivePnl
 } from '../services/agentQuantEngine';
+import { FirstPrinciplesMarketEngine } from './FirstPrinciplesMarketEngine';
 import { 
   Bot, 
   ShieldCheck, 
@@ -51,34 +52,33 @@ interface AutonomousAgentsDeskProps {
 export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({ onOpenCircuitBreaker }) => {
   const { quotes, latencyMs } = useLiveMarketData(5000);
 
-  // User-configured capital allocation (strictly zero dummy/demo numbers)
+  // User-configured capital allocation (defaults to ₹5,00,000 working capital so 5 agents immediately size trades)
   const [totalCapital, setTotalCapital] = useState<number>(() => {
     try {
       const saved = localStorage.getItem('jarvis_agent_total_capital');
-      return saved ? Number(saved) : 0;
+      const parsed = saved ? Number(saved) : 0;
+      return parsed > 0 ? parsed : 500000;
     } catch {
-      return 0;
+      return 500000;
     }
   });
 
   const [userAllocations, setUserAllocations] = useState<Record<string, number>>(() => {
+    const defaultSplit = {
+      agent_chanakya: 100000,
+      agent_bhishma: 100000,
+      agent_arjuna: 100000,
+      agent_kuber: 100000,
+      agent_vidura: 100000,
+    };
     try {
       const saved = localStorage.getItem('jarvis_agent_allocations');
-      return saved ? JSON.parse(saved) : {
-        agent_chanakya: 0,
-        agent_bhishma: 0,
-        agent_arjuna: 0,
-        agent_kuber: 0,
-        agent_vidura: 0,
-      };
+      if (!saved) return defaultSplit;
+      const parsed = JSON.parse(saved);
+      const sum = Object.values(parsed).reduce((acc: number, v: any) => acc + (Number(v) || 0), 0);
+      return sum > 0 ? parsed : defaultSplit;
     } catch {
-      return {
-        agent_chanakya: 0,
-        agent_bhishma: 0,
-        agent_arjuna: 0,
-        agent_kuber: 0,
-        agent_vidura: 0,
-      };
+      return defaultSplit;
     }
   });
 
@@ -511,6 +511,9 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({ onOp
           </div>
         </div>
       </div>
+
+      {/* First-Principles Market Intelligence, Sector Gain/Loss Matrix & Self-Learning 5 Agents */}
+      <FirstPrinciplesMarketEngine quotes={quotes} />
 
       {/* 5-Agent Strategy Roster Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3.5">

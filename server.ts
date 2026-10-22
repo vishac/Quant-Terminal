@@ -22,6 +22,11 @@ import {
   checkIsMarketHours, DATA_SOURCE, DATA_DISCLAIMER, TRACKED_SYMBOLS,
   fetchDynamicZonesScreener,
 } from './src/server/marketData.ts';
+import { computeGlobalMarketImpact } from './src/server/globalMarketImpactEngine.ts';
+import {
+  computeFirstPrinciplesMarketIntelligence,
+  calibrateSelfLearningAgents,
+} from './src/server/firstPrinciplesEngine.ts';
 import type { MarketQuote } from './src/types/quant.ts';
 
 export type { MarketQuote };
@@ -33,7 +38,7 @@ dotenv.config({ path: path.resolve(__dirname, '.env.local') });
 dotenv.config({ path: path.resolve(__dirname, '.env') });
 
 // Gemini model name — single constant, easy to update when the API changes
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
 
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
@@ -687,7 +692,44 @@ function computeMarketDerivedMacro(reason?: string) {
   };
 }
 
-app.get('/api/macro/intelligence', rateLimit, requireOwner, async (req, res) => {
+app.get('/api/market/global-impact', rateLimit, async (_req, res) => {
+  try {
+    const data = await computeGlobalMarketImpact();
+    return res.json({ success: true, data });
+  } catch (err: any) {
+    return res.status(500).json({
+      success: false,
+      error: String(err?.message || 'Failed to compute global market impact.'),
+    });
+  }
+});
+
+app.get('/api/market/first-principles', rateLimit, async (req, res) => {
+  try {
+    const force = req.query.recalibrate === 'true';
+    const data = await computeFirstPrinciplesMarketIntelligence(force);
+    return res.json({ success: true, data });
+  } catch (err: any) {
+    return res.status(500).json({
+      success: false,
+      error: String(err?.message || 'Failed to compute first-principles market intelligence.'),
+    });
+  }
+});
+
+app.post('/api/market/self-learn/calibrate', rateLimit, async (_req, res) => {
+  try {
+    const selfLearning = await calibrateSelfLearningAgents(true);
+    return res.json({ success: true, selfLearning });
+  } catch (err: any) {
+    return res.status(500).json({
+      success: false,
+      error: String(err?.message || 'Failed to calibrate self-learning agents.'),
+    });
+  }
+});
+
+app.get('/api/macro/intelligence', rateLimit, async (req, res) => {
   const forceRefresh = req.query.refresh === 'true';
   const now = Date.now();
   const isCooldownActive = now < macroApiCooldownUntil;

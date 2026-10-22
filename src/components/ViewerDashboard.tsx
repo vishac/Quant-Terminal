@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useLiveMarketData } from '../services/liveMarketService';
 import { GlobalSentiment } from './GlobalSentiment';
 import { MarketImpactAnalysis } from './MarketImpactAnalysis';
+import { FirstPrinciplesMarketEngine } from './FirstPrinciplesMarketEngine';
 import type { InstitutionalStockPick } from '../data/institutionalEquityData';
 import { 
   TrendingUp, 
@@ -291,6 +292,9 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
           </div>
         </div>
       </div>
+
+      {/* First-Principles Market Intelligence, Sector Gain/Loss Matrix & Self-Learning 5 Agents */}
+      <FirstPrinciplesMarketEngine quotes={quotes} />
 
       {/* Real-Time Market Impact & Direction Drivers (Why the Market is Rising / Declining) */}
       <MarketImpactAnalysis
