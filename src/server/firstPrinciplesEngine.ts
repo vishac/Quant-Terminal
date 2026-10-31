@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { quotesCache } from './marketData.ts';
+import { quotesCache, NSE_EQUITY_QUANT_PROFILES } from './marketData.ts';
 import { computeGlobalMarketImpact, type GlobalMarketImpactResponse } from './globalMarketImpactEngine.ts';
 
 export interface FirstPrinciplePillar {
@@ -948,8 +948,14 @@ export async function computeFirstPrinciplesMarketIntelligence(forceRecalibrate 
   const buildStockPick = (sym: string, name: string, isBuy: boolean, reason: string) => {
     const q = getQuote(sym);
     const price = q.price || 1000;
-    const stopDist = price * 0.015;
-    const targetDist = price * 0.032;
+    const baseTicker = sym.replace('.NS', '');
+    const quantProfile = NSE_EQUITY_QUANT_PROFILES[baseTicker];
+    const atrPct = quantProfile?.atrPct ?? 1.85;
+    const stopDist = price * (Math.min(3.2, Math.max(1.1, atrPct * 0.9)) / 100);
+    const rsRank = quantProfile?.rsRank ?? 80;
+    const dynamicMultiplier = Math.max(1.65, Math.min(3.30, Number((1.85 + ((rsRank - 75) / 25) * 0.45).toFixed(2))));
+    const targetDist = stopDist * dynamicMultiplier;
+    const expectedRoiPct = Number(((targetDist / price) * 100).toFixed(2));
     return {
       symbol: sym,
       name,
@@ -958,7 +964,7 @@ export async function computeFirstPrinciplesMarketIntelligence(forceRecalibrate 
       entryPrice: Number(price.toFixed(2)),
       targetPrice: Number((isBuy ? price + targetDist : price - targetDist).toFixed(2)),
       stopLoss: Number((isBuy ? price - stopDist : price + stopDist).toFixed(2)),
-      expectedRoiPct: 3.2,
+      expectedRoiPct,
       reason,
     };
   };

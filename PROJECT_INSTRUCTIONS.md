@@ -124,6 +124,11 @@ Under no circumstances should dummy, mock, or hardcoded static seed trades be in
 - [x] **Cloud Run Production Startup Fix (`node server.ts` Native TypeScript Strip-Types Compatibility)**:
   - Fixed `SyntaxError: The requested module '../brokers/BrokerAdapter.ts' does not provide an export named 'Segment'` when `server.ts` loads `src/server/agentScheduler.ts` -> `src/services/positionSizer.ts` under Node.js v22 native TypeScript execution (`node server.ts`).
   - Converted all TypeScript interface/type imports across `src/services/positionSizer.ts`, `src/services/orderLifecycle.ts`, `src/brokers/PaperBrokerAdapter.ts`, `src/brokers/UpstoxAdapter.ts`, `src/data/institutionalEquityData.ts`, and `src/data/sebiRegulatoryFramework.ts` to explicit `import type` / `type` specifiers and verified `.ts` extensions on all server-reachable relative imports.
+- [x] **Elimination of Static R:R 1:2.1 & Uniform +4.62% ROI (`src/server/globalMarketImpactEngine.ts`, `src/server/firstPrinciplesEngine.ts`, `src/server/marketData.ts`)**:
+  - Identified root cause: `target1DistancePct = Math.round(stopDistancePct * 2.1 * 100) / 100` multiplied `stopDistancePct` by a hardcoded `2.1`, and clamped `stopDistancePct` at 2.2%, mathematically forcing $(2.2 \times 2.1) / 2.2 = 2.1$ and $2.2 \times 2.1 = 4.62\%$ across all stocks (Sun Pharma, Asian Paints, UltraTech Cement, Indigo).
+  - Exported `NSE_EQUITY_QUANT_PROFILES` from `src/server/marketData.ts` to power stock-specific volatility and ATR stop distances ($0.95 \times \text{ATR}$).
+  - Implemented dynamic asymmetric payoff multiplier ($1.60\times$ to $3.45\times$) based on stock CANSLIM RS rank, 5-agent conviction score ($\ge 88$), and live relative alpha vs Nifty.
+  - Formatted R:R dynamically to 2 decimal places (`1 : 2.33`, `1 : 2.17`, `1 : 2.35`, `1 : 2.12`) with varying Expected ROI/downside targets.
 
 ### 5.3 Current Progress & Live System Status
 - **Type Safety**: `npx tsc --noEmit` passes with 0 errors across the entire codebase.

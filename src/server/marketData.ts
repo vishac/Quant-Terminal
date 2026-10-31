@@ -378,7 +378,7 @@ async function getChartinkCSRF() {
   };
 }
 
-interface EquityQuantProfile {
+export interface EquityQuantProfile {
   capTier: 'LARGE_CAP' | 'MID_CAP' | 'SMALL_CAP';
   roce: number;
   roe: number;
@@ -393,7 +393,7 @@ interface EquityQuantProfile {
   primaryDriver: string;
 }
 
-const NSE_EQUITY_QUANT_PROFILES: Record<string, EquityQuantProfile> = {
+export const NSE_EQUITY_QUANT_PROFILES: Record<string, EquityQuantProfile> = {
   BEL:        { capTier: 'LARGE_CAP', roce: 34.8, roe: 27.4, patGrowthYoY: 26.4,  debtToEquity: 0.00, avgVol20D: 14500000, deliveryPct: 64.2, rsRank: 96, atrPct: 2.35, moatBaseScore: 98, moatLabel: 'Defense Electronics PIL-5 Monopoly (₹76,200 Cr Backlog)', primaryDriver: 'Monopolistic defense radar/EW indigenization & zero-debt cash surplus' },
   HAL:        { capTier: 'LARGE_CAP', roce: 36.1, roe: 29.4, patGrowthYoY: 31.2,  debtToEquity: 0.00, avgVol20D: 1850000,  deliveryPct: 61.8, rsRank: 95, atrPct: 2.45, moatBaseScore: 98, moatLabel: 'Sovereign Combat Aerospace Monopoly (₹94,000 Cr Backlog)', primaryDriver: 'Tejas Mk1A & Prachand combat helicopter sovereign backlog' },
   TRENT:      { capTier: 'LARGE_CAP', roce: 31.2, roe: 28.6, patGrowthYoY: 124.0, debtToEquity: 0.00, avgVol20D: 1250000,  deliveryPct: 58.4, rsRank: 96, atrPct: 2.25, moatBaseScore: 92, moatLabel: 'Organized Value Fashion Scale Moat (Zudio / Westside)', primaryDriver: 'Hyper-scaling Zudio unit economics & +124% YoY PAT compounding' },
