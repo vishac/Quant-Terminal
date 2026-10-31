@@ -1,15 +1,15 @@
 import React, { useState, useMemo } from 'react';
 import { useMarketWebSocket } from '../services/useMarketWebSocket';
-import { 
-  Gauge, 
-  Activity, 
-  TrendingUp, 
-  TrendingDown, 
-  ShieldCheck, 
-  ShieldAlert, 
-  Zap, 
-  ArrowUpRight, 
-  ArrowDownRight, 
+import {
+  Gauge,
+  Activity,
+  TrendingUp,
+  TrendingDown,
+  ShieldCheck,
+  ShieldAlert,
+  Zap,
+  ArrowUpRight,
+  ArrowDownRight,
   Compass,
   Info,
   X,
@@ -76,7 +76,7 @@ export const GlobalSentiment: React.FC<GlobalSentimentProps> = ({ livePicks }) =
     const vix = vixQuote?.price ?? 13.5;
     // VIX <= 11 is extreme greed (100), VIX >= 27 is extreme fear (0)
     const vixScore = Math.max(0, Math.min(100, Math.round((1 - (vix - 11) / 16) * 100)));
-    
+
     // 2. Index Momentum Factor (Nifty 50 & Bank Nifty drift) - Weight 25%
     const niftyPct = niftyQuote?.changePct ?? 0;
     const bankNiftyPct = bankNiftyQuote?.changePct ?? 0;
@@ -89,23 +89,23 @@ export const GlobalSentiment: React.FC<GlobalSentimentProps> = ({ livePicks }) =
     const equityDefinitions: { symbol: string; name: string }[] = isRadarUniverse && livePicks
       ? livePicks.map(p => ({ symbol: p.symbol, name: p.name }))
       : [
-          { symbol: 'RELIANCE.NS', name: 'Reliance Industries' },
-          { symbol: 'TCS.NS', name: 'Tata Consultancy Services' },
-          { symbol: 'HDFCBANK.NS', name: 'HDFC Bank Ltd' },
-          { symbol: 'INFY.NS', name: 'Infosys Limited' },
-          { symbol: 'ICICIBANK.NS', name: 'ICICI Bank Ltd' },
-          { symbol: 'SBIN.NS', name: 'State Bank of India' },
-          { symbol: 'BHARTIARTL.NS', name: 'Bharti Airtel' },
-          { symbol: 'LT.NS', name: 'Larsen & Toubro' },
-          { symbol: 'TRENT.NS', name: 'Trent Ltd' },
-          { symbol: 'BEL.NS', name: 'Bharat Electronics' },
-          { symbol: 'HAL.NS', name: 'Hindustan Aeronautics' },
-          { symbol: 'DIXON.NS', name: 'Dixon Technologies' },
-          { symbol: 'POLYCAB.NS', name: 'Polycab India' },
-          { symbol: 'SOLARINDS.NS', name: 'Solar Industries' },
-          { symbol: 'COCHINSHIP.NS', name: 'Cochin Shipyard' },
-          { symbol: 'NTPC.NS', name: 'NTPC Limited' },
-        ];
+        { symbol: 'RELIANCE.NS', name: 'Reliance Industries' },
+        { symbol: 'TCS.NS', name: 'Tata Consultancy Services' },
+        { symbol: 'HDFCBANK.NS', name: 'HDFC Bank Ltd' },
+        { symbol: 'INFY.NS', name: 'Infosys Limited' },
+        { symbol: 'ICICIBANK.NS', name: 'ICICI Bank Ltd' },
+        { symbol: 'SBIN.NS', name: 'State Bank of India' },
+        { symbol: 'BHARTIARTL.NS', name: 'Bharti Airtel' },
+        { symbol: 'LT.NS', name: 'Larsen & Toubro' },
+        { symbol: 'TRENT.NS', name: 'Trent Ltd' },
+        { symbol: 'BEL.NS', name: 'Bharat Electronics' },
+        { symbol: 'HAL.NS', name: 'Hindustan Aeronautics' },
+        { symbol: 'DIXON.NS', name: 'Dixon Technologies' },
+        { symbol: 'POLYCAB.NS', name: 'Polycab India' },
+        { symbol: 'SOLARINDS.NS', name: 'Solar Industries' },
+        { symbol: 'COCHINSHIP.NS', name: 'Cochin Shipyard' },
+        { symbol: 'NTPC.NS', name: 'NTPC Limited' },
+      ];
 
     let advancers = 0;
     let decliners = 0;
@@ -171,8 +171,8 @@ export const GlobalSentiment: React.FC<GlobalSentimentProps> = ({ livePicks }) =
     const breadthScore = Math.round(breadthRatio);
 
     // 4. 52-Week High/Low Proximity Factor - Weight 20%
-    const priceStrengthScore = highProximityCount > 0 
-      ? Math.round(highProximityTotal / highProximityCount) 
+    const priceStrengthScore = highProximityCount > 0
+      ? Math.round(highProximityTotal / highProximityCount)
       : 65;
 
     // Weighted composite score (0 - 100)
@@ -355,11 +355,11 @@ export const GlobalSentiment: React.FC<GlobalSentimentProps> = ({ livePicks }) =
         <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
         <div className="flex-1 text-[11px] text-slate-300 leading-relaxed">
           <strong className="text-amber-300 uppercase font-mono">Model Assumption &amp; Scope Disclosure:</strong>{' '}
-          All underlying input quotes (India VIX, NIFTY 50, Bank Nifty, and equities) are authentic exchange market numbers. 
-          However, the Fear &amp; Greed Index itself is a <strong>proprietary quantitative model (0–100)</strong>, not an official index published by the NSE. 
+          All underlying input quotes (India VIX, NIFTY 50, Bank Nifty, and equities) are authentic exchange market numbers.
+          However, the Fear &amp; Greed Index itself is a <strong>proprietary quantitative model (0–100)</strong>, not an official index published by the NSE.
           Advance/Decline breadth is measured across the terminal's <strong>16 core liquid benchmark equities</strong>, not the entire 2,200+ NSE exchange universe.{' '}
-          <button 
-            onClick={() => setActiveAuditModal('MASTER')} 
+          <button
+            onClick={() => setActiveAuditModal('MASTER')}
             className="text-cyan-400 underline font-semibold hover:text-cyan-300 cursor-pointer ml-1"
           >
             Review exact formulas &amp; source evidence &rarr;
@@ -370,7 +370,7 @@ export const GlobalSentiment: React.FC<GlobalSentimentProps> = ({ livePicks }) =
       {/* Main Grid: Gauge Meter (Left) + Factor Breakdown (Right) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-center">
         {/* Left: Interactive Circular Gauge Pod (5 cols) */}
-        <div 
+        <div
           onClick={() => setActiveAuditModal('MASTER')}
           className="lg:col-span-5 p-4 rounded-xl bg-slate-950/70 border border-slate-800 hover:border-cyan-500/40 transition-all cursor-pointer flex flex-col items-center justify-center text-center group relative"
           title="Click to view complete quantitative model calculation & constituent audit"
@@ -715,8 +715,8 @@ export const GlobalSentiment: React.FC<GlobalSentimentProps> = ({ livePicks }) =
             {/* Scope Clarification Alert */}
             <div className="p-3 rounded-xl bg-slate-950 border border-amber-500/30 text-xs text-slate-300 leading-relaxed mb-4">
               <strong className="text-amber-300 font-mono">BREADTH SCOPE DEFINITION:</strong>{' '}
-              The Advance/Decline ratio displayed on this card is computed strictly across the <strong>16 high-liquidity benchmark equities</strong> below. 
-              It is not the total NSE exchange-wide breadth (which comprises ~2,200 listed companies). 
+              The Advance/Decline ratio displayed on this card is computed strictly across the <strong>16 high-liquidity benchmark equities</strong> below.
+              It is not the total NSE exchange-wide breadth (which comprises ~2,200 listed companies).
               A 12:3 ratio signifies that 75% of India&apos;s most influential market heavyweights are trading positive.
             </div>
 
@@ -844,7 +844,7 @@ export const GlobalSentiment: React.FC<GlobalSentimentProps> = ({ livePicks }) =
               <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1 text-slate-300 font-sans">
                 <span className="text-[10px] text-slate-400 uppercase font-mono block">Mathematical Scaling Rule</span>
                 <p className="text-[11px] leading-relaxed">
-                  In options theory, higher implied volatility reflects fear and put protection hedging. 
+                  In options theory, higher implied volatility reflects fear and put protection hedging.
                   VIX &le; 11 pts maps to 100 (Extreme Greed / Complacency). VIX &ge; 27 pts maps to 0 (Extreme Fear).
                 </p>
                 <div className="bg-black/60 p-2 rounded border border-slate-800 font-mono text-[10px] text-amber-300 mt-1">
