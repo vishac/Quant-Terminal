@@ -1,4 +1,4 @@
-import dotenv from 'dotenv';
+﻿import dotenv from 'dotenv';
 import express from 'express';
 import { createServer as createHttpServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
@@ -25,6 +25,8 @@ import {
 } from './src/server/marketData.ts';
 import { computeGlobalMarketImpact } from './src/server/globalMarketImpactEngine.ts';
 import { getOptionChainData } from './src/server/optionChain.ts';
+import { agentScheduler } from './src/server/agentScheduler.ts';
+import { LedgerDatabase } from './src/server/ledgerDatabase.ts';
 import {
   computeFirstPrinciplesMarketIntelligence,
   calibrateSelfLearningAgents,
@@ -987,6 +989,56 @@ app.post('/api/backtest/run', rateLimit, async (req, res) => {
 // =============================================================================
 // MULTI-USER QUANT FLOOR ENDPOINTS (20 SEATS)
 // =============================================================================
+
+
+// =============================================================================
+// AUTONOMOUS AGENT SCHEDULER & PERSISTENT LEDGER DATABASE
+// =============================================================================
+
+agentScheduler.start();
+
+app.get('/api/scheduler/status', (_req, res) => {
+  res.json({
+    success: true,
+    status: agentScheduler.getStatus(),
+    stats: LedgerDatabase.getStatsSummary(),
+  });
+});
+
+app.get('/api/scheduler/logs', (_req, res) => {
+  res.json({ success: true, logs: LedgerDatabase.getSchedulerLogs(50) });
+});
+
+app.get('/api/scheduler/audits', (req, res) => {
+  const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : 100;
+  const symbol = req.query.symbol ? String(req.query.symbol) : undefined;
+  const outcome = req.query.outcome === 'VERIFIED_WIN' || req.query.outcome === 'VERIFIED_LOSS' ? req.query.outcome : undefined;
+  res.json({ success: true, audits: LedgerDatabase.getAudits(limit, symbol, outcome) });
+});
+
+app.get('/api/scheduler/trades', (req, res) => {
+  const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : 100;
+  const status = req.query.status ? String(req.query.status) : undefined;
+  res.json({ success: true, trades: LedgerDatabase.getPaperTrades(limit, status) });
+});
+
+app.post('/api/scheduler/trigger-cycle', rateLimit, requireOwner, async (req, res) => {
+  const { routine } = req.body || {};
+  try {
+    if (routine === 'PRE_MARKET') {
+      await agentScheduler.runCycle(true, false);
+      return res.json({ success: true, message: 'Pre-market routine executed successfully' });
+    } else if (routine === 'POST_MARKET') {
+      await agentScheduler.runCycle(false, true);
+      return res.json({ success: true, message: 'Post-market audit executed successfully' });
+    } else {
+      await agentScheduler.runCycle(true, true);
+      return res.json({ success: true, message: 'Full cycle executed successfully' });
+    }
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 app.get('/api/desk/summary', (_req, res) => {
   res.json({
