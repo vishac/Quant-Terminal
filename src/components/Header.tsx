@@ -63,9 +63,11 @@ export const Header: React.FC<HeaderProps> = ({
     marketSession, 
     isPacketSaverActive, 
     packetsSavedCount, 
-    toggleForceSyncOverride 
+    toggleForceSyncOverride,
+    provider
   } = useLiveMarketData(5000);
 
+  const isUpstoxLive = provider === 'UPSTOX_ANALYTICS_REALTIME';
   const [isInfoModalOpen, setIsInfoModalOpen] = useState<boolean>(false);
   const { currentSeat, setIsAuthModalOpen } = useDeskAuth();
 
@@ -117,11 +119,26 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           )}
 
-          {/* Live Feed Pill */}
-          <div className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1 bg-slate-900/80 border border-slate-800 rounded-lg text-xs">
+          {/* Live / Delayed Feed Pill with Info Icon */}
+          <div
+            onClick={() => setIsInfoModalOpen(true)}
+            title={
+              isUpstoxLive
+                ? 'Upstox Analytics API Connected: Streaming real-time NSE/BSE quotes & Option Chains (no static IP required). Paper-trading mode only.'
+                : 'Delayed Feed Notice: Quotes are currently sourced from Yahoo Finance (~15m delayed). Pair your Upstox Analytics Token in Sync Hub -> Broker Gateway for live real-time NSE/BSE ticks (no static IP required).'
+            }
+            className={`flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-lg text-xs cursor-pointer transition border ${
+              isUpstoxLive
+                ? 'bg-emerald-950/60 border-emerald-500/40 hover:border-emerald-400'
+                : 'bg-slate-900/80 border-amber-500/30 hover:border-amber-400'
+            }`}
+          >
             <span className="text-slate-400 text-[10px] hidden sm:inline">FEED:</span>
-            <span className="text-amber-300 font-bold text-[10px]">NSE/BSE · DELAYED</span>
-            <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+            <span className={`font-bold text-[10px] ${isUpstoxLive ? 'text-emerald-300' : 'text-amber-300'}`}>
+              {isUpstoxLive ? 'UPSTOX · LIVE' : 'NSE/BSE · DELAYED'}
+            </span>
+            <span className={`inline-block w-1.5 h-1.5 rounded-full ${isUpstoxLive ? 'bg-emerald-400 animate-ping' : 'bg-amber-400'}`}></span>
+            <Info className={`w-3 h-3 ${isUpstoxLive ? 'text-emerald-400' : 'text-amber-400'}`} />
           </div>
 
           {/* Latency Telemetry */}
@@ -262,11 +279,13 @@ export const Header: React.FC<HeaderProps> = ({
 
             <div className="space-y-3 text-slate-300 text-xs leading-relaxed max-h-[60vh] overflow-y-auto no-scrollbar pr-1">
               <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
-                <span className="text-[11px] font-bold text-amber-300 block uppercase">
-                  1. Market Data: Delayed &amp; Unofficial (Phase 1)
+                <span className={`text-[11px] font-bold block uppercase ${isUpstoxLive ? 'text-emerald-400' : 'text-amber-300'}`}>
+                  1. Market Data Feed ({isUpstoxLive ? 'Upstox Real-Time Analytics Connected' : 'Delayed Fallback Active'})
                 </span>
                 <p className="text-[11px] text-slate-400">
-                  Quotes come from an unofficial Yahoo Finance endpoint (daily candles) and are DELAYED, not a licensed real-time exchange feed. No option-chain or live greeks data is available yet. A licensed real-time feed is a Phase 2 item.
+                  {isUpstoxLive
+                    ? 'Connected to Upstox Analytics API (/market-quote/quotes & /option/chain — no static IP required). Streaming live NSE/BSE ticks and option chains for analytics & autonomous paper trading.'
+                    : 'Currently running on the Yahoo Finance fallback (~15m delayed). Pair your Upstox Analytics Token in Sync Hub -> Broker Gateway to upgrade to real-time NSE/BSE quotes and Option Chains without needing a static IP.'}
                 </p>
               </div>
 

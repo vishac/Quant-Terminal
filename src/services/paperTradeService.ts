@@ -1,6 +1,7 @@
 import { PaperTradeOrder } from '../types/quant';
 import { MarketQuote } from './liveMarketService';
 import { formatOrderDate, formatOrderTime } from '../utils/orderFormatters';
+import { generateLiveMarketOrder } from './agentQuantEngine';
 
 export interface ExecutedTradeRecord {
   id: string;
@@ -21,331 +22,34 @@ export interface ExecutedTradeRecord {
   strategyName: string;
 }
 
-/**
- * 11 Institutional Seed Paper Trades across NSE F&O, NSE Cash, BSE Cash, and MCX Commodity.
- * Strictly formatted with dd-mmm-yyyy and [hh]:mm:ss.
- */
-export const INITIAL_INSTITUTIONAL_PAPER_TRADES: PaperTradeOrder[] = [
-  // 1. NSE F&O: NIFTY Weekly Long Call
-  {
-    id: 'ORD-NSE-FNO-101',
-    agentId: 'agent_bhishma',
-    agentName: 'Bhishma (F&O Desk)',
-    symbol: 'NIFTY 24,500 CE (Weekly)',
-    segment: 'NSE_FNO',
-    strategyName: 'Gamma Momentum Long Strike Breakout',
-    entryPrice: 142.50,
-    exitPrice: 186.20,
-    side: 'BUY',
-    qty: 75,
-    legs: [
-      { instrument: 'NIFTY 24,500 CE', action: 'BUY', qty: 75, price: 142.50, exitPrice: 186.20 }
-    ],
-    totalInvestmentINR: 10688,
-    maxDefinedLossINR: 10688,
-    targetProfitINR: 3278,
-    riskRewardRatio: '1:2.35',
-    timestamp: '29-Oct-2026 [09]:32:15',
-    orderDate: '29-Oct-2026',
-    orderTime: '[09]:32:15',
-    status: 'SQUARED_OFF',
-    pnlINR: 3277.50,
-    sebiComplianceVerified: true,
-    isSimulation: false,
-  },
-  // 2. NSE F&O: BANK NIFTY Short Put (Option Credit)
-  {
-    id: 'ORD-NSE-FNO-102',
-    agentId: 'agent_bhishma',
-    agentName: 'Bhishma (F&O Desk)',
-    symbol: 'BANKNIFTY 52,000 PE (Weekly)',
-    segment: 'NSE_FNO',
-    strategyName: 'Volatility Skew Short Premium Decay',
-    entryPrice: 280.00,
-    exitPrice: 195.40,
-    side: 'SELL',
-    qty: 30,
-    legs: [
-      { instrument: 'BANKNIFTY 52,000 PE', action: 'SELL', qty: 30, price: 280.00, exitPrice: 195.40 }
-    ],
-    totalInvestmentINR: 42000,
-    maxDefinedLossINR: 5200,
-    targetProfitINR: 2538,
-    riskRewardRatio: '1:1.95',
-    timestamp: '29-Oct-2026 [10]:14:48',
-    orderDate: '29-Oct-2026',
-    orderTime: '[10]:14:48',
-    status: 'SQUARED_OFF',
-    pnlINR: 2538.00,
-    sebiComplianceVerified: true,
-    isSimulation: false,
-  },
-  // 3. NSE F&O: L&T Current Month Futures
-  {
-    id: 'ORD-NSE-FNO-103',
-    agentId: 'agent_bhishma',
-    agentName: 'Bhishma (F&O Desk)',
-    symbol: 'L&T 3,620 FUT (Current Month)',
-    segment: 'NSE_FNO',
-    strategyName: 'Capex Heavyweight Momentum Breakout',
-    entryPrice: 3620.00,
-    exitPrice: 3668.50,
-    side: 'BUY',
-    qty: 175,
-    legs: [
-      { instrument: 'L&T FUT (NSE)', action: 'BUY', qty: 175, price: 3620.00, exitPrice: 3668.50 }
-    ],
-    totalInvestmentINR: 95000,
-    maxDefinedLossINR: 7500,
-    targetProfitINR: 8488,
-    riskRewardRatio: '1:2.40',
-    timestamp: '29-Oct-2026 [11]:05:22',
-    orderDate: '29-Oct-2026',
-    orderTime: '[11]:05:22',
-    status: 'SQUARED_OFF',
-    pnlINR: 8487.50,
-    sebiComplianceVerified: true,
-    isSimulation: false,
-  },
-  // 4. NSE Cash: CIPLA Cash Equity MIS
-  {
-    id: 'ORD-NSE-CSH-201',
-    agentId: 'agent_arjuna',
-    agentName: 'Arjuna (Cash Alpha)',
-    symbol: 'CIPLA (NSE EQ)',
-    segment: 'NSE_CASH',
-    strategyName: 'Pharma Sector Relative Strength Breakout',
-    entryPrice: 1330.00,
-    exitPrice: 1364.50,
-    side: 'BUY',
-    qty: 25,
-    legs: [
-      { instrument: 'CIPLA (NSE EQ)', action: 'BUY', qty: 25, price: 1330.00, exitPrice: 1364.50 }
-    ],
-    totalInvestmentINR: 6650,
-    maxDefinedLossINR: 400,
-    targetProfitINR: 863,
-    riskRewardRatio: '1:2.16',
-    timestamp: '29-Oct-2026 [11]:45:10',
-    orderDate: '29-Oct-2026',
-    orderTime: '[11]:45:10',
-    status: 'SQUARED_OFF',
-    pnlINR: 862.50,
-    sebiComplianceVerified: true,
-    isSimulation: false,
-  },
-  // 5. NSE Cash: RELIANCE Cash Equity
-  {
-    id: 'ORD-NSE-CSH-202',
-    agentId: 'agent_arjuna',
-    agentName: 'Arjuna (Cash Alpha)',
-    symbol: 'RELIANCE (NSE EQ)',
-    segment: 'NSE_CASH',
-    strategyName: 'Conglomerate VWAP Pullback Accumulation',
-    entryPrice: 2940.00,
-    exitPrice: 2978.00,
-    side: 'BUY',
-    qty: 15,
-    legs: [
-      { instrument: 'RELIANCE (NSE EQ)', action: 'BUY', qty: 15, price: 2940.00, exitPrice: 2978.00 }
-    ],
-    totalInvestmentINR: 8820,
-    maxDefinedLossINR: 350,
-    targetProfitINR: 570,
-    riskRewardRatio: '1:1.90',
-    timestamp: '29-Oct-2026 [12]:18:33',
-    orderDate: '29-Oct-2026',
-    orderTime: '[12]:18:33',
-    status: 'SQUARED_OFF',
-    pnlINR: 570.00,
-    sebiComplianceVerified: true,
-    isSimulation: false,
-  },
-  // 6. NSE Cash: ULTRACEMCO Cash Equity
-  {
-    id: 'ORD-NSE-CSH-203',
-    agentId: 'agent_vidura',
-    agentName: 'Vidura (Risk Arbiter)',
-    symbol: 'ULTRACEMCO (NSE EQ)',
-    segment: 'NSE_CASH',
-    strategyName: '1% Rupee Capital Protection Bracket',
-    entryPrice: 10958.00,
-    exitPrice: 10880.00,
-    side: 'BUY',
-    qty: 5,
-    legs: [
-      { instrument: 'ULTRACEMCO (NSE EQ)', action: 'BUY', qty: 5, price: 10958.00, exitPrice: 10880.00 }
-    ],
-    totalInvestmentINR: 10958,
-    maxDefinedLossINR: 420,
-    targetProfitINR: 950,
-    riskRewardRatio: '1:2.26',
-    timestamp: '29-Oct-2026 [13]:02:45',
-    orderDate: '29-Oct-2026',
-    orderTime: '[13]:02:45',
-    status: 'SQUARED_OFF',
-    pnlINR: -390.00,
-    sebiComplianceVerified: true,
-    isSimulation: false,
-  },
-  // 7. BSE Cash: TCS Cash Equity (BSE Delivery)
-  {
-    id: 'ORD-BSE-CSH-301',
-    agentId: 'agent_chanakya',
-    agentName: 'Chanakya (Macro Desk)',
-    symbol: 'TCS (BSE EQ)',
-    segment: 'BSE_CASH',
-    strategyName: 'Global NASDAQ Transmission Defensive Allocation',
-    entryPrice: 3850.00,
-    exitPrice: 3912.00,
-    side: 'BUY',
-    qty: 10,
-    legs: [
-      { instrument: 'TCS (BSE EQ)', action: 'BUY', qty: 10, price: 3850.00, exitPrice: 3912.00 }
-    ],
-    totalInvestmentINR: 38500,
-    maxDefinedLossINR: 400,
-    targetProfitINR: 620,
-    riskRewardRatio: '1:1.85',
-    timestamp: '29-Oct-2026 [13]:25:19',
-    orderDate: '29-Oct-2026',
-    orderTime: '[13]:25:19',
-    status: 'SQUARED_OFF',
-    pnlINR: 620.00,
-    sebiComplianceVerified: true,
-    isSimulation: false,
-  },
-  // 8. BSE Cash: INFY Cash Equity (BSE Delivery)
-  {
-    id: 'ORD-BSE-CSH-302',
-    agentId: 'agent_chanakya',
-    agentName: 'Chanakya (Macro Desk)',
-    symbol: 'INFY (BSE EQ)',
-    segment: 'BSE_CASH',
-    strategyName: 'IT Tier-1 Institutional Rebound Allocation',
-    entryPrice: 1820.00,
-    exitPrice: 1844.50,
-    side: 'BUY',
-    qty: 20,
-    legs: [
-      { instrument: 'INFY (BSE EQ)', action: 'BUY', qty: 20, price: 1820.00, exitPrice: 1844.50 }
-    ],
-    totalInvestmentINR: 36400,
-    maxDefinedLossINR: 300,
-    targetProfitINR: 490,
-    riskRewardRatio: '1:1.75',
-    timestamp: '29-Oct-2026 [13]:40:02',
-    orderDate: '29-Oct-2026',
-    orderTime: '[13]:40:02',
-    status: 'SQUARED_OFF',
-    pnlINR: 490.00,
-    sebiComplianceVerified: true,
-    isSimulation: false,
-  },
-  // 9. MCX Commodity: CRUDEOIL Futures
-  {
-    id: 'ORD-MCX-FUT-401',
-    agentId: 'agent_kuber',
-    agentName: 'Kuber (MCX Desk)',
-    symbol: 'MCX CRUDEOIL FUT',
-    segment: 'MCX_FUTURES',
-    strategyName: 'ICE Brent / MCX Parity Momentum Bracket',
-    entryPrice: 7650.00,
-    exitPrice: 7732.00,
-    side: 'BUY',
-    qty: 1, // 1 Lot = 100 bbl
-    legs: [
-      { instrument: 'MCX CRUDEOIL FUT', action: 'BUY', qty: 1, price: 7650.00, exitPrice: 7732.00 }
-    ],
-    totalInvestmentINR: 24500,
-    maxDefinedLossINR: 760,
-    targetProfitINR: 8200,
-    riskRewardRatio: '1:2.60',
-    timestamp: '29-Oct-2026 [14]:10:30',
-    orderDate: '29-Oct-2026',
-    orderTime: '[14]:10:30',
-    status: 'SQUARED_OFF',
-    pnlINR: 8200.00,
-    sebiComplianceVerified: true,
-    isSimulation: false,
-  },
-  // 10. MCX Commodity: GOLD MINI Futures
-  {
-    id: 'ORD-MCX-FUT-402',
-    agentId: 'agent_kuber',
-    agentName: 'Kuber (MCX Desk)',
-    symbol: 'MCX GOLD MINI FUT',
-    segment: 'MCX_FUTURES',
-    strategyName: 'COMEX/MCX Gold Parity Safe Haven Hedge',
-    entryPrice: 78500.00,
-    exitPrice: 78820.00,
-    side: 'BUY',
-    qty: 1, // 1 Lot = 100 grams
-    legs: [
-      { instrument: 'MCX GOLDM FUT', action: 'BUY', qty: 1, price: 78500.00, exitPrice: 78820.00 }
-    ],
-    totalInvestmentINR: 28000,
-    maxDefinedLossINR: 740,
-    targetProfitINR: 3200,
-    riskRewardRatio: '1:2.45',
-    timestamp: '29-Oct-2026 [14]:35:12',
-    orderDate: '29-Oct-2026',
-    orderTime: '[14]:35:12',
-    status: 'SQUARED_OFF',
-    pnlINR: 3200.00,
-    sebiComplianceVerified: true,
-    isSimulation: false,
-  },
-  // 11. MCX Commodity: NATURALGAS Futures
-  {
-    id: 'ORD-MCX-FUT-403',
-    agentId: 'agent_kuber',
-    agentName: 'Kuber (MCX Desk)',
-    symbol: 'MCX NATURALGAS FUT',
-    segment: 'MCX_FUTURES',
-    strategyName: 'NYMEX Henry Hub Trend Continuation Breakdown',
-    entryPrice: 245.50,
-    exitPrice: 241.20,
-    side: 'SELL',
-    qty: 1, // 1 Lot = 1250 mmBtu
-    legs: [
-      { instrument: 'MCX NATURALGAS FUT', action: 'SELL', qty: 1, price: 245.50, exitPrice: 241.20 }
-    ],
-    totalInvestmentINR: 18500,
-    maxDefinedLossINR: 780,
-    targetProfitINR: 5375,
-    riskRewardRatio: '1:2.75',
-    timestamp: '29-Oct-2026 [15]:02:50',
-    orderDate: '29-Oct-2026',
-    orderTime: '[15]:02:50',
-    status: 'SQUARED_OFF',
-    pnlINR: 5375.00,
-    sebiComplianceVerified: true,
-    isSimulation: false,
-  }
-];
-
 const ORDERS_STORAGE_KEY = 'jarvis_session_orders';
+
+// Legacy static seed IDs to strip out if previously cached in localStorage
+const LEGACY_STATIC_IDS = new Set([
+  'ORD-NSE-FNO-101', 'ORD-NSE-FNO-102', 'ORD-NSE-FNO-103',
+  'ORD-NSE-CSH-201', 'ORD-NSE-CSH-202', 'ORD-NSE-CSH-203',
+  'ORD-BSE-CSH-301', 'ORD-BSE-CSH-302',
+  'ORD-MCX-FUT-401', 'ORD-MCX-FUT-402', 'ORD-MCX-FUT-403',
+]);
 
 /**
  * Retrieve paper trade orders from localStorage.
- * Automatically initializes with institutional default seed if empty.
+ * Starts clean with 0 static seed rows — only stores trades actually executed by the 5 agents.
  */
 export function getStoredPaperTrades(): PaperTradeOrder[] {
   try {
     const raw = localStorage.getItem(ORDERS_STORAGE_KEY);
-    if (!raw) {
-      localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(INITIAL_INSTITUTIONAL_PAPER_TRADES));
-      return INITIAL_INSTITUTIONAL_PAPER_TRADES;
-    }
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length === 0) {
-      localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(INITIAL_INSTITUTIONAL_PAPER_TRADES));
-      return INITIAL_INSTITUTIONAL_PAPER_TRADES;
+    if (!Array.isArray(parsed)) return [];
+    // Filter out any legacy static seed trades from previous versions
+    const cleaned = parsed.filter((o: PaperTradeOrder) => o && o.id && !LEGACY_STATIC_IDS.has(o.id));
+    if (cleaned.length !== parsed.length) {
+      localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(cleaned));
     }
-    return parsed;
+    return cleaned;
   } catch {
-    return INITIAL_INSTITUTIONAL_PAPER_TRADES;
+    return [];
   }
 }
 
@@ -359,6 +63,45 @@ export function persistPaperTrades(trades: PaperTradeOrder[]): void {
   } catch (err) {
     console.error('Failed to save paper trades:', err);
   }
+}
+
+/**
+ * Autonomous Multi-Agent Auto-Execution Engine:
+ * When the 5 agents are armed and real market quotes arrive, if no session orders
+ * have been executed yet, the agents automatically evaluate broader market regime
+ * and execute their initial defined-risk paper positions across NSE F&O, NSE Cash,
+ * BSE Cash, and MCX Commodity.
+ */
+let autoExecutionTriggeredThisSession = false;
+
+export function runAutonomousAgentCycleIfArmed(
+  quotes: Record<string, MarketQuote>,
+  allBotsArmed: boolean
+): PaperTradeOrder[] | null {
+  if (!allBotsArmed || autoExecutionTriggeredThisSession) return null;
+
+  // Ensure live/delayed quotes have loaded from the server before agents size trades
+  const niftyPrice = quotes['^NSEI']?.price;
+  if (!niftyPrice || niftyPrice <= 0) return null;
+
+  const existing = getStoredPaperTrades();
+  if (existing.length > 0) {
+    autoExecutionTriggeredThisSession = true;
+    return null;
+  }
+
+  autoExecutionTriggeredThisSession = true;
+
+  // All 5 agents evaluate current quotes and deploy defined-risk paper trades
+  const fnoOrder = generateLiveMarketOrder(quotes, 'agent_bhishma');     // NSE F&O
+  const nseCashOrder = generateLiveMarketOrder(quotes, 'agent_arjuna');  // NSE Cash
+  const bseCashOrder = generateLiveMarketOrder(quotes, 'agent_chanakya');// BSE Cash
+  const mcxOrder = generateLiveMarketOrder(quotes, 'agent_kuber');       // MCX Commodity
+  const defOrder = generateLiveMarketOrder(quotes, 'agent_vidura');      // Defensive Cash
+
+  const executedBatch = [fnoOrder, nseCashOrder, bseCashOrder, mcxOrder, defOrder];
+  persistPaperTrades(executedBatch);
+  return executedBatch;
 }
 
 /**
@@ -386,16 +129,22 @@ export function flattenOrdersToTrades(
         let legPnl = 0;
 
         if (isOpen) {
-          // For open trades, derive live exit price from quotes or simulated spread
-          const quoteKey = Object.keys(quotes).find(k => k.includes(order.symbol.split(' ')[0]));
+          // For open trades, derive live exit price from quotes or current order MTM
+          const firstToken = order.symbol.split(' ')[0];
+          const quoteKey = Object.keys(quotes).find(k => k.replace('.NS', '') === firstToken);
           const livePrice = quoteKey && quotes[quoteKey]?.price ? quotes[quoteKey].price! : entryPrice;
           exitPrice = livePrice;
-          legPnl = leg.action === 'BUY' 
-            ? (livePrice - entryPrice) * legQty 
-            : (entryPrice - livePrice) * legQty;
+          if (order.pnlINR !== 0 && order.legs.length === 1) {
+            legPnl = order.pnlINR;
+            const pnlPerUnit = legPnl / Math.max(1, legQty);
+            exitPrice = leg.action === 'BUY' ? entryPrice + pnlPerUnit : entryPrice - pnlPerUnit;
+          } else {
+            legPnl = leg.action === 'BUY' 
+              ? (livePrice - entryPrice) * legQty 
+              : (entryPrice - livePrice) * legQty;
+          }
         } else {
           if (exitPrice == null) {
-            // Compute exitPrice from order PnL
             const pnlPerUnit = order.pnlINR / Math.max(1, legQty);
             exitPrice = leg.action === 'BUY' ? entryPrice + pnlPerUnit : entryPrice - pnlPerUnit;
           }

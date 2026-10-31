@@ -8,9 +8,10 @@ import {
   getStoredPaperTrades, 
   persistPaperTrades, 
   flattenOrdersToTrades, 
-  exportTradesToCSV 
+  exportTradesToCSV,
+  runAutonomousAgentCycleIfArmed
 } from '../services/paperTradeService';
-import { generateLiveMarketOrder } from '../services/agentQuantEngine';
+import { generateLiveMarketOrder, updateOrdersLivePnl } from '../services/agentQuantEngine';
 import { formatOrderDate, formatOrderTime } from '../utils/orderFormatters';
 import { 
   History, 
@@ -31,7 +32,8 @@ import {
   Clock,
   Calendar,
   Layers,
-  ChevronRight
+  ChevronRight,
+  Info
 } from 'lucide-react';
 
 interface TradeHistoryProps {
@@ -39,7 +41,8 @@ interface TradeHistoryProps {
 }
 
 export const TradeHistory: React.FC<TradeHistoryProps> = ({ onNavigateToAgents }) => {
-  const { quotes, latencyMs } = useLiveMarketData(5000);
+  const { quotes, latencyMs, provider } = useLiveMarketData(5000);
+  const isUpstoxLive = provider === 'UPSTOX_ANALYTICS_REALTIME';
 
   // Load orders from shared localStorage and subscribe to updates
   const [orders, setOrders] = useState<PaperTradeOrder[]>(() => getStoredPaperTrades());
@@ -56,6 +59,25 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({ onNavigateToAgents }
       window.removeEventListener('storage', handleUpdate);
     };
   }, []);
+
+  // Autonomous Agent Auto-Execution when armed & live/delayed quotes arrive
+  useEffect(() => {
+    let botsArmed = true;
+    try {
+      const saved = localStorage.getItem('jarvis_bots_armed_state');
+      if (saved !== null) botsArmed = saved === 'true';
+    } catch {}
+
+    const autoOrders = runAutonomousAgentCycleIfArmed(quotes, botsArmed);
+    if (autoOrders && autoOrders.length > 0) {
+      setOrders(autoOrders);
+      setToastMessage(`🤖 5 Autonomous Agents analyzed broader market regime & auto-executed ${autoOrders.length} defined-risk paper positions across NSE, BSE & MCX.`);
+      setTimeout(() => setToastMessage(null), 5000);
+    } else if (orders.some(o => o.status === 'OPEN')) {
+      const updated = updateOrdersLivePnl(orders, quotes);
+      setOrders(updated);
+    }
+  }, [quotes]);
 
   // Filter state
   const [segmentFilter, setSegmentFilter] = useState<'ALL' | 'NSE_FNO' | 'NSE_CASH' | 'BSE_CASH' | 'MCX'>('ALL');
@@ -223,23 +245,11 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({ onNavigateToAgents }
     setTimeout(() => setToastMessage(null), 4000);
   };
 
-  // Clear all trades with restore option
+  // Clear all trades
   const handleClearHistory = () => {
-    if (window.confirm('Are you sure you want to clear your local paper trade history?')) {
-      setOrders([]);
-      persistPaperTrades([]);
-      setToastMessage('Trade history cleared.');
-      setTimeout(() => setToastMessage(null), 3000);
-    }
-  };
-
-  // Reset to default institutional seed trades
-  const handleRestoreDefaults = () => {
-    localStorage.removeItem('jarvis_session_orders');
-    const initial = getStoredPaperTrades();
-    setOrders(initial);
-    persistPaperTrades(initial);
-    setToastMessage('Institutional default trades restored across NSE F&O, NSE Cash, BSE Cash, and MCX.');
+    setOrders([]);
+    persistPaperTrades([]);
+    setToastMessage('Trade history cleared. Click "SCAN & DEPLOY (ALL DESKS)" for the 5 agents to re-evaluate the live market.');
     setTimeout(() => setToastMessage(null), 4000);
   };
 
@@ -264,15 +274,27 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({ onNavigateToAgents }
               <h1 className="text-xl font-bold tracking-wider text-slate-100 uppercase font-sans">
                 Trade History & Order Audit
               </h1>
-              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950/60 text-emerald-400 border border-emerald-500/40">
-                NSE / BSE / MCX LIVE
+              <span
+                className={`px-2 py-0.5 rounded text-[10px] font-bold inline-flex items-center gap-1 border ${
+                  isUpstoxLive
+                    ? 'bg-emerald-950/60 text-emerald-400 border-emerald-500/40'
+                    : 'bg-amber-950/60 text-amber-300 border-amber-500/40'
+                }`}
+                title={
+                  isUpstoxLive
+                    ? 'Upstox Analytics API Connected (No Static IP required): Real-time NSE/BSE quotes active. Paper trades only.'
+                    : 'Running on Delayed Unofficial Yahoo Finance Feed. Pair an Upstox Analytics Token in Sync Hub for live NSE/BSE quotes (no static IP required). Paper trades only.'
+                }
+              >
+                <span>{isUpstoxLive ? 'UPSTOX REALTIME FEED' : 'NSE/BSE · DELAYED FEED'}</span>
+                <Info className="w-3 h-3 opacity-80" />
               </span>
               <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-950/60 text-cyan-300 border border-cyan-500/30">
-                STT / CTT 2026 AUDIT COMPLIANT
+                5-AGENT AUTO PAPER EXECUTION
               </span>
             </div>
             <p className="text-xs text-slate-400 mt-1">
-              Deterministic audit ledger of all executed paper trades across NSE F&O, NSE/BSE Cash, and MCX Commodity desks.
+              Autonomous 5-Agent paper trades across NSE F&O, NSE/BSE Cash, and MCX Commodity desks (No live broker money orders placed).
             </p>
           </div>
         </div>
@@ -293,7 +315,7 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({ onNavigateToAgents }
             onClick={() => handleDeployOrder('ALL')}
             disabled={isScanning}
             className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 shadow-[0_0_15px_rgba(0,240,255,0.35)] transition cursor-pointer active:scale-95"
-            title="Deploy multi-desk paper trades across NSE F&O, NSE Cash, BSE Cash, and MCX"
+            title="Have the 5 agents evaluate broader market regime and auto-execute paper trades across NSE F&O, NSE Cash, BSE Cash, and MCX"
           >
             <RotateCw className={`w-3.5 h-3.5 ${isScanning ? 'animate-spin' : ''}`} />
             <span>SCAN & DEPLOY (ALL DESKS)</span>
@@ -453,14 +475,7 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({ onNavigateToAgents }
             </button>
           )}
 
-          {tradeRecords.length === 0 ? (
-            <button
-              onClick={handleRestoreDefaults}
-              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold transition cursor-pointer border border-slate-700"
-            >
-              Restore Seed Trades
-            </button>
-          ) : (
+          {tradeRecords.length > 0 && (
             <button
               onClick={handleClearHistory}
               className="p-1.5 rounded-xl bg-slate-950 hover:bg-rose-950/40 text-slate-400 hover:text-rose-400 border border-slate-800 hover:border-rose-800/40 transition cursor-pointer"
@@ -476,8 +491,8 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({ onNavigateToAgents }
       <div className="flex items-center justify-between p-3 rounded-xl bg-[#070b14] border border-slate-800/80 text-xs text-slate-400">
         <div className="flex items-center gap-2">
           <Zap className="w-3.5 h-3.5 text-amber-400" />
-          <span className="font-bold text-slate-300">Quick Desk Trade Triggers:</span>
-          <span className="text-[11px] hidden sm:inline">Execute authentic defined-risk paper trade with live quotes:</span>
+          <span className="font-bold text-slate-300">Autonomous Agent Desk Triggers:</span>
+          <span className="text-[11px] hidden sm:inline">Agents size & execute defined-risk paper trades from current market ticks:</span>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <button
@@ -516,23 +531,17 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({ onNavigateToAgents }
         <div className="p-12 rounded-2xl border border-slate-800 bg-[#070b14]/90 text-center flex flex-col items-center justify-center gap-3 font-mono">
           <Scale className="w-10 h-10 text-slate-600" />
           <div className="text-sm text-slate-300 font-bold uppercase tracking-wider">
-            No Executed Trades Found
+            No Executed Paper Trades Matching Filter
           </div>
           <p className="text-xs text-slate-500 max-w-md">
-            No paper trades match the current filters ({segmentFilter !== 'ALL' ? segmentFilter : 'All Segments'}, {sideFilter}, {statusFilter}).
+            All static seed rows have been removed. Only real paper trades evaluated and executed by the 5 autonomous agents are recorded here.
           </p>
           <div className="flex items-center gap-2 mt-2">
             <button
               onClick={() => handleDeployOrder('ALL')}
               className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-bold uppercase rounded-xl transition cursor-pointer shadow-[0_0_15px_rgba(0,240,255,0.3)]"
             >
-              Deploy Multi-Desk Trades Now
-            </button>
-            <button
-              onClick={handleRestoreDefaults}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl transition cursor-pointer border border-slate-700"
-            >
-              Restore Seed Audit Trades
+              Run 5-Agent Auto-Execution Across All Desks
             </button>
           </div>
         </div>

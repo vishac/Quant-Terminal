@@ -20,7 +20,7 @@ import {
 import {
   quotesCache, syncMarketQuotes, fetchDelayedYahooQuote,
   checkIsMarketHours, DATA_SOURCE, DATA_DISCLAIMER, TRACKED_SYMBOLS,
-  fetchDynamicZonesScreener,
+  fetchDynamicZonesScreener, setMarketDataUpstoxCredentials, getActiveDataProvider,
 } from './src/server/marketData.ts';
 import { computeGlobalMarketImpact } from './src/server/globalMarketImpactEngine.ts';
 import {
@@ -159,16 +159,18 @@ app.get('/api/market-data', async (req, res) => {
   try {
     const needsInitialWarmup = Object.values(quotesCache).some((q) => q.price === null);
     if (session.isOpen || force || needsInitialWarmup) {
-      await syncMarketQuotes();
+      await syncMarketQuotes(force);
     }
   } catch { /* serve cache */ }
 
+  const activeFeed = getActiveDataProvider();
+
   res.json({
     success: true,
-    provider: DATA_SOURCE,
-    isDelayed: true,
-    isOfficial: false,
-    dataDisclaimer: DATA_DISCLAIMER,
+    provider: activeFeed.provider,
+    isDelayed: activeFeed.isDelayed,
+    isOfficial: activeFeed.isOfficial,
+    dataDisclaimer: activeFeed.disclaimer,
     timestamp: new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' }) + ' IST',
     marketSession: session,
     packetSaverActive: !session.isOpen && !force,
@@ -179,8 +181,15 @@ app.get('/api/market-data', async (req, res) => {
 
 app.get('/api/market-data/:symbol', async (req, res) => {
   const sym = req.params.symbol;
+  const activeFeed = getActiveDataProvider();
   if (quotesCache[sym] && quotesCache[sym].price !== null) {
-    return res.json({ success: true, isDelayed: true, isOfficial: false, dataDisclaimer: DATA_DISCLAIMER, quote: quotesCache[sym] });
+    return res.json({
+      success: true,
+      isDelayed: quotesCache[sym].source !== 'UPSTOX_ANALYTICS_REALTIME',
+      isOfficial: quotesCache[sym].source === 'UPSTOX_ANALYTICS_REALTIME',
+      dataDisclaimer: activeFeed.disclaimer,
+      quote: quotesCache[sym],
+    });
   }
   const fresh = await fetchDelayedYahooQuote(sym);
   if (fresh && fresh.price) {
@@ -196,7 +205,7 @@ app.get('/api/market-data/:symbol', async (req, res) => {
     quotesCache[sym] = q;
     return res.json({ success: true, isDelayed: true, isOfficial: false, dataDisclaimer: DATA_DISCLAIMER, quote: q });
   }
-  res.status(404).json({ success: false, error: 'Quote unavailable from the delayed data source.' });
+  res.status(404).json({ success: false, error: 'Quote unavailable from the data source.' });
 });
 
 // Chartink Live Dynamic Zones Breakout Screener API
@@ -216,7 +225,7 @@ app.get('/api/screener/chartink', async (_req, res) => {
 });
 
 // =============================================================================
-// UPSTOX ANALYTICS & MARKET DATA GATEWAY (v2 API)
+// UPSTOX ANALYTICS & MARKET DATA GATEWAY (v2 API — NO STATIC IP REQUIRED)
 // =============================================================================
 
 interface UpstoxConfigState {
@@ -241,6 +250,13 @@ const upstoxConfig: UpstoxConfigState = {
   profile: null,
 };
 
+/**
+ * Verify Upstox Analytics Token using `/market-quote/quotes` instead of `/user/profile`.
+ * Per official Upstox Analytics Token documentation:
+ * https://upstox.com/developer/api-documentation/analytics-token/#supported-apis
+ * Market Quote, Historical Data, Option Chain, Market Info, Fundamentals, News, and Websocket
+ * do NOT require a registered Static IP!
+ */
 async function testUpstoxConnection(customToken?: string, customBaseUrl?: string): Promise<{
   success: boolean;
   status: 'CONNECTED' | 'DISCONNECTED' | 'ERROR' | 'UNCONFIGURED';
@@ -248,7 +264,7 @@ async function testUpstoxConnection(customToken?: string, customBaseUrl?: string
   profile?: any;
   error?: string;
 }> {
-  const token = (customToken || upstoxConfig.accessToken || process.env.UPSTOX_ACCESS_TOKEN || '').trim();
+  const token = (customToken || upstoxConfig.accessToken || process.env.UPSTOX_ACCESS_TOKEN || '').trim().replace(/^Bearer\s+/i, '');
   const baseUrl = (customBaseUrl || upstoxConfig.baseUrl || 'https://api.upstox.com/v2').trim();
 
   if (!token) {
@@ -257,32 +273,42 @@ async function testUpstoxConnection(customToken?: string, customBaseUrl?: string
       success: false,
       status: 'UNCONFIGURED',
       latencyMs: null,
-      error: 'Upstox Access Token is not configured. Provide an access token or set UPSTOX_ACCESS_TOKEN in environment.',
+      error: 'Upstox Analytics Token is not configured. Provide your Analytics Token or set UPSTOX_ACCESS_TOKEN in environment.',
     };
   }
 
   const start = Date.now();
   try {
-    const res = await fetch(`${baseUrl}/user/profile`, {
+    // Verify via Market Quote endpoint (No Static IP required for Analytics Token!)
+    const verifyUrl = `${baseUrl}/market-quote/quotes?instrument_key=${encodeURIComponent('NSE_INDEX|Nifty 50,NSE_INDEX|India VIX')}`;
+    const res = await fetch(verifyUrl, {
       headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
     });
 
     const latencyMs = Date.now() - start;
     if (res.ok) {
       const data = await res.json();
-      const user = data.data || {};
+      const quotesMap = data?.data || {};
+      const niftyEntry: any = Object.values(quotesMap)[0] || {};
+      const niftyPrice = niftyEntry?.last_price ? ` (NIFTY Spot: ₹${niftyEntry.last_price})` : '';
+
       upstoxConfig.status = 'CONNECTED';
       upstoxConfig.lastConnected = new Date().toISOString();
       upstoxConfig.lastLatencyMs = latencyMs;
       upstoxConfig.profile = {
-        userId: user.user_id || user.client_id || 'UPSTOX-CLIENT',
-        userName: user.user_name || 'Upstox Trader',
-        email: user.email || '',
-        userType: user.user_type || 'INDIVIDUAL',
+        userId: 'ANALYTICS-TOKEN-V2',
+        userName: `Upstox Analytics Feed${niftyPrice}`,
+        email: '',
+        userType: 'ANALYTICS_READ_ONLY (NO STATIC IP NEEDED)',
         broker: 'UPSTOX',
-        exchanges: user.exchanges || ['NSE', 'BSE', 'MCX'],
-        products: user.products || ['CNC', 'MIS', 'NRML'],
+        exchanges: ['NSE', 'BSE', 'MCX'],
+        products: ['MARKET_QUOTE', 'OPTION_CHAIN', 'HISTORICAL_DATA', 'WEBSOCKET'],
       };
+
+      // Register token with marketData engine and trigger immediate live quote sync
+      setMarketDataUpstoxCredentials(token, baseUrl);
+      syncMarketQuotes(true).catch(() => {});
+
       return { success: true, status: 'CONNECTED', latencyMs, profile: upstoxConfig.profile };
     } else {
       const errBody = await res.json().catch(() => ({}));
@@ -299,6 +325,11 @@ async function testUpstoxConnection(customToken?: string, customBaseUrl?: string
       error: `Network failure connecting to Upstox API: ${netErr.message}`,
     };
   }
+}
+
+// Auto-verify on boot if UPSTOX_ACCESS_TOKEN is present in environment
+if (upstoxConfig.accessToken) {
+  testUpstoxConnection(upstoxConfig.accessToken, upstoxConfig.baseUrl).catch(() => {});
 }
 
 app.get('/api/upstox/status', async (_req, res) => {
@@ -319,19 +350,19 @@ app.get('/api/upstox/status', async (_req, res) => {
       { key: 'NSE_INDEX|India VIX', name: 'INDIA VIX' },
     ],
     features: [
-      'L2 Market Depth (Quotes API)',
-      'Real Options Chain (Delta, Gamma, Vega, Theta, IV)',
-      'Intraday & Historical Candles (1m, 5m, 15m, 1d)',
-      'NSE / BSE Exchange Status Telemetry',
+      'Market Quote API (No Static IP Required)',
+      'Real Options Chain & Greeks (No Static IP Required)',
+      'Intraday & Historical Candles (No Static IP Required)',
+      'Market Information, Fundamentals & WebSocket',
     ],
-    disclaimer: 'Upstox Analytics Gateway is active. Live feed requests require a valid, unexpired Upstox Access Token.',
+    disclaimer: 'Upstox Analytics Token verified via /market-quote/quotes (No Static IP Required).',
   });
 });
 
 app.post('/api/upstox/configure', rateLimit, requireOwner, async (req, res) => {
   const { accessToken, apiKey, apiSecret, baseUrl } = req.body || {};
   if (!accessToken || typeof accessToken !== 'string' || !accessToken.trim()) {
-    return res.status(400).json({ success: false, error: 'Valid Upstox Access Token is required.' });
+    return res.status(400).json({ success: false, error: 'Valid Upstox Analytics Token is required.' });
   }
 
   const cleanToken = accessToken.trim().replace(/^Bearer\s+/i, '');
@@ -344,16 +375,18 @@ app.post('/api/upstox/configure', rateLimit, requireOwner, async (req, res) => {
     if (apiSecret && typeof apiSecret === 'string') upstoxConfig.apiSecret = apiSecret.trim();
     upstoxConfig.baseUrl = cleanBaseUrl;
     upstoxConfig.status = 'CONNECTED';
+    setMarketDataUpstoxCredentials(cleanToken, cleanBaseUrl);
+    await syncMarketQuotes(true);
     return res.json({
       success: true,
-      message: 'Upstox Analytics API successfully verified and connected!',
+      message: 'Upstox Analytics Token verified via Market Quote API (No Static IP needed) — Live NSE/BSE feed active!',
       latencyMs: testResult.latencyMs,
       profile: testResult.profile,
     });
   } else {
     return res.status(401).json({
       success: false,
-      error: testResult.error || 'Upstox Access Token verification failed.',
+      error: testResult.error || 'Upstox Analytics Token verification failed.',
       latencyMs: testResult.latencyMs,
     });
   }
@@ -431,6 +464,7 @@ app.post('/api/upstox/disconnect', requireOwner, (_req, res) => {
   upstoxConfig.accessToken = '';
   upstoxConfig.status = 'DISCONNECTED';
   upstoxConfig.profile = null;
+  setMarketDataUpstoxCredentials('', upstoxConfig.baseUrl);
   res.json({ success: true, message: 'Upstox Analytics session safely disconnected.' });
 });
 

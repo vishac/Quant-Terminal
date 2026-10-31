@@ -26,12 +26,14 @@ import {
   ChevronRight,
   ExternalLink,
   ShieldCheck,
+  Info,
   X
 } from 'lucide-react';
 import { useLiveMarketData } from '../services/liveMarketService';
 
 export const BrokerGatewayRouter: React.FC = () => {
-  const { latencyMs } = useLiveMarketData(2500);
+  const { latencyMs, provider } = useLiveMarketData(2500);
+  const isUpstoxLive = provider === 'UPSTOX_ANALYTICS_REALTIME';
 
   // Live state
   const [tickRate, setTickRate] = useState<number>(2840);
@@ -39,6 +41,9 @@ export const BrokerGatewayRouter: React.FC = () => {
   const [showAddBrokerModal, setShowAddBrokerModal] = useState<boolean>(false);
   const [cliInput, setCliInput] = useState<string>('');
   const [selectedLogFilter, setSelectedLogFilter] = useState<'ALL' | 'AUTH_TOKENS' | 'WEBSOCKET' | 'RATELIMITS'>('ALL');
+
+  // Hide unused brokers (Zerodha, Dhan, Aditya Birla, Angel One) by default without removing code
+  const [showUnusedBrokers, setShowUnusedBrokers] = useState<boolean>(false);
 
   // Broker states
   const [abmRoutingActive, setAbmRoutingActive] = useState<boolean>(true);
@@ -418,8 +423,47 @@ export const BrokerGatewayRouter: React.FC = () => {
         </div>
       </div>
 
+      {/* ACTIVE ANALYTICS GATEWAY HEADER & STANDBY BROKERS VISIBILITY TOGGLE */}
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 rounded-xl bg-slate-900/80 border border-cyan-500/30 font-mono text-xs">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <span className="px-2 py-0.5 rounded bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 font-bold text-[10px]">
+            PRIMARY FEED GATEWAY: UPSTOX ANALYTICS V2
+          </span>
+          <span
+            className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded border text-[10px] font-bold ${
+              isUpstoxLive || upstoxData?.status === 'CONNECTED'
+                ? 'bg-emerald-950/70 border-emerald-500/40 text-emerald-300'
+                : 'bg-amber-950/70 border-amber-500/40 text-amber-300'
+            }`}
+            title={
+              isUpstoxLive || upstoxData?.status === 'CONNECTED'
+                ? 'Upstox Analytics Token Active: Streaming live NSE/BSE Market Quotes & Option Chain (No Static IP required). Terminal operates in Paper-Trading & Market Intelligence mode.'
+                : 'Delayed Data Notice: Currently using Yahoo Finance fallback (~15m delayed). Pair your Upstox Analytics Token below to stream live NSE/BSE ticks (No Static IP required).'
+            }
+          >
+            <Info className="w-3.5 h-3.5 shrink-0" />
+            <span>
+              {isUpstoxLive || upstoxData?.status === 'CONNECTED'
+                ? 'UPSTOX LIVE DATA ACTIVE (NO STATIC IP REQUIRED · PAPER TRADING ONLY)'
+                : 'DELAYED FALLBACK DATA — PAIR UPSTOX ANALYTICS TOKEN FOR LIVE FEED'}
+            </span>
+          </span>
+        </div>
+
+        <button
+          onClick={() => setShowUnusedBrokers(!showUnusedBrokers)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-cyan-300 text-[11px] font-bold transition cursor-pointer"
+          title="Unused brokers (Zerodha, Dhan, Angel One, Aditya Birla) are hidden by default and preserved in standby."
+        >
+          {showUnusedBrokers ? <EyeOff className="w-3.5 h-3.5 text-amber-400" /> : <Eye className="w-3.5 h-3.5 text-cyan-400" />}
+          <span>{showUnusedBrokers ? 'Hide Unused Brokers (Zerodha / Dhan / ABM)' : 'Show Standby / Unused Brokers (3 Hidden)'}</span>
+        </button>
+      </div>
+
       {/* PRIMARY BROKER TOPOLOGY GRID */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        {showUnusedBrokers && (
+          <>
         {/* CARD 1: ADITYA BIRLA MONEY (PRIMARY ROUTE) */}
         <div className="relative flex flex-col justify-between bg-[#080d1a]/85 backdrop-blur-xl rounded-2xl p-5 border border-cyan-500/25 shadow-xl hover:shadow-[0_0_30px_rgba(0,240,255,0.18)] transition-all">
           <div className="space-y-3 font-mono">
@@ -725,9 +769,11 @@ export const BrokerGatewayRouter: React.FC = () => {
             </label>
           </div>
         </div>
+          </>
+        )}
 
         {/* CARD 4: UPSTOX ANALYTICS API GATEWAY */}
-        <div className="relative flex flex-col justify-between bg-[#080d1a]/85 backdrop-blur-xl rounded-2xl p-5 border border-cyan-500/30 shadow-xl hover:shadow-[0_0_30px_rgba(0,240,255,0.2)] transition-all font-mono">
+        <div className={`relative flex flex-col justify-between bg-[#080d1a]/85 backdrop-blur-xl rounded-2xl p-5 border border-cyan-500/30 shadow-xl hover:shadow-[0_0_30px_rgba(0,240,255,0.2)] transition-all font-mono ${!showUnusedBrokers ? 'col-span-full' : ''}`}>
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-[10px] text-cyan-400 uppercase tracking-widest font-semibold">
@@ -1392,22 +1438,38 @@ export const BrokerGatewayRouter: React.FC = () => {
                   </div>
                 </div>
 
+                {/* Official Upstox Analytics Token — No Static IP Needed Banner */}
+                <div className="p-3.5 rounded-xl bg-cyan-950/35 border border-cyan-500/40 text-xs space-y-1.5">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 font-bold text-cyan-300">
+                      <Info className="w-4 h-4 shrink-0 text-cyan-400" />
+                      <span>UPSTOX ANALYTICS TOKEN: NO STATIC IP REQUIRED</span>
+                    </div>
+                    <a
+                      href="https://upstox.com/developer/api-documentation/analytics-token/#supported-apis"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-[10px] text-cyan-400 hover:text-cyan-200 underline"
+                    >
+                      <span>Official Supported APIs Docs</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+                  <p className="text-[11px] text-slate-300 leading-relaxed font-sans">
+                    We do <strong className="text-emerald-300">not</strong> place live money orders from this terminal (all 5 autonomous agents execute strictly in <strong className="text-cyan-300">Paper-Trading &amp; Market Intelligence</strong> mode). Verification &amp; live streaming use Upstox&apos;s <code className="text-cyan-300">/market-quote/quotes</code> and <code className="text-cyan-300">/option/chain</code> endpoints, which work with any Upstox Analytics Token <strong className="text-emerald-300">without requiring a Static IP</strong>.
+                  </p>
+                </div>
+
                 {/* Feedback Alerts */}
                 {upstoxError && (
                   <div className="p-3.5 rounded-xl bg-rose-950/60 border border-rose-500/50 text-rose-200 text-xs flex flex-col gap-1.5 animate-in fade-in">
                     <div className="flex items-center gap-2 font-bold text-rose-300">
                       <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
-                      <span>{upstoxError.includes('static IP') ? 'Upstox Developer Account: Static IP Restriction' : 'Upstox Handshake Notice'}</span>
+                      <span>Upstox Token Verification Notice</span>
                     </div>
                     <p className="text-[11px] text-slate-300 leading-relaxed font-sans">
                       {upstoxError}
                     </p>
-                    {upstoxError.includes('static IP') && (
-                      <div className="mt-1 p-2 rounded-lg bg-slate-900/90 border border-slate-800 text-[10px] text-slate-300 font-mono space-y-1">
-                        <div>💡 <span className="text-cyan-300 font-bold">Why this happens:</span> In your Upstox Developer Console (app settings), you have enabled &quot;Static IP Whitelisting&quot;.</div>
-                        <div>🔧 <span className="text-amber-300 font-bold">Resolution:</span> In your Upstox App configuration, either disable &quot;IP Whitelisting&quot; or add your cloud container IP (<code className="text-emerald-300 font-bold">34.34.254.191</code>).</div>
-                      </div>
-                    )}
                   </div>
                 )}
                 {upstoxSuccessMsg && (

@@ -10,8 +10,83 @@ import { TRACKED_SYMBOLS } from '../data/symbols.ts';
 export { TRACKED_SYMBOLS };
 
 export const DATA_SOURCE = 'YAHOO_DELAYED_UNOFFICIAL';
+export const UPSTOX_DATA_SOURCE = 'UPSTOX_ANALYTICS_REALTIME';
 export const DATA_DISCLAIMER =
-  'Delayed, unofficial market data (Yahoo Finance daily candles). Not a licensed real-time exchange feed. For information only.';
+  'Delayed, unofficial market data (Yahoo Finance daily candles). Not a licensed real-time exchange feed. Pair an Upstox Analytics Token (no static IP required) for live NSE/BSE ticks.';
+export const UPSTOX_DISCLAIMER =
+  'Live NSE/BSE market quotes powered by Upstox Analytics v2 API (no static IP required). Global macro indicators supplemented via Yahoo Finance.';
+
+// Active Upstox Analytics Token state (shared with server.ts)
+let activeUpstoxToken = process.env.UPSTOX_ACCESS_TOKEN || '';
+let activeUpstoxBaseUrl = process.env.UPSTOX_BASE_URL || 'https://api.upstox.com/v2';
+
+export function setMarketDataUpstoxCredentials(token: string, baseUrl = 'https://api.upstox.com/v2') {
+  activeUpstoxToken = token.trim().replace(/^Bearer\s+/i, '');
+  activeUpstoxBaseUrl = baseUrl.trim() || 'https://api.upstox.com/v2';
+}
+
+export function getActiveDataProvider(): {
+  provider: string;
+  isDelayed: boolean;
+  isOfficial: boolean;
+  disclaimer: string;
+} {
+  const hasUpstox = !!activeUpstoxToken && Object.values(quotesCache).some(q => q.source === UPSTOX_DATA_SOURCE);
+  if (hasUpstox) {
+    return {
+      provider: UPSTOX_DATA_SOURCE,
+      isDelayed: false,
+      isOfficial: true,
+      disclaimer: UPSTOX_DISCLAIMER,
+    };
+  }
+  return {
+    provider: DATA_SOURCE,
+    isDelayed: true,
+    isOfficial: false,
+    disclaimer: DATA_DISCLAIMER,
+  };
+}
+
+// Canonical mapping from tracked symbol to Upstox v2 instrument_key
+export const SYMBOL_TO_UPSTOX_KEY: Record<string, string> = {
+  '^NSEI':         'NSE_INDEX|Nifty 50',
+  '^BSESN':        'BSE_INDEX|SENSEX',
+  '^NSEBANK':      'NSE_INDEX|Nifty Bank',
+  '^INDIAVIX':     'NSE_INDEX|India VIX',
+  'RELIANCE.NS':   'NSE_EQ|INE002A01018',
+  'ONGC.NS':       'NSE_EQ|INE213A01029',
+  'BPCL.NS':       'NSE_EQ|INE029A01011',
+  'ASIANPAINT.NS': 'NSE_EQ|INE021A01026',
+  'INDIGO.NS':     'NSE_EQ|INE646L01027',
+  'TCS.NS':        'NSE_EQ|INE467B01029',
+  'INFY.NS':       'NSE_EQ|INE009A01021',
+  'HCLTECH.NS':    'NSE_EQ|INE860A01027',
+  'HDFCBANK.NS':   'NSE_EQ|INE040A01034',
+  'ICICIBANK.NS':  'NSE_EQ|INE090A01021',
+  'SBIN.NS':       'NSE_EQ|INE062A01020',
+  'AXISBANK.NS':   'NSE_EQ|INE238A01034',
+  'BAJFINANCE.NS': 'NSE_EQ|INE296A01032',
+  'TATASTEEL.NS':  'NSE_EQ|INE081A01020',
+  'HINDALCO.NS':   'NSE_EQ|INE038A01020',
+  'JSWSTEEL.NS':   'NSE_EQ|INE019A01038',
+  'SUNPHARMA.NS':  'NSE_EQ|INE044A01036',
+  'CIPLA.NS':      'NSE_EQ|INE059A01026',
+  'DRREDDY.NS':    'NSE_EQ|INE089A01031',
+  'LT.NS':         'NSE_EQ|INE018A01030',
+  'ULTRACEMCO.NS': 'NSE_EQ|INE481G01011',
+  'INDIACEM.NS':   'NSE_EQ|INE383A01012',
+  'NTPC.NS':       'NSE_EQ|INE733E01010',
+  'BHARTIARTL.NS': 'NSE_EQ|INE397D01024',
+  'HAL.NS':        'NSE_EQ|INE066F01020',
+  'BEL.NS':        'NSE_EQ|INE263A01024',
+  'TRENT.NS':      'NSE_EQ|INE849A01020',
+  'TITAN.NS':      'NSE_EQ|INE280A01028',
+  'DIXON.NS':      'NSE_EQ|INE935N01020',
+  'POLYCAB.NS':    'NSE_EQ|INE455K01017',
+  'SOLARINDS.NS':  'NSE_EQ|INE343H01029',
+  'COCHINSHIP.NS': 'NSE_EQ|INE704P01025',
+};
 
 // In-memory cache — initialized with null values (never fake demo data)
 export const quotesCache: Record<string, MarketQuote> = {};
@@ -26,6 +101,82 @@ TRACKED_SYMBOLS.forEach(({ symbol, name }) => {
 
 let lastFetchTime = 0;
 const FETCH_COOLDOWN_MS = 2500;
+
+/**
+ * Batch-fetch live NSE/BSE quotes via Upstox Analytics v2 Market Quote API.
+ * Note: Upstox Analytics Token does NOT require a static IP for /market-quote/quotes.
+ */
+export async function fetchUpstoxBatchQuotes(): Promise<boolean> {
+  if (!activeUpstoxToken) return false;
+  try {
+    const entries = Object.entries(SYMBOL_TO_UPSTOX_KEY);
+    const instrumentKeys = entries.map(([, upstoxKey]) => upstoxKey).join(',');
+    const url = `${activeUpstoxBaseUrl}/market-quote/quotes?instrument_key=${encodeURIComponent(instrumentKeys)}`;
+
+    const res = await fetch(url, {
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${activeUpstoxToken}`,
+      },
+    });
+
+    if (!res.ok) return false;
+    const json: any = await res.json();
+    const dataMap = json?.data || {};
+    if (typeof dataMap !== 'object' || Object.keys(dataMap).length === 0) return false;
+
+    const istTimestamp = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' }) + ' IST';
+    let updatedCount = 0;
+
+    // Upstox keys in response can be keyed by `NSE_EQ:RELIANCE` or `NSE_EQ|INE002A01018`
+    // Match by instrument_token or symbol or key
+    const responseItems = Object.entries(dataMap);
+
+    for (const [trackedSym, upstoxKey] of entries) {
+      const bareSym = trackedSym.replace('.NS', '');
+      const matchedEntry = responseItems.find(([respKey, val]: [string, any]) => {
+        if (!val) return false;
+        if (respKey === upstoxKey || val.instrument_token === upstoxKey) return true;
+        if (respKey.endsWith(`:${bareSym}`) || val.symbol?.toUpperCase() === bareSym.toUpperCase()) return true;
+        if (trackedSym === '^NSEI' && (respKey.includes('Nifty 50') || val.instrument_token?.includes('Nifty 50'))) return true;
+        if (trackedSym === '^NSEBANK' && (respKey.includes('Nifty Bank') || val.instrument_token?.includes('Nifty Bank'))) return true;
+        if (trackedSym === '^BSESN' && (respKey.includes('SENSEX') || val.instrument_token?.includes('SENSEX'))) return true;
+        if (trackedSym === '^INDIAVIX' && (respKey.includes('India VIX') || val.instrument_token?.includes('India VIX'))) return true;
+        return false;
+      });
+
+      if (matchedEntry) {
+        const qData: any = matchedEntry[1];
+        const ltp = Number(qData.last_price);
+        if (!isNaN(ltp) && ltp > 0) {
+          const ohlc = qData.ohlc || {};
+          const netChange = Number(qData.net_change ?? 0);
+          const closePrice = Number(ohlc.close) > 0 ? Number(ohlc.close) : ltp - netChange;
+          const change = ltp - closePrice;
+          const changePct = closePrice > 0 ? (change / closePrice) * 100 : 0;
+
+          quotesCache[trackedSym] = {
+            ...quotesCache[trackedSym],
+            price: Math.round(ltp * 100) / 100,
+            prevClose: Math.round(closePrice * 100) / 100,
+            change: Math.round(change * 100) / 100,
+            changePct: Math.round(changePct * 100) / 100,
+            high: ohlc.high != null ? Math.round(Number(ohlc.high) * 100) / 100 : quotesCache[trackedSym].high,
+            low: ohlc.low != null ? Math.round(Number(ohlc.low) * 100) / 100 : quotesCache[trackedSym].low,
+            volume: qData.volume != null ? Number(qData.volume) : quotesCache[trackedSym].volume,
+            timestamp: istTimestamp,
+            source: UPSTOX_DATA_SOURCE,
+          };
+          updatedCount++;
+        }
+      }
+    }
+
+    return updatedCount > 0;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Fetch delayed quotes from the unofficial Yahoo Finance chart endpoint.
@@ -106,14 +257,22 @@ export async function fetchDelayedYahooQuote(
   }
 }
 
-export async function syncMarketQuotes(): Promise<Record<string, MarketQuote>> {
+export async function syncMarketQuotes(force = false): Promise<Record<string, MarketQuote>> {
   const now = Date.now();
-  if (now - lastFetchTime < FETCH_COOLDOWN_MS) return quotesCache;
+  if (!force && now - lastFetchTime < FETCH_COOLDOWN_MS) return quotesCache;
   lastFetchTime = now;
 
+  // 1. First attempt live NSE/BSE quotes via Upstox Analytics API if token is configured
+  const upstoxSucceeded = await fetchUpstoxBatchQuotes();
+
+  // 2. Fetch remaining symbols (e.g. Global Macro US/Commodities/FX, or fallback for Indian symbols if Upstox is unconfigured)
   const symbols = Object.keys(quotesCache);
   await Promise.allSettled(
     symbols.map(async (sym) => {
+      // If Upstox already updated this Indian symbol, skip overwriting with delayed Yahoo data
+      if (upstoxSucceeded && SYMBOL_TO_UPSTOX_KEY[sym] && quotesCache[sym]?.source === UPSTOX_DATA_SOURCE && quotesCache[sym]?.price !== null) {
+        return;
+      }
       const updated = await fetchDelayedYahooQuote(sym);
       if (updated && typeof updated.price === 'number') {
         quotesCache[sym] = { ...quotesCache[sym], ...updated } as MarketQuote;

@@ -1,9 +1,14 @@
-# J.A.R.V.I.S. Quant Terminal — Code, Logic & Security Audit (Phase 1)
+# J.A.R.V.I.S. Quant Terminal — Code, Logic & Security Audit (Phase 1 & Phase 2 Updates)
 
-**Date:** 2026-06  ·  **Reviewer:** Emergent (E1)  ·  **Repo:** vishac/Quant-Terminal
-**Scope:** Full review of logic, correctness, data integrity, and security + a staged remediation plan.
+**Date:** 2026-10  ·  **Reviewer:** Emergent / AI Studio Engineering  ·  **Repo:** vishac/Quant-Terminal
+**Scope:** Full review of logic, correctness, data integrity, and security + Upstox Analytics Real-Time Feed & Autonomous 5-Agent Paper Trading.
 
-> **Headline finding:** In its reviewed form the terminal **cannot place real trades** and **does not use real-time data**. It is a demo / paper-trading + AI-commentary dashboard. It therefore **cannot responsibly trade real capital on the go-live date**. "Profits from day 1" is a goal to build toward safely (Phases 2–3), **not** something this build can guarantee or even execute. Phase 1 (this delivery) makes the app **truthful and safe** first.
+> **Latest Architectural Status (Updated 2026-10-31):**
+> 1. **Upstox Analytics Token (No Static IP Needed):** Token verification and live polling now use `/market-quote/quotes` and `/option/chain` per [Upstox Analytics Token Supported APIs](https://upstox.com/developer/api-documentation/analytics-token/#supported-apis), which require **no Static IP**. When paired, the terminal streams real-time NSE/BSE quotes (`provider: 'UPSTOX_ANALYTICS_REALTIME'`, `isDelayed: false`). When unpaired, it falls back to `YAHOO_DELAYED_UNOFFICIAL` (`isDelayed: true`) and displays `Info` icons across all views informing the operator of the feed state.
+> 2. **Analytics & Autonomous Paper-Trading Only:** This terminal does not place live money broker orders. All static seed rows (`INITIAL_INSTITUTIONAL_PAPER_TRADES`) have been removed; the 5 autonomous agents (**Chanakya, Bhishma, Arjuna, Kuber, Vidura**) automatically evaluate market ticks and execute defined-risk paper trades when armed.
+> 3. **Unused Brokers Hidden by Default:** Non-used brokers (Zerodha Kite, Dhan HQ, Aditya Birla Money, Angel One) are hidden by default behind a toggle (`showUnusedBrokers = false`) without deleting their code.
+
+> **Historical Phase-1 Baseline Note:** In its original reviewed form (prior to pairing Upstox Analytics), the terminal operated as a paper-trading + AI-commentary dashboard using delayed fallback data.
 
 ---
 

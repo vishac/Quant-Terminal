@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Shield, Key, RefreshCw, CheckCircle2, Server, Database, Globe, Sliders, Lock, ArrowRight, ExternalLink, Smartphone, Download, Zap, Apple, Cpu, Activity, Layers, Bot, Clock, Radio } from 'lucide-react';
+import { Shield, Key, RefreshCw, CheckCircle2, Server, Database, Globe, Sliders, Lock, ArrowRight, ExternalLink, Smartphone, Download, Zap, Apple, Cpu, Activity, Layers, Bot, Clock, Radio, Info, Eye, EyeOff } from 'lucide-react';
 import { useLiveMarketData } from '../services/liveMarketService';
 import { executePostMarketSync, INITIAL_SYNC_STATE, PostMarketSyncState } from '../utils/indianHolidayCalendar';
 import { PWAInstallButton } from './PWAInstallButton';
@@ -15,11 +15,14 @@ export const SettingsTerminal: React.FC = () => {
     isPacketSaverActive, 
     packetsSavedCount, 
     forceSyncOverride, 
-    toggleForceSyncOverride 
+    toggleForceSyncOverride,
+    provider
   } = useLiveMarketData(3000);
+  const isUpstoxLive = provider === 'UPSTOX_ANALYTICS_REALTIME';
   const [postMarketSync, setPostMarketSync] = useState<PostMarketSyncState>(INITIAL_SYNC_STATE);
   const [isSyncingHolidays, setIsSyncingHolidays] = useState(false);
   const [testStatus, setTestStatus] = useState<string | null>(null);
+  const [showUnusedBrokers, setShowUnusedBrokers] = useState<boolean>(false);
 
   // Broker Credentials Configuration State
   const [brokers, setBrokers] = useState([
@@ -250,9 +253,21 @@ export const SettingsTerminal: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-950/60 border border-emerald-500/40 text-emerald-400 text-xs font-mono font-bold">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-              {isLive ? 'DELAYED QUOTES (UNOFFICIAL)' : 'CACHED'}
+            <span
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs font-mono font-bold ${
+                isUpstoxLive
+                  ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-400'
+                  : 'bg-amber-950/60 border-amber-500/40 text-amber-300'
+              }`}
+              title={
+                isUpstoxLive
+                  ? 'Upstox Analytics API Connected: Streaming live NSE/BSE quotes & Option Chain (No Static IP needed). Paper-trading mode only.'
+                  : 'Delayed Feed Notice: Quotes are currently ~15m delayed from Yahoo Finance fallback. Pair your Upstox Analytics Token in Sync Hub -> Broker Gateway for live real-time NSE/BSE quotes (No Static IP required).'
+              }
+            >
+              <span className={`w-2 h-2 rounded-full ${isUpstoxLive ? 'bg-emerald-400 animate-ping' : 'bg-amber-400'}`}></span>
+              <span>{isUpstoxLive ? 'UPSTOX REALTIME FEED' : isLive ? 'DELAYED QUOTES (INFO)' : 'CACHED'}</span>
+              <Info className="w-3.5 h-3.5 shrink-0" />
             </span>
             <span className="text-xs font-mono text-slate-400 bg-slate-900 px-2.5 py-1 rounded border border-slate-800">
               RTT: {latencyMs} ms
@@ -282,7 +297,7 @@ export const SettingsTerminal: React.FC = () => {
                     ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' 
                     : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
                 }`}>
-                  {isPacketSaverActive ? 'PACKET SAVER ACTIVE' : 'DELAYED QUOTES SYNCING'}
+                  {isPacketSaverActive ? 'PACKET SAVER ACTIVE' : isUpstoxLive ? 'UPSTOX LIVE QUOTES SYNCING' : 'DELAYED QUOTES SYNCING'}
                 </span>
               </div>
               <p className="text-[11px] text-slate-300 font-sans mt-1">
@@ -350,66 +365,102 @@ export const SettingsTerminal: React.FC = () => {
         </div>
       </div>
 
-      {/* Broker Nodes & Direct Execution Gateway */}
+      {/* Broker Nodes & Analytics Gateway */}
       <div className="bg-[#080d1a]/85 backdrop-blur-xl rounded-2xl p-6 border border-cyan-500/20 shadow-xl flex flex-col gap-4">
-        <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div className="flex flex-wrap items-center justify-between pb-3 border-b border-slate-800 gap-3">
           <div className="flex items-center gap-2.5">
-            <Key className="w-5 h-5 text-amber-400" />
+            <Key className="w-5 h-5 text-cyan-400" />
             <div>
-              <h2 className="text-sm font-bold font-mono text-slate-200 uppercase tracking-wide">
-                Configured Broker Nodes & API Key Vault
+              <h2 className="text-sm font-bold font-mono text-slate-200 uppercase tracking-wide flex items-center gap-2">
+                <span>Primary Analytics Gateway (Upstox v2) &amp; Standby Nodes</span>
               </h2>
               <span className="text-[11px] text-slate-400 font-mono">
-                Illustrative placeholders only — no broker is actually connected and no real credentials are stored here. Order execution is disabled until a broker is integrated (Phase 2+).
+                Upstox Analytics Token requires NO Static IP for Market Quotes, Option Chain &amp; Historical Candles. Terminal operates strictly in Paper-Trading &amp; Market Intelligence mode (no live money orders).
               </span>
             </div>
           </div>
-          <span className="text-xs font-mono text-amber-400 bg-amber-950/40 px-2.5 py-1 rounded border border-amber-500/30">
-            0 OF 3 CONNECTED (DEMO)
-          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowUnusedBrokers(!showUnusedBrokers)}
+              className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs font-mono text-slate-300 hover:text-cyan-300 transition cursor-pointer"
+            >
+              {showUnusedBrokers ? <EyeOff className="w-3.5 h-3.5 text-amber-400" /> : <Eye className="w-3.5 h-3.5 text-cyan-400" />}
+              <span>{showUnusedBrokers ? 'Hide Unused Brokers' : 'Show Standby / Unused Brokers (3 Hidden)'}</span>
+            </button>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {brokers.map((broker) => (
-            <div key={broker.id} className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 flex flex-col justify-between gap-3">
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold font-mono text-cyan-300">{broker.name}</span>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950/60 text-emerald-400 font-bold border border-emerald-500/30">
-                    {broker.status}
-                  </span>
-                </div>
-                <div className="space-y-1.5 text-xs font-mono">
-                  <div className="flex items-center justify-between text-slate-400">
-                    <span>PROTOCOL:</span>
-                    <span className="text-slate-200 font-semibold">{broker.apiCode}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-slate-400">
-                    <span>COLO NODE:</span>
-                    <span className="text-cyan-400">{broker.coloNode}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-slate-400">
-                    <span>API KEY:</span>
-                    <span className="text-slate-300 font-bold">{broker.apiKey}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-slate-400">
-                    <span>LATENCY:</span>
-                    <span className="text-emerald-400 font-bold">{broker.latency}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2">
-                <button
-                  onClick={() => handleTestBroker(broker.name)}
-                  className="w-full py-1.5 px-3 rounded-lg bg-slate-900 hover:bg-cyan-950/60 border border-slate-800 hover:border-cyan-500/40 text-xs font-mono text-cyan-300 font-bold transition-all"
-                >
-                  TEST PING
-                </button>
-              </div>
+        {/* Active Primary Node: Upstox Analytics API */}
+        <div className="p-4 rounded-xl bg-slate-950/90 border border-cyan-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4 font-mono text-xs">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold text-cyan-300">UPSTOX ANALYTICS GATEWAY (PRIMARY)</span>
+              <span className={`text-[10px] px-2 py-0.5 rounded font-bold border ${
+                isUpstoxLive
+                  ? 'bg-emerald-950/70 border-emerald-500/40 text-emerald-400'
+                  : 'bg-amber-950/60 border-amber-500/40 text-amber-300'
+              }`}>
+                {isUpstoxLive ? 'CONNECTED · REALTIME FEED' : 'STANDBY · PAIR IN SYNC HUB'}
+              </span>
             </div>
-          ))}
+            <p className="text-[11px] text-slate-400 font-sans">
+              Verified via <code className="text-cyan-300">/market-quote/quotes</code> &amp; <code className="text-cyan-300">/option/chain</code> (No Static IP required per official Upstox Analytics Token docs).
+            </p>
+          </div>
+          <a
+            href="https://upstox.com/developer/api-documentation/analytics-token/#supported-apis"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-950/60 hover:bg-cyan-900/60 border border-cyan-500/40 text-cyan-300 font-bold text-xs shrink-0"
+          >
+            <span>Upstox Analytics Docs</span>
+            <ExternalLink className="w-3.5 h-3.5" />
+          </a>
         </div>
+
+        {showUnusedBrokers && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 pt-2">
+            {brokers.map((broker) => (
+              <div key={broker.id} className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 flex flex-col justify-between gap-3">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-bold font-mono text-cyan-300">{broker.name}</span>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 text-slate-400 font-bold border border-slate-700">
+                      UNUSED / STANDBY
+                    </span>
+                  </div>
+                  <div className="space-y-1.5 text-xs font-mono">
+                    <div className="flex items-center justify-between text-slate-400">
+                      <span>PROTOCOL:</span>
+                      <span className="text-slate-200 font-semibold">{broker.apiCode}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-slate-400">
+                      <span>COLO NODE:</span>
+                      <span className="text-cyan-400">{broker.coloNode}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-slate-400">
+                      <span>API KEY:</span>
+                      <span className="text-slate-300 font-bold">{broker.apiKey}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-slate-400">
+                      <span>LATENCY:</span>
+                      <span className="text-emerald-400 font-bold">{broker.latency}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2">
+                  <button
+                    onClick={() => handleTestBroker(broker.name)}
+                    className="w-full py-1.5 px-3 rounded-lg bg-slate-900 hover:bg-cyan-950/60 border border-slate-800 hover:border-cyan-500/40 text-xs font-mono text-cyan-300 font-bold transition-all"
+                  >
+                    TEST PING
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Automated 5:00 PM IST Holiday Sync Task Status */}
