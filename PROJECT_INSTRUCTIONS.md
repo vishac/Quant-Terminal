@@ -74,5 +74,9 @@ Under no circumstances should dummy, mock, or hardcoded static seed trades be in
    - Every visualization must function as an operational decision maker with explicit trade signals, entry bands, stop losses, profit targets, and risk parameters.
 3. **Node.js ESM Production Compatibility (`node server.ts` on Cloud Run)**:
    - Because production runs `node server.ts` under `"type": "module"`, every relative import in `server.ts` and any transitively imported module (`src/server/*`, `src/data/*`, `src/utils/*`, `src/brokers/*`, `src/services/*`) **MUST** include the explicit `.ts` file extension (e.g., `from '../utils/indianHolidayCalendar.ts'`) and files must be saved in clean UTF-8 without BOM so Cloud Run containers never throw `ERR_MODULE_NOT_FOUND` on startup.
+4. **Environment Variable Hygiene (No Redundant `.env.example` Prompts)**:
+   - Do **NOT** list non-secret or hardcoded constants (`MARKET_DATA_PROVIDER`, `MARKET_DATA_REFRESH_INTERVAL_MS`, `NSE_EQUITY_STT_SELL_PCT`, `NSE_OPTIONS_STT_SELL_PCT`, `MCX_COMMODITY_CTT_PCT`, `SEBI_TURNOVER_FEE_PER_CR`, `GST_RATE_PCT`, `BROKERAGE_FLAT_INR`) as environment variables, as AI Studio prompts the user to enter secret values for every key defined in `.env.example`.
+   - Only `GEMINI_API_KEY` (auto-injected by AI Studio), `OWNER_ACCESS_TOKEN` (for Owner Desk unlock), and `UPSTOX_ACCESS_TOKEN` (optional if paired via the UI modal) are read by the backend.
+
 
 
