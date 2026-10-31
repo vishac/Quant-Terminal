@@ -19,7 +19,7 @@
  *      └──────────────────────────────────────────── CANCELLED
  */
 
-import { OrderRequest, OrderResponse, OrderStatus } from '../brokers/BrokerAdapter';
+import { OrderRequest, OrderResponse, OrderStatus } from '../brokers/BrokerAdapter.ts';
 
 // ---------------------------------------------------------------------------
 // Types

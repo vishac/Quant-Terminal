@@ -1,4 +1,4 @@
-﻿import dotenv from 'dotenv';
+import dotenv from 'dotenv';
 import express from 'express';
 import { createServer as createHttpServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';

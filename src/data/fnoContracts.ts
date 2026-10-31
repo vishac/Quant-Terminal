@@ -15,7 +15,7 @@ import {
   getAdjustedExpiryDate,
   formatDate,
   isHoliday,
-} from '../utils/indianHolidayCalendar';
+} from '../utils/indianHolidayCalendar.ts';
 
 // ---------------------------------------------------------------------------
 // Segment definitions

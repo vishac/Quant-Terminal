@@ -26,7 +26,7 @@ import {
   MarginInfo,
   Segment,
   generateClientOrderId,
-} from './BrokerAdapter';
+} from './BrokerAdapter.ts';
 
 // ---------------------------------------------------------------------------
 // Paper account state

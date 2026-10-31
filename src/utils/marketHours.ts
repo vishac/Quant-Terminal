@@ -1,4 +1,4 @@
-﻿import { ALL_INDIAN_HOLIDAYS, formatDate } from './indianHolidayCalendar';
+import { ALL_INDIAN_HOLIDAYS, formatDate } from './indianHolidayCalendar.ts';
 
 export type MarketPhase = 
   | 'LIVE_OPEN'         // 09:15 - 15:30 IST on trading day

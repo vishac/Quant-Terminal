@@ -1,4 +1,4 @@
-﻿import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useMarketWebSocket } from '../services/useMarketWebSocket';
 import {
   Gauge,
@@ -238,7 +238,7 @@ export const GlobalSentiment: React.FC<GlobalSentimentProps> = ({ livePicks }) =
         weightPct: 25,
         currentValue: `${niftyPct >= 0 ? '+' : ''}${niftyPct.toFixed(2)}%`,
         signal: getFactorSignal(momentumScore),
-        detail: `NIFTY ${niftyPct >= 0 ? '+' : ''}${niftyPct.toFixed(2)}% Â· BANK NIFTY ${bankNiftyPct >= 0 ? '+' : ''}${bankNiftyPct.toFixed(2)}%`
+        detail: `NIFTY ${niftyPct >= 0 ? '+' : ''}${niftyPct.toFixed(2)}% · BANK NIFTY ${bankNiftyPct >= 0 ? '+' : ''}${bankNiftyPct.toFixed(2)}%`
       },
       {
         id: 'BREADTH',
@@ -246,7 +246,7 @@ export const GlobalSentiment: React.FC<GlobalSentimentProps> = ({ livePicks }) =
         category: isRadarUniverse ? `${validEquities} Live Radar Stocks (Weight: 25%)` : '16 Bluechip Basket (Weight: 25%)',
         score: breadthScore,
         weightPct: 25,
-        currentValue: `${advancers} Adv / ${decliners} Dec Â· ${unchanged} Flat`,
+        currentValue: `${advancers} Adv / ${decliners} Dec · ${unchanged} Flat`,
         signal: getFactorSignal(breadthScore),
         detail: `${advancers} of ${validEquities} dynamic breakout stocks trading positive (${Math.round((advancers / (validEquities || 1)) * 100)}%)`,
         sampleClarification: isRadarUniverse
@@ -317,7 +317,7 @@ export const GlobalSentiment: React.FC<GlobalSentimentProps> = ({ livePicks }) =
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-sm font-bold text-slate-100 uppercase tracking-wide">
-                Quantitative Market Sentiment Â· Fear &amp; Greed Model
+                Quantitative Market Sentiment · Fear &amp; Greed Model
               </h3>
               <span className={`text-[10px] font-mono px-2 py-0.5 rounded ${scheme.bg} ${scheme.border} ${scheme.text} font-bold`}>
                 {sentimentData.label.toUpperCase()}
@@ -356,7 +356,7 @@ export const GlobalSentiment: React.FC<GlobalSentimentProps> = ({ livePicks }) =
         <div className="flex-1 text-[11px] text-slate-300 leading-relaxed">
           <strong className="text-amber-300 uppercase font-mono">Model Assumption &amp; Scope Disclosure:</strong>{' '}
           All underlying input quotes (India VIX, NIFTY 50, Bank Nifty, and equities) are authentic exchange market numbers.
-          However, the Fear &amp; Greed Index itself is a <strong>proprietary quantitative model (0â€“100)</strong>, not an official index published by the NSE.
+          However, the Fear &amp; Greed Index itself is a <strong>proprietary quantitative model (0–100)</strong>, not an official index published by the NSE.
           Advance/Decline breadth is measured across the terminal's <strong>16 core liquid benchmark equities</strong>, not the entire 2,200+ NSE exchange universe.{' '}
           <button
             onClick={() => setActiveAuditModal('MASTER')}
@@ -525,7 +525,7 @@ export const GlobalSentiment: React.FC<GlobalSentimentProps> = ({ livePicks }) =
                     </p>
                     {factor.sampleClarification && (
                       <span className="text-[9px] text-amber-400/90 font-mono block">
-                        âš  {factor.sampleClarification}
+                        ⚠ {factor.sampleClarification}
                       </span>
                     )}
                   </div>
@@ -602,7 +602,7 @@ export const GlobalSentiment: React.FC<GlobalSentimentProps> = ({ livePicks }) =
                   This index is a <strong>quantitative composite proxy model</strong> modeled after the CNN Fear &amp; Greed Index framework and adapted for Indian capital markets.
                 </p>
                 <p className="text-slate-400 text-[11px]">
-                  The 0â€“100 score is computed from a transparent mathematical weighted formula combining the 4 verified live factors below:
+                  The 0–100 score is computed from a transparent mathematical weighted formula combining the 4 verified live factors below:
                 </p>
               </div>
 
@@ -612,7 +612,7 @@ export const GlobalSentiment: React.FC<GlobalSentimentProps> = ({ livePicks }) =
                   Exact Mathematical Composite Formula:
                 </div>
                 <div className="font-mono text-[11px] bg-black/60 p-2.5 rounded-lg border border-slate-800 text-slate-200">
-                  Score = (VIX_Score Ã— 30%) + (Index_Momentum Ã— 25%) + (Benchmark_Breadth Ã— 25%) + (52W_Proximity Ã— 20%)
+                  Score = (VIX_Score × 30%) + (Index_Momentum × 25%) + (Benchmark_Breadth × 25%) + (52W_Proximity × 20%)
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] font-mono pt-1">
                   <div className="p-2 rounded bg-slate-900 border border-slate-800">
@@ -666,7 +666,7 @@ export const GlobalSentiment: React.FC<GlobalSentimentProps> = ({ livePicks }) =
                   </div>
                 </div>
                 <p className="text-[11px] text-amber-300/90 font-mono">
-                  âš  Note: This reflects the institutional heavyweights in our tracking universe. It does NOT represent the entire 2,200+ companies on the NSE cash market.
+                  ⚠ Note: This reflects the institutional heavyweights in our tracking universe. It does NOT represent the entire 2,200+ companies on the NSE cash market.
                 </p>
               </div>
             </div>
@@ -752,10 +752,10 @@ export const GlobalSentiment: React.FC<GlobalSentimentProps> = ({ livePicks }) =
                         <td className="py-2 px-3 font-bold text-slate-200">{item.symbol}</td>
                         <td className="py-2 px-3 text-slate-400 font-sans">{item.name}</td>
                         <td className="py-2 px-3 text-right text-slate-200">
-                          {item.price != null ? `â‚¹${item.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : 'â€”'}
+                          {item.price != null ? `₹${item.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
                         </td>
                         <td className={`py-2 px-3 text-right font-bold ${isAdv ? 'text-emerald-400' : isDec ? 'text-rose-400' : 'text-slate-400'}`}>
-                          {item.changePct != null ? `${item.changePct >= 0 ? '+' : ''}${item.changePct.toFixed(2)}%` : 'â€”'}
+                          {item.changePct != null ? `${item.changePct >= 0 ? '+' : ''}${item.changePct.toFixed(2)}%` : '—'}
                         </td>
                         <td className="py-2 px-3 text-center">
                           {isAdv && (
@@ -787,9 +787,9 @@ export const GlobalSentiment: React.FC<GlobalSentimentProps> = ({ livePicks }) =
                 Total Constituents: <strong className="text-slate-200">{sentimentData.constituentList.length}</strong>
               </span>
               <div className="flex items-center gap-3">
-                <span className="text-emerald-400 font-bold">âœ“ {sentimentData.advancersCount} Advances</span>
-                <span className="text-rose-400 font-bold">âœ— {sentimentData.declinersCount} Declines</span>
-                <span className="text-slate-400">â—‹ {sentimentData.unchangedCount} Flat</span>
+                <span className="text-emerald-400 font-bold">✓ {sentimentData.advancersCount} Advances</span>
+                <span className="text-rose-400 font-bold">✗ {sentimentData.declinersCount} Declines</span>
+                <span className="text-slate-400">○ {sentimentData.unchangedCount} Flat</span>
               </div>
               <span className="text-cyan-300 font-bold">
                 Breadth Score = {sentimentData.factors[2].score} / 100

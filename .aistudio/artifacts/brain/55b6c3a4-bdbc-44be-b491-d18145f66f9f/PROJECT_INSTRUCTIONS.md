@@ -67,3 +67,6 @@ Under no circumstances should dummy, mock, or hardcoded static seed trades be in
    - Never unilaterally replace primary decision workspaces without user alignment.
 2. **No Purely Decorative 3D Gimmicks**:
    - Every visualization must function as an operational decision maker with explicit trade signals, entry bands, stop losses, profit targets, and risk parameters.
+3. **Node.js ESM Production Compatibility (`node server.ts` on Cloud Run)**:
+   - Because production runs `node server.ts` under `"type": "module"`, every relative import in `server.ts` and any transitively imported module (`src/server/*`, `src/data/*`, `src/utils/*`, `src/brokers/*`, `src/services/*`) **MUST** include the explicit `.ts` file extension (e.g., `from '../utils/indianHolidayCalendar.ts'`) and files must be saved in clean UTF-8 without BOM so Cloud Run containers never throw `ERR_MODULE_NOT_FOUND` on startup.
+

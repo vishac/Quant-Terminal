@@ -1,4 +1,4 @@
-﻿/**
+/**
  * ExecutionTerminal — Order entry panel with mandatory risk gate.
  *
  * Architecture rule: NO order may be submitted without:
