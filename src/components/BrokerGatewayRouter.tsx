@@ -26,12 +26,14 @@ import {
   ChevronRight,
   ExternalLink,
   ShieldCheck,
+  Info,
   X
 } from 'lucide-react';
 import { useLiveMarketData } from '../services/liveMarketService';
 
 export const BrokerGatewayRouter: React.FC = () => {
-  const { latencyMs } = useLiveMarketData(2500);
+  const { latencyMs, provider } = useLiveMarketData(2500);
+  const isUpstoxLive = provider === 'UPSTOX_ANALYTICS_REALTIME';
 
   // Live state
   const [tickRate, setTickRate] = useState<number>(2840);
@@ -39,6 +41,9 @@ export const BrokerGatewayRouter: React.FC = () => {
   const [showAddBrokerModal, setShowAddBrokerModal] = useState<boolean>(false);
   const [cliInput, setCliInput] = useState<string>('');
   const [selectedLogFilter, setSelectedLogFilter] = useState<'ALL' | 'AUTH_TOKENS' | 'WEBSOCKET' | 'RATELIMITS'>('ALL');
+
+  // Hide unused brokers (Zerodha, Dhan, Aditya Birla, Angel One) by default without removing code
+  const [showUnusedBrokers, setShowUnusedBrokers] = useState<boolean>(false);
 
   // Broker states
   const [abmRoutingActive, setAbmRoutingActive] = useState<boolean>(true);
@@ -215,11 +220,11 @@ export const BrokerGatewayRouter: React.FC = () => {
     }
   };
 
-  // Terminal log stream
+  // Terminal log stream (Unused brokers Zerodha, DhanHQ, Aditya Birla Money removed from audit logs)
   const [logs, setLogs] = useState<Array<{
     id: string;
     timestamp: string;
-    type: 'AUTH_OK' | 'KITE_WS' | 'DHAN_STANDBY' | 'RATE_LIMIT' | 'CROSS_CONNECT' | 'VOL_SURFACE' | 'CLI_OUTPUT';
+    type: 'AUTH_OK' | 'UPSTOX_V2' | 'CHARTINK_BACKUP' | 'RATE_LIMIT' | 'CROSS_CONNECT' | 'VOL_SURFACE' | 'CLI_OUTPUT';
     message: string;
     category: 'AUTH_TOKENS' | 'WEBSOCKET' | 'RATELIMITS' | 'GENERAL';
   }>>([
@@ -228,28 +233,28 @@ export const BrokerGatewayRouter: React.FC = () => {
       timestamp: '10:14:02.812',
       type: 'AUTH_OK',
       category: 'AUTH_TOKENS',
-      message: 'Aditya Birla Money TOTP handshake verified. SHA256 Token renewed with 21,600s TTL. Gateway #02 response time: 2.12ms.'
+      message: 'Upstox Analytics v2 Gateway initialized (/market-quote/quotes & /option/chain). No Static IP required for Market Data & Paper Trading.'
     },
     {
       id: 'log-2',
-      timestamp: '10:14:03.004',
-      type: 'KITE_WS',
+      timestamp: '10:14:03.215',
+      type: 'UPSTOX_V2',
       category: 'WEBSOCKET',
-      message: 'Zerodha binary mode handshake established on wss://ws.kite.trade?api_key=KT_PROD_***&enctoken=VALID. Subscribed 3,000 instrument tokens. Mode: full (depth 5).'
+      message: 'Primary NSE/BSE/MCX market stream routed to Upstox Analytics API v2. Subscribed 45 liquid NSE equities + 4 benchmark indices.'
     },
     {
       id: 'log-3',
-      timestamp: '10:14:03.490',
-      type: 'DHAN_STANDBY',
+      timestamp: '10:14:03.640',
+      type: 'CHARTINK_BACKUP',
       category: 'WEBSOCKET',
-      message: 'DhanHQ Hot Standby ping acknowledged. RTT: 3.4ms. Feed multiplexer armed with automatic trip threshold set to 150ms packet drop.'
+      message: 'Chartink NSE Technical Breakout Scanner armed in AUTO-FAILOVER BACKUP mode. Automatically triggers only if Upstox primary feed is unpaired or unreachable.'
     },
     {
       id: 'log-4',
       timestamp: '10:14:04.118',
       type: 'RATE_LIMIT',
       category: 'RATELIMITS',
-      message: 'Quota compliance: Zerodha Kite (1/3 orders/sec, 0/10 req/sec), DhanHQ (0/10 quotes/sec), ABM Broker (OK, 0 rejections). Margin pool synchronized.'
+      message: 'Quota compliance: Upstox Analytics v2 (OK, 0 rejections), Chartink Backup Scanner (Armed/Standby), 5-Agent Paper Engine (Synchronized).'
     },
     {
       id: 'log-5',
@@ -284,16 +289,16 @@ export const BrokerGatewayRouter: React.FC = () => {
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + '.' + String(now.getMilliseconds()).padStart(3, '0');
 
     let responseMsg = '';
-    let cmdType: 'AUTH_OK' | 'KITE_WS' | 'DHAN_STANDBY' | 'RATE_LIMIT' | 'CROSS_CONNECT' | 'VOL_SURFACE' | 'CLI_OUTPUT' = 'CLI_OUTPUT';
+    let cmdType: 'AUTH_OK' | 'UPSTOX_V2' | 'CHARTINK_BACKUP' | 'RATE_LIMIT' | 'CROSS_CONNECT' | 'VOL_SURFACE' | 'CLI_OUTPUT' = 'CLI_OUTPUT';
     let category: 'AUTH_TOKENS' | 'WEBSOCKET' | 'RATELIMITS' | 'GENERAL' = 'GENERAL';
 
-    if (cmd.includes('broker.reconnect')) {
-      responseMsg = `[CLI EXEC] Reconnected broker sockets on BOM-DC2-RACK08. Auth handshake verified in 1.94ms.`;
+    if (cmd.includes('upstox.ping') || cmd.includes('broker.reconnect')) {
+      responseMsg = `[CLI EXEC] Verified Upstox Analytics v2 Gateway on BOM-DC2-RACK08 (/market-quote/quotes). No Static IP required.`;
       cmdType = 'AUTH_OK';
       category = 'AUTH_TOKENS';
-    } else if (cmd.includes('stream.divert')) {
-      responseMsg = `[CLI EXEC] Stream route diverted to DhanHQ secondary socket. Bandwidth reallocated to 1.82 MB/s.`;
-      cmdType = 'DHAN_STANDBY';
+    } else if (cmd.includes('failover.status') || cmd.includes('stream.divert')) {
+      responseMsg = `[CLI EXEC] Auto-Failover status: Primary = Upstox Analytics v2 | Backup = Chartink NSE Breakout Scanner (Auto-Armed).`;
+      cmdType = 'CHARTINK_BACKUP';
       category = 'WEBSOCKET';
     } else if (cmd.includes('ping')) {
       responseMsg = `[CLI EXEC] ICMP Ping: NSE BKC Rack-08: 0.84ms, BSE PJ Towers: 1.12ms, MCX Goregaon: 1.45ms. 0% loss.`;
@@ -304,7 +309,7 @@ export const BrokerGatewayRouter: React.FC = () => {
       setCliInput('');
       return;
     } else {
-      responseMsg = `[CLI EXEC] Command '${cmd}' dispatched to colocation broker arbiter. Status: ACKNOWLEDGED (200 OK).`;
+      responseMsg = `[CLI EXEC] Command '${cmd}' dispatched to Upstox/Chartink gateway arbiter. Status: ACKNOWLEDGED (200 OK).`;
       cmdType = 'CLI_OUTPUT';
       category = 'GENERAL';
     }
@@ -418,8 +423,47 @@ export const BrokerGatewayRouter: React.FC = () => {
         </div>
       </div>
 
+      {/* ACTIVE ANALYTICS GATEWAY HEADER & STANDBY BROKERS VISIBILITY TOGGLE */}
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 rounded-xl bg-slate-900/80 border border-cyan-500/30 font-mono text-xs">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <span className="px-2 py-0.5 rounded bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 font-bold text-[10px]">
+            PRIMARY FEED GATEWAY: UPSTOX ANALYTICS V2
+          </span>
+          <span
+            className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded border text-[10px] font-bold ${
+              isUpstoxLive || upstoxData?.status === 'CONNECTED'
+                ? 'bg-emerald-950/70 border-emerald-500/40 text-emerald-300'
+                : 'bg-amber-950/70 border-amber-500/40 text-amber-300'
+            }`}
+            title={
+              isUpstoxLive || upstoxData?.status === 'CONNECTED'
+                ? 'Upstox Analytics Token Active: Streaming live NSE/BSE Market Quotes & Option Chain (No Static IP required). Terminal operates in Paper-Trading & Market Intelligence mode.'
+                : 'Delayed Data Notice: Currently using Yahoo Finance fallback (~15m delayed). Pair your Upstox Analytics Token below to stream live NSE/BSE ticks (No Static IP required).'
+            }
+          >
+            <Info className="w-3.5 h-3.5 shrink-0" />
+            <span>
+              {isUpstoxLive || upstoxData?.status === 'CONNECTED'
+                ? 'UPSTOX LIVE DATA ACTIVE (NO STATIC IP REQUIRED · PAPER TRADING ONLY)'
+                : 'DELAYED FALLBACK DATA — PAIR UPSTOX ANALYTICS TOKEN FOR LIVE FEED'}
+            </span>
+          </span>
+        </div>
+
+        <button
+          onClick={() => setShowUnusedBrokers(!showUnusedBrokers)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-cyan-300 text-[11px] font-bold transition cursor-pointer"
+          title="Unused brokers (Zerodha, Dhan, Angel One, Aditya Birla) are hidden by default and preserved in standby."
+        >
+          {showUnusedBrokers ? <EyeOff className="w-3.5 h-3.5 text-amber-400" /> : <Eye className="w-3.5 h-3.5 text-cyan-400" />}
+          <span>{showUnusedBrokers ? 'Hide Unused Brokers (Zerodha / Dhan / ABM)' : 'Show Standby / Unused Brokers (3 Hidden)'}</span>
+        </button>
+      </div>
+
       {/* PRIMARY BROKER TOPOLOGY GRID */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        {showUnusedBrokers && (
+          <>
         {/* CARD 1: ADITYA BIRLA MONEY (PRIMARY ROUTE) */}
         <div className="relative flex flex-col justify-between bg-[#080d1a]/85 backdrop-blur-xl rounded-2xl p-5 border border-cyan-500/25 shadow-xl hover:shadow-[0_0_30px_rgba(0,240,255,0.18)] transition-all">
           <div className="space-y-3 font-mono">
@@ -601,9 +645,9 @@ export const BrokerGatewayRouter: React.FC = () => {
                 setLogs(prev => [{
                   id: `log-${Date.now()}`,
                   timestamp: timeStr,
-                  type: 'KITE_WS',
+                  type: 'UPSTOX_V2',
                   category: 'WEBSOCKET',
-                  message: 'KiteTicker binary WS ping: RTT 1.84ms on wss://ws.kite.trade. Zero packet jitter.'
+                  message: 'Secondary binary WS ping: RTT 1.84ms. Zero packet jitter.'
                 }, ...prev]);
               }}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-cyan-500/30 text-cyan-300 text-xs font-bold uppercase tracking-wider transition-all"
@@ -703,9 +747,9 @@ export const BrokerGatewayRouter: React.FC = () => {
                 setLogs(prev => [{
                   id: `log-${Date.now()}`,
                   timestamp: timeStr,
-                  type: 'DHAN_STANDBY',
+                  type: 'CHARTINK_BACKUP',
                   category: 'WEBSOCKET',
-                  message: 'DhanHQ Protobuf Standby armed with 150ms trip tripwire. Ready for instant hot-swap.'
+                  message: 'Standby failover armed with 150ms tripwire. Ready for instant hot-swap.'
                 }, ...prev]);
               }}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-amber-500/30 text-amber-300 text-xs font-bold uppercase tracking-wider transition-all"
@@ -725,9 +769,11 @@ export const BrokerGatewayRouter: React.FC = () => {
             </label>
           </div>
         </div>
+          </>
+        )}
 
         {/* CARD 4: UPSTOX ANALYTICS API GATEWAY */}
-        <div className="relative flex flex-col justify-between bg-[#080d1a]/85 backdrop-blur-xl rounded-2xl p-5 border border-cyan-500/30 shadow-xl hover:shadow-[0_0_30px_rgba(0,240,255,0.2)] transition-all font-mono">
+        <div className={`relative flex flex-col justify-between bg-[#080d1a]/85 backdrop-blur-xl rounded-2xl p-5 border border-cyan-500/30 shadow-xl hover:shadow-[0_0_30px_rgba(0,240,255,0.2)] transition-all font-mono ${!showUnusedBrokers ? 'col-span-full' : ''}`}>
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-[10px] text-cyan-400 uppercase tracking-widest font-semibold">
@@ -849,91 +895,95 @@ export const BrokerGatewayRouter: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
-                  {/* ROW 1 */}
+                  {/* ROW 1: OPTION CHAIN & VOLATILITY */}
                   <tr className="hover:bg-slate-900/40 transition-colors">
                     <td className="py-3 px-3">
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_8px_#00f0ff]"></div>
                         <div>
-                          <div className="text-sm text-cyan-200 font-semibold leading-tight font-sans">3D Volatility Surface</div>
-                          <div className="text-[10px] text-slate-400">Sub-millisecond SABR Greek generation</div>
+                          <div className="text-sm text-cyan-200 font-semibold leading-tight font-sans">Option Chain &amp; 3D Volatility Surface</div>
+                          <div className="text-[10px] text-slate-400">Live NSE Option Chain &amp; SABR Greek generation</div>
                         </div>
                       </div>
                     </td>
-                    <td className="py-3 px-3 text-cyan-300">ZERODHA (KiteTicker)</td>
-                    <td className="py-3 px-3 text-slate-400">BINARY WS // PORT 443</td>
+                    <td className="py-3 px-3 text-cyan-300 font-bold">UPSTOX ANALYTICS V2</td>
+                    <td className="py-3 px-3 text-slate-400">HTTPS REST / WS V2 (NO STATIC IP)</td>
                     <td className="py-3 px-3 text-emerald-400 font-bold">1.42 MB/s</td>
                     <td className="py-3 px-3 text-right">
                       <select className="bg-slate-900 border border-slate-800 text-cyan-300 text-[10px] rounded px-2 py-1 outline-none">
-                        <option>ZERODHA (PRIMARY)</option>
-                        <option>DHAN (STANDBY)</option>
-                        <option>ADITYA BIRLA</option>
+                        <option>UPSTOX V2 (PRIMARY)</option>
+                        <option>CHARTINK (AUTO-BACKUP)</option>
+                        {showUnusedBrokers && <option>ZERODHA (STANDBY)</option>}
                       </select>
                     </td>
                   </tr>
 
-                  {/* ROW 2 */}
+                  {/* ROW 2: AUTONOMOUS PAPER EXECUTION */}
                   <tr className="hover:bg-slate-900/40 transition-colors">
                     <td className="py-3 px-3">
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_#4dffb2]"></div>
                         <div>
-                          <div className="text-sm text-cyan-200 font-semibold leading-tight font-sans">Order Execution Stream</div>
-                          <div className="text-[10px] text-slate-400">Institutional direct DMA slicing engine</div>
+                          <div className="text-sm text-cyan-200 font-semibold leading-tight font-sans">Autonomous 5-Agent Paper Execution</div>
+                          <div className="text-[10px] text-slate-400">NSE F&amp;O, NSE/BSE Cash &amp; MCX paper order engine</div>
                         </div>
                       </div>
                     </td>
-                    <td className="py-3 px-3 text-cyan-300">ADITYA BIRLA MONEY</td>
-                    <td className="py-3 px-3 text-slate-400">REST TCP // DIRECT FIBER</td>
+                    <td className="py-3 px-3 text-cyan-300 font-bold">UPSTOX ANALYTICS V2</td>
+                    <td className="py-3 px-3 text-slate-400">PAPER DMA // ZERO BROKER RISK</td>
                     <td className="py-3 px-3 text-emerald-400 font-bold">620 KB/s</td>
                     <td className="py-3 px-3 text-right">
                       <select className="bg-slate-900 border border-slate-800 text-cyan-300 text-[10px] rounded px-2 py-1 outline-none">
-                        <option>ABM (PRIMARY)</option>
-                        <option>ZERODHA KITE</option>
-                        <option>DHANHQ</option>
+                        <option>UPSTOX FEED (PRIMARY)</option>
+                        <option>CHARTINK FEED (BACKUP)</option>
+                        {showUnusedBrokers && <option>ABM (STANDBY)</option>}
                       </select>
                     </td>
                   </tr>
 
-                  {/* ROW 3 */}
+                  {/* ROW 3: LIVE EQUITIES & BREAKOUT RADAR */}
                   <tr className="hover:bg-slate-900/40 transition-colors">
                     <td className="py-3 px-3">
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_8px_#ffdea8]"></div>
                         <div>
-                          <div className="text-sm text-cyan-200 font-semibold leading-tight font-sans">Historical Candlesticks & VWAP</div>
-                          <div className="text-[10px] text-slate-400">Deep-tick rolling 1-min & 5-min bars</div>
+                          <div className="text-sm text-cyan-200 font-semibold leading-tight font-sans">45-Script NSE Breakout &amp; Sector Radar</div>
+                          <div className="text-[10px] text-slate-400">ISIN-mapped batch quotes &amp; intraday OHLCV</div>
                         </div>
                       </div>
                     </td>
-                    <td className="py-3 px-3 text-cyan-300">DHANHQ REST API</td>
-                    <td className="py-3 px-3 text-slate-400">HTTPS REST / V2 HIST</td>
+                    <td className="py-3 px-3 text-cyan-300 font-bold">UPSTOX ANALYTICS V2</td>
+                    <td className="py-3 px-3 text-slate-400">/MARKET-QUOTE/QUOTES V2</td>
                     <td className="py-3 px-3 text-amber-400 font-bold">380 KB/s</td>
                     <td className="py-3 px-3 text-right">
                       <select className="bg-slate-900 border border-slate-800 text-cyan-300 text-[10px] rounded px-2 py-1 outline-none">
-                        <option>DHAN (ZERO COST)</option>
-                        <option>ZERODHA (PAID)</option>
-                        <option>LOCAL CACHE</option>
+                        <option>UPSTOX V2 (PRIMARY)</option>
+                        <option>CHARTINK (AUTO-BACKUP)</option>
+                        {showUnusedBrokers && <option>DHAN (STANDBY)</option>}
                       </select>
                     </td>
                   </tr>
 
-                  {/* ROW 4 */}
+                  {/* ROW 4: CHARTINK AUTO-FAILOVER BACKUP */}
                   <tr className="hover:bg-slate-900/40 transition-colors">
                     <td className="py-3 px-3">
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full bg-rose-400 animate-pulse shadow-[0_0_8px_#ffb4ab]"></div>
                         <div>
                           <div className="text-sm text-cyan-200 font-semibold leading-tight font-sans">Fallback Hot-Swap Redundancy</div>
-                          <div className="text-[10px] text-slate-400">Automatic heartbeat switch on link failure</div>
+                          <div className="text-[10px] text-slate-400">Auto-triggers Chartink NSE Scanner if Upstox has issues</div>
                         </div>
                       </div>
                     </td>
-                    <td className="py-3 px-3 text-emerald-400">DHANHQ HOT ARMED</td>
-                    <td className="py-3 px-3 text-slate-400">ASYNC MULTIPLEX</td>
-                    <td className="py-3 px-3 text-slate-500">0.05 KB/s (IDLE)</td>
+                    <td className="py-3 px-3 text-emerald-400 font-bold">CHARTINK AUTO-BACKUP</td>
+                    <td className="py-3 px-3 text-slate-400">CSRF + SESSION SCANNER</td>
+                    <td className="py-3 px-3 text-slate-400">
+                      {isUpstoxLive || upstoxData?.status === 'CONNECTED' ? '0.05 KB/s (STANDBY)' : '410 KB/s (ACTIVE FAILOVER)'}
+                    </td>
                     <td className="py-3 px-3 text-right">
-                      <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-emerald-400 font-bold text-[10px]">AUTO_ARMED</span>
+                      <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-emerald-400 font-bold text-[10px]">
+                        {isUpstoxLive || upstoxData?.status === 'CONNECTED' ? 'AUTO_ARMED (STANDBY)' : 'FAILOVER_ENGAGED'}
+                      </span>
                     </td>
                   </tr>
                 </tbody>
@@ -1019,27 +1069,27 @@ export const BrokerGatewayRouter: React.FC = () => {
             <div className="space-y-2.5 text-xs font-mono">
               <div>
                 <div className="flex justify-between">
-                  <span className="text-slate-300">ABM Execution Pipeline</span>
-                  <span className="text-cyan-300 font-bold">58% load</span>
+                  <span className="text-slate-300">Upstox Analytics v2 Live Stream</span>
+                  <span className="text-cyan-300 font-bold">64% load</span>
                 </div>
                 <div className="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden mt-1">
-                  <div className="bg-cyan-400 h-full w-[58%] shadow-[0_0_8px_#00f0ff]"></div>
+                  <div className="bg-cyan-400 h-full w-[64%] shadow-[0_0_8px_#00f0ff]"></div>
                 </div>
               </div>
 
               <div>
                 <div className="flex justify-between">
-                  <span className="text-slate-300">Zerodha Kite Ticker WS</span>
-                  <span className="text-emerald-400 font-bold">34% load</span>
+                  <span className="text-slate-300">5-Agent Paper Execution Engine</span>
+                  <span className="text-emerald-400 font-bold">28% load</span>
                 </div>
                 <div className="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden mt-1">
-                  <div className="bg-emerald-400 h-full w-[34%] shadow-[0_0_8px_#4dffb2]"></div>
+                  <div className="bg-emerald-400 h-full w-[28%] shadow-[0_0_8px_#4dffb2]"></div>
                 </div>
               </div>
 
               <div>
                 <div className="flex justify-between">
-                  <span className="text-slate-300">Dhan Protobuf Pool</span>
+                  <span className="text-slate-300">Chartink Auto-Failover Backup</span>
                   <span className="text-amber-400 font-bold">8% load</span>
                 </div>
                 <div className="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden mt-1">
@@ -1122,8 +1172,8 @@ export const BrokerGatewayRouter: React.FC = () => {
               <span className="text-slate-500 shrink-0">[{log.timestamp}]</span>
               <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold shrink-0 ${
                 log.type === 'AUTH_OK' ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-500/40' :
-                log.type === 'KITE_WS' ? 'bg-cyan-950/80 text-cyan-300 border border-cyan-500/40' :
-                log.type === 'DHAN_STANDBY' ? 'bg-amber-950/80 text-amber-300 border border-amber-500/40' :
+                log.type === 'UPSTOX_V2' ? 'bg-cyan-950/80 text-cyan-300 border border-cyan-500/40' :
+                log.type === 'CHARTINK_BACKUP' ? 'bg-amber-950/80 text-amber-300 border border-amber-500/40' :
                 log.type === 'RATE_LIMIT' ? 'bg-slate-800 text-slate-300' :
                 'bg-cyan-950/80 text-cyan-400'
               }`}>
@@ -1141,7 +1191,7 @@ export const BrokerGatewayRouter: React.FC = () => {
             type="text"
             value={cliInput}
             onChange={(e) => setCliInput(e.target.value)}
-            placeholder="Type tactical CLI command (e.g. 'broker.reconnect --force abm', 'stream.divert --to dhanhq', 'ping')..."
+            placeholder="Type tactical CLI command (e.g. 'upstox.ping', 'failover.status', 'ping', 'clear')..."
             className="w-full bg-transparent border-0 text-slate-100 text-xs outline-none focus:ring-0 placeholder:text-slate-600"
           />
           <button
@@ -1166,7 +1216,7 @@ export const BrokerGatewayRouter: React.FC = () => {
             </div>
 
             <p className="text-xs text-slate-300 leading-relaxed font-sans">
-              Engaging the master kill switch will immediately sever all active binary WebSocket threads, cancel open L2 orders on Aditya Birla Money, and divert failover to local overnight repo cache.
+              Engaging the master kill switch will immediately sever all active Upstox Analytics v2 market streams, halt the 5-Agent Paper Execution Engine, and divert failover to the local cache.
             </p>
 
             <div className="p-3 rounded-lg bg-rose-950/40 border border-rose-500/30 text-xs text-rose-200">
@@ -1392,11 +1442,38 @@ export const BrokerGatewayRouter: React.FC = () => {
                   </div>
                 </div>
 
+                {/* Official Upstox Analytics Token — No Static IP Needed Banner */}
+                <div className="p-3.5 rounded-xl bg-cyan-950/35 border border-cyan-500/40 text-xs space-y-1.5">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 font-bold text-cyan-300">
+                      <Info className="w-4 h-4 shrink-0 text-cyan-400" />
+                      <span>UPSTOX ANALYTICS TOKEN: NO STATIC IP REQUIRED</span>
+                    </div>
+                    <a
+                      href="https://upstox.com/developer/api-documentation/analytics-token/#supported-apis"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-[10px] text-cyan-400 hover:text-cyan-200 underline"
+                    >
+                      <span>Official Supported APIs Docs</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+                  <p className="text-[11px] text-slate-300 leading-relaxed font-sans">
+                    We do <strong className="text-emerald-300">not</strong> place live money orders from this terminal (all 5 autonomous agents execute strictly in <strong className="text-cyan-300">Paper-Trading &amp; Market Intelligence</strong> mode). Verification &amp; live streaming use Upstox&apos;s <code className="text-cyan-300">/market-quote/quotes</code> and <code className="text-cyan-300">/option/chain</code> endpoints, which work with any Upstox Analytics Token <strong className="text-emerald-300">without requiring a Static IP</strong>.
+                  </p>
+                </div>
+
                 {/* Feedback Alerts */}
                 {upstoxError && (
-                  <div className="p-3 rounded-xl bg-rose-950/50 border border-rose-500/40 text-rose-300 text-xs flex items-center gap-2.5 animate-in fade-in">
-                    <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
-                    <span>{upstoxError}</span>
+                  <div className="p-3.5 rounded-xl bg-rose-950/60 border border-rose-500/50 text-rose-200 text-xs flex flex-col gap-1.5 animate-in fade-in">
+                    <div className="flex items-center gap-2 font-bold text-rose-300">
+                      <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
+                      <span>Upstox Token Verification Notice</span>
+                    </div>
+                    <p className="text-[11px] text-slate-300 leading-relaxed font-sans">
+                      {upstoxError}
+                    </p>
                   </div>
                 )}
                 {upstoxSuccessMsg && (

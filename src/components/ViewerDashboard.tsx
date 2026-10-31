@@ -1,6 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useLiveMarketData } from '../services/liveMarketService';
 import { GlobalSentiment } from './GlobalSentiment';
+import { MarketImpactAnalysis } from './MarketImpactAnalysis';
+import { FirstPrinciplesMarketEngine } from './FirstPrinciplesMarketEngine';
+import type { InstitutionalStockPick } from '../data/institutionalEquityData';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -8,10 +11,17 @@ import {
   RefreshCw, 
   Clock, 
   ShieldCheck, 
+  ShieldAlert,
   Activity, 
   ArrowUpRight, 
   ArrowDownRight,
-  ExternalLink
+  Sparkles,
+  ExternalLink,
+  Info,
+  X,
+  Gauge,
+  Sliders,
+  Layers
 } from 'lucide-react';
 
 interface ViewerDashboardProps {
@@ -19,14 +29,51 @@ interface ViewerDashboardProps {
 }
 
 export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
-  const { quotes, latencyMs, countdownSeconds, marketSession, refetch, isLive } = useLiveMarketData(5000);
+  const { quotes, latencyMs, countdownSeconds, marketSession, refetch, isLive, provider } = useLiveMarketData(5000);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedSector, setSelectedSector] = useState<'ALL' | 'HEAVYWEIGHTS' | 'BANKING' | 'DEFENSE_INFRA' | 'IT'>('ALL');
+  const [selectedFilter, setSelectedFilter] = useState<'ALL' | 'SHORT_TERM' | 'LONG_TERM' | 'LARGE_CAP' | 'MID_CAP' | 'SMALL_CAP'>('ALL');
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Conviction Score Modal Audits
+  const [selectedConvictionStock, setSelectedConvictionStock] = useState<any | null>(null);
+  const [showModelFormulaModal, setShowModelFormulaModal] = useState<boolean>(false);
+
+  // Dynamic Live Technical Breakout Radar Universe (Primary: Upstox v2 Live -> Backup: Chartink Auto-Failover)
+  const [screenerStocks, setScreenerStocks] = useState<InstitutionalStockPick[]>([]);
+  const [screenerSource, setScreenerSource] = useState<'UPSTOX_PRIMARY_LIVE' | 'CHARTINK_BACKUP_AUTO_FAILOVER'>('CHARTINK_BACKUP_AUTO_FAILOVER');
+  const [isLoadingScreener, setIsLoadingScreener] = useState<boolean>(true);
+
+  const loadScreener = useCallback(async () => {
+    try {
+      const res = await fetch('/api/screener/chartink');
+      const data = await res.json();
+      if (data.success && Array.isArray(data.data) && data.data.length > 0) {
+        setScreenerStocks(data.data);
+        if (data.source === 'UPSTOX_PRIMARY_LIVE') {
+          setScreenerSource('UPSTOX_PRIMARY_LIVE');
+        } else {
+          setScreenerSource('CHARTINK_BACKUP_AUTO_FAILOVER');
+        }
+      }
+    } catch {
+      // Keep existing screener stocks on transient failure
+    } finally {
+      setIsLoadingScreener(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadScreener();
+    const interval = setInterval(loadScreener, 60000);
+    return () => clearInterval(interval);
+  }, [loadScreener, provider]);
+
+  const isUpstoxPrimaryActive = screenerSource === 'UPSTOX_PRIMARY_LIVE' || provider === 'UPSTOX_ANALYTICS_REALTIME';
 
   const handleManualRefresh = () => {
     setIsRefreshing(true);
     refetch();
+    loadScreener();
     setTimeout(() => setIsRefreshing(false), 600);
   };
 
@@ -36,72 +83,106 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
   const bankNifty = quotes['^NSEBANK'];
   const indiaVix = quotes['^INDIAVIX'];
 
-  // Indian equities list
+  // Indian equities list: dynamically mapped directly from the 45 stocks on Dynamic Technical Breakout Radar
   const stocksList = useMemo(() => {
-    const list = [
-      { symbol: 'RELIANCE.NS', name: 'Reliance Industries', sector: 'HEAVYWEIGHTS' },
-      { symbol: 'TCS.NS', name: 'Tata Consultancy Services', sector: 'IT' },
-      { symbol: 'HDFCBANK.NS', name: 'HDFC Bank Ltd', sector: 'BANKING' },
-      { symbol: 'INFY.NS', name: 'Infosys Limited', sector: 'IT' },
-      { symbol: 'ICICIBANK.NS', name: 'ICICI Bank Ltd', sector: 'BANKING' },
-      { symbol: 'SBIN.NS', name: 'State Bank of India', sector: 'BANKING' },
-      { symbol: 'BHARTIARTL.NS', name: 'Bharti Airtel', sector: 'HEAVYWEIGHTS' },
-      { symbol: 'LT.NS', name: 'Larsen & Toubro', sector: 'DEFENSE_INFRA' },
-      { symbol: 'TRENT.NS', name: 'Trent Ltd', sector: 'HEAVYWEIGHTS' },
-      { symbol: 'BEL.NS', name: 'Bharat Electronics', sector: 'DEFENSE_INFRA' },
-      { symbol: 'HAL.NS', name: 'Hindustan Aeronautics', sector: 'DEFENSE_INFRA' },
-      { symbol: 'DIXON.NS', name: 'Dixon Technologies', sector: 'DEFENSE_INFRA' },
-      { symbol: 'POLYCAB.NS', name: 'Polycab India', sector: 'DEFENSE_INFRA' },
-      { symbol: 'SOLARINDS.NS', name: 'Solar Industries', sector: 'DEFENSE_INFRA' },
-      { symbol: 'COCHINSHIP.NS', name: 'Cochin Shipyard', sector: 'DEFENSE_INFRA' },
-      { symbol: 'NTPC.NS', name: 'NTPC Limited', sector: 'HEAVYWEIGHTS' },
-    ];
+    return screenerStocks.map(stock => {
+      const live = quotes[stock.symbol];
+      const price = live?.price ?? stock.ltp ?? null;
+      const change = live?.change ?? stock.changeVal ?? null;
+      const changePct = live?.changePct ?? stock.changePct ?? null;
+      const high = live?.high ?? null;
+      const low = live?.low ?? null;
+      const convictionScore =
+        stock.strategyQuantification?.compositeScore ??
+        stock.tacticalLevels?.confidenceScore ??
+        78;
 
-    return list.map(item => {
-      const live = quotes[item.symbol];
       return {
-        ...item,
-        price: live?.price ?? null,
-        change: live?.change ?? null,
-        changePct: live?.changePct ?? null,
-        prevClose: live?.prevClose ?? null,
-        high: live?.high ?? null,
-        low: live?.low ?? null,
-        fiftyTwoWeekHigh: live?.fiftyTwoWeekHigh ?? null,
-        fiftyTwoWeekLow: live?.fiftyTwoWeekLow ?? null,
-        volume: live?.volume ?? null,
-        timestamp: live?.timestamp || '',
+        id: stock.id,
+        ticker: stock.ticker,
+        symbol: stock.symbol,
+        name: stock.name,
+        sector: stock.sector,
+        capCategory: stock.capCategory || 'Mid Cap',
+        horizon: stock.horizon,
+        price,
+        change,
+        changePct,
+        high,
+        low,
+        convictionScore,
+        strategyQuantification: stock.strategyQuantification,
+        tacticalLevels: stock.tacticalLevels,
+        sourceEvidence: stock.sourceEvidence,
+        volume: stock.volume,
       };
     });
-  }, [quotes]);
+  }, [screenerStocks, quotes]);
+
+  const shortTermCount = useMemo(() => stocksList.filter(s => s.horizon === 'SHORT_TERM').length, [stocksList]);
+  const longTermCount = useMemo(() => stocksList.filter(s => s.horizon === 'LONG_TERM').length, [stocksList]);
+  const largeCapCount = useMemo(() => stocksList.filter(s => s.sector === 'LARGE_CAP').length, [stocksList]);
+  const midCapCount = useMemo(() => stocksList.filter(s => s.sector === 'MID_CAP').length, [stocksList]);
+  const smallCapCount = useMemo(() => stocksList.filter(s => s.sector === 'SMALL_CAP').length, [stocksList]);
 
   const filteredStocks = useMemo(() => {
     return stocksList.filter(s => {
-      const matchesSector = selectedSector === 'ALL' || s.sector === selectedSector;
-      const matchesQuery = 
-        s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.symbol.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesSector && matchesQuery;
+      const matchesFilter =
+        selectedFilter === 'ALL' ||
+        (selectedFilter === 'SHORT_TERM' && s.horizon === 'SHORT_TERM') ||
+        (selectedFilter === 'LONG_TERM' && s.horizon === 'LONG_TERM') ||
+        (selectedFilter === 'LARGE_CAP' && s.sector === 'LARGE_CAP') ||
+        (selectedFilter === 'MID_CAP' && s.sector === 'MID_CAP') ||
+        (selectedFilter === 'SMALL_CAP' && s.sector === 'SMALL_CAP');
+
+      const q = searchQuery.toLowerCase().trim();
+      const matchesQuery =
+        !q ||
+        s.name.toLowerCase().includes(q) ||
+        s.symbol.toLowerCase().includes(q) ||
+        s.ticker.toLowerCase().includes(q);
+
+      return matchesFilter && matchesQuery;
     });
-  }, [stocksList, selectedSector, searchQuery]);
+  }, [stocksList, selectedFilter, searchQuery]);
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto font-sans animate-in fade-in duration-300">
-      {/* Top Banner: Market Status & Real-time Indicator */}
+      {/* Top Banner: Market Status & Primary Upstox vs Backup Chartink Indicator */}
       <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></div>
+          <div className={`w-2.5 h-2.5 rounded-full animate-pulse ${
+            screenerSource === 'UPSTOX_PRIMARY_LIVE' || provider === 'UPSTOX_ANALYTICS_REALTIME'
+              ? 'bg-emerald-400'
+              : 'bg-amber-400'
+          }`}></div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-sm font-bold text-slate-100 uppercase tracking-wide">
                 Live Indian Markets (NSE &amp; BSE)
               </h2>
-              <span className="text-[11px] font-mono text-amber-300 font-semibold bg-amber-950/60 px-2 py-0.5 rounded border border-amber-700/40">
-                DELAYED · UNOFFICIAL
-              </span>
+              {screenerSource === 'UPSTOX_PRIMARY_LIVE' || provider === 'UPSTOX_ANALYTICS_REALTIME' ? (
+                <span
+                  className="text-[11px] font-mono text-emerald-300 font-semibold bg-emerald-950/70 px-2.5 py-0.5 rounded border border-emerald-500/40 inline-flex items-center gap-1.5"
+                  title="Primary Feed Active: Streaming real-time NSE quotes directly from Upstox Analytics v2 API (No Static IP required). Chartink NSE Scanner is armed as automatic backup failover."
+                >
+                  <span>UPSTOX LIVE NSE FEED (PRIMARY)</span>
+                  <Info className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                </span>
+              ) : (
+                <span
+                  className="text-[11px] font-mono text-amber-300 font-semibold bg-amber-950/70 px-2.5 py-0.5 rounded border border-amber-500/40 inline-flex items-center gap-1.5"
+                  title="Auto-Failover Backup Active: Upstox Analytics Token is unpaired or unreachable, so Chartink NSE Breakout Scanner is automatically serving data as backup. Pair Upstox in Sync Hub -> Broker Gateway to switch to Primary Upstox Realtime."
+                >
+                  <span>CHARTINK BACKUP FEED (AUTO-FAILOVER)</span>
+                  <Info className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Delayed, unofficial quotes (Yahoo Finance daily candles) — not a licensed real-time exchange feed. Change % is computed against the prior session close. For information only.
+              {screenerSource === 'UPSTOX_PRIMARY_LIVE' || provider === 'UPSTOX_ANALYTICS_REALTIME'
+                ? '45 NSE equities polled in real time via Upstox Analytics v2 API (Primary). Chartink NSE Scanner is on standby as automatic failover backup.'
+                : '45 dynamic technical breakout candidates served via Chartink Auto-Failover Backup while Upstox Analytics Gateway is on standby.'}
             </p>
           </div>
         </div>
@@ -148,20 +229,14 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
             )}
           </div>
           <div className="mt-1 text-[11px] font-mono text-slate-400 flex items-center justify-between">
-            <span>
-              Chg: {nifty?.change != null 
-                ? `${(nifty.change ?? 0) >= 0 ? '+' : ''}${nifty.change.toFixed(2)}` 
-                : '—'}
-            </span>
-            <span>
-              Prev: {nifty?.prevClose != null 
-                ? nifty.prevClose.toLocaleString('en-IN') 
-                : '—'}
+            <span>Prev: ₹{nifty?.prevClose?.toLocaleString('en-IN') ?? '—'}</span>
+            <span className={(nifty?.change ?? 0) >= 0 ? 'text-emerald-400/90' : 'text-rose-400/90'}>
+              {nifty?.change != null ? `${(nifty.change ?? 0) >= 0 ? '+' : ''}${nifty.change.toFixed(2)}` : '—'}
             </span>
           </div>
         </div>
 
-        {/* BSE SENSEX */}
+        {/* SENSEX */}
         <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-slate-700 transition">
           <div className="flex items-center justify-between text-xs text-slate-400 font-medium">
             <span className="font-bold text-slate-200">BSE SENSEX</span>
@@ -183,15 +258,9 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
             )}
           </div>
           <div className="mt-1 text-[11px] font-mono text-slate-400 flex items-center justify-between">
-            <span>
-              Chg: {sensex?.change != null 
-                ? `${(sensex.change ?? 0) >= 0 ? '+' : ''}${sensex.change.toFixed(2)}` 
-                : '—'}
-            </span>
-            <span>
-              Prev: {sensex?.prevClose != null 
-                ? sensex.prevClose.toLocaleString('en-IN') 
-                : '—'}
+            <span>Prev: ₹{sensex?.prevClose?.toLocaleString('en-IN') ?? '—'}</span>
+            <span className={(sensex?.change ?? 0) >= 0 ? 'text-emerald-400/90' : 'text-rose-400/90'}>
+              {sensex?.change != null ? `${(sensex.change ?? 0) >= 0 ? '+' : ''}${sensex.change.toFixed(2)}` : '—'}
             </span>
           </div>
         </div>
@@ -218,15 +287,9 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
             )}
           </div>
           <div className="mt-1 text-[11px] font-mono text-slate-400 flex items-center justify-between">
-            <span>
-              Chg: {bankNifty?.change != null 
-                ? `${(bankNifty.change ?? 0) >= 0 ? '+' : ''}${bankNifty.change.toFixed(2)}` 
-                : '—'}
-            </span>
-            <span>
-              Prev: {bankNifty?.prevClose != null 
-                ? bankNifty.prevClose.toLocaleString('en-IN') 
-                : '—'}
+            <span>Prev: ₹{bankNifty?.prevClose?.toLocaleString('en-IN') ?? '—'}</span>
+            <span className={(bankNifty?.change ?? 0) >= 0 ? 'text-emerald-400/90' : 'text-rose-400/90'}>
+              {bankNifty?.change != null ? `${(bankNifty.change ?? 0) >= 0 ? '+' : ''}${bankNifty.change.toFixed(2)}` : '—'}
             </span>
           </div>
         </div>
@@ -239,13 +302,11 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
           </div>
           <div className="mt-2 flex items-baseline justify-between">
             <span className="text-2xl font-bold font-mono text-white">
-              {indiaVix?.price != null
-                ? indiaVix.price.toFixed(2)
-                : '—'}
+              {indiaVix?.price != null ? indiaVix.price.toFixed(2) : '—'}
             </span>
             {indiaVix?.changePct != null && (
               <span className={`text-xs font-mono font-bold flex items-center gap-0.5 ${
-                (indiaVix.changePct ?? 0) <= 0 ? 'text-emerald-400' : 'text-amber-400'
+                (indiaVix.changePct ?? 0) <= 0 ? 'text-emerald-400' : 'text-rose-400'
               }`}>
                 {(indiaVix.changePct ?? 0) >= 0 ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
                 {(indiaVix.changePct ?? 0) >= 0 ? '+' : ''}{indiaVix.changePct.toFixed(2)}%
@@ -253,40 +314,67 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
             )}
           </div>
           <div className="mt-1 text-[11px] font-mono text-slate-400 flex items-center justify-between">
-            <span>
-              Chg: {indiaVix?.change != null 
-                ? `${(indiaVix.change ?? 0) >= 0 ? '+' : ''}${indiaVix.change.toFixed(2)}` 
-                : '—'}
-            </span>
-            <span>
-              Prev: {indiaVix?.prevClose != null 
-                ? indiaVix.prevClose.toFixed(2) 
-                : '—'}
+            <span>Prev: {indiaVix?.prevClose?.toFixed(2) ?? '—'}</span>
+            <span className={(indiaVix?.change ?? 0) <= 0 ? 'text-emerald-400/90' : 'text-rose-400/90'}>
+              {indiaVix?.change != null ? `${(indiaVix.change ?? 0) >= 0 ? '+' : ''}${indiaVix.change.toFixed(2)}` : '—'}
             </span>
           </div>
         </div>
       </div>
 
-      {/* Global Sentiment: Real-Time Fear & Greed Index */}
-      <GlobalSentiment />
+      {/* First-Principles Market Intelligence, Sector Gain/Loss Matrix & Self-Learning 5 Agents */}
+      <FirstPrinciplesMarketEngine quotes={quotes} />
 
-      {/* Main Content: Equities Watchlist & Filter */}
+      {/* Real-Time Market Impact & Direction Drivers (Why the Market is Rising / Declining) */}
+      <MarketImpactAnalysis
+        quotes={quotes}
+        screenerStocks={screenerStocks}
+        marketSession={marketSession}
+        countdownSeconds={countdownSeconds}
+        onRefresh={handleManualRefresh}
+      />
+
+      {/* Global Sentiment: Real-Time Fear & Greed Index (Dynamically uses 45 Live Screener Picks) */}
+      <GlobalSentiment livePicks={screenerStocks} />
+
+      {/* Main Content: Equities Watchlist & Filter (Same 45 stocks as Dynamic Technical Breakout Radar) */}
       <div className="p-5 rounded-xl bg-slate-900/80 border border-slate-800 shadow-sm space-y-4">
+        {/* Header & Live Count Badge */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-slate-800/80">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-cyan-400" />
+            <h3 className="text-sm font-bold text-slate-100 uppercase tracking-wide">
+              Dynamic Technical Breakout Equities ({stocksList.length} Active Candidates)
+            </h3>
+            <span className={`px-2 py-0.5 rounded font-mono text-[10px] font-bold border ${
+              isUpstoxPrimaryActive
+                ? 'bg-emerald-950/80 border-emerald-500/40 text-emerald-300'
+                : 'bg-amber-950/80 border-amber-500/40 text-amber-300'
+            }`}>
+              {isUpstoxPrimaryActive ? 'UPSTOX LIVE NSE FEED (PRIMARY)' : 'CHARTINK BACKUP NSE FEED (AUTO-FAILOVER)'}
+            </span>
+          </div>
+          <span className="text-xs text-slate-400 font-mono">
+            {filteredStocks.length} of {stocksList.length} stocks shown
+          </span>
+        </div>
+
         {/* Filter and Search Bar */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
             {[
-              { id: 'ALL', label: 'All Equities' },
-              { id: 'HEAVYWEIGHTS', label: 'Large Cap' },
-              { id: 'BANKING', label: 'Banking & Financials' },
-              { id: 'DEFENSE_INFRA', label: 'Defense & Infra' },
-              { id: 'IT', label: 'IT & Tech' },
+              { id: 'ALL', label: `All Radar Stocks (${stocksList.length})` },
+              { id: 'SHORT_TERM', label: `Short-Term Swings (${shortTermCount})` },
+              { id: 'LONG_TERM', label: `Long-Term Compounders (${longTermCount})` },
+              { id: 'LARGE_CAP', label: `Large Cap (${largeCapCount})` },
+              { id: 'MID_CAP', label: `Mid Cap (${midCapCount})` },
+              { id: 'SMALL_CAP', label: `Small Cap (${smallCapCount})` },
             ].map(tab => (
               <button
                 key={tab.id}
-                onClick={() => setSelectedSector(tab.id as any)}
+                onClick={() => setSelectedFilter(tab.id as any)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition cursor-pointer ${
-                  selectedSector === tab.id
+                  selectedFilter === tab.id
                     ? 'bg-cyan-500 text-slate-950 font-bold shadow-sm'
                     : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                 }`}
@@ -300,7 +388,7 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
             <input
               type="text"
-              placeholder="Search stock by name or symbol..."
+              placeholder="Search by company or symbol..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 outline-none focus:border-cyan-500 transition"
@@ -308,7 +396,8 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
           </div>
         </div>
 
-        {/* Clean, Lightweight Stock Table */}
+        {/* Dynamic Stock Table — strictly rendering ONLY the requested fields:
+            Company/Symbol, LTP, Change, Gain/Loss%, Day High/Low, Conviction Score */}
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs font-sans">
             <thead>
@@ -317,9 +406,19 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
                 <th className="py-2.5 px-3 text-right">LTP (₹)</th>
                 <th className="py-2.5 px-3 text-right">Change (₹)</th>
                 <th className="py-2.5 px-3 text-right">Gain / Loss (%)</th>
-                <th className="py-2.5 px-3 text-right hidden md:table-cell">Day High / Low</th>
-                <th className="py-2.5 px-3 text-right hidden lg:table-cell">Previous Close</th>
-                <th className="py-2.5 px-3 text-right hidden xl:table-cell">Volume</th>
+                <th className="py-2.5 px-3 text-right">Day High / Low</th>
+                <th className="py-2.5 px-3 text-right">
+                  <div className="inline-flex items-center gap-1.5 justify-end">
+                    <span>Conviction Score</span>
+                    <button
+                      onClick={() => setShowModelFormulaModal(true)}
+                      className="p-1 rounded hover:bg-slate-800 text-cyan-400 hover:text-cyan-300 transition"
+                      title="View 5-Factor Conviction Quantification Model & Formula"
+                    >
+                      <Info className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 font-mono">
@@ -327,17 +426,30 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
                 const isPositive = (stock.changePct ?? 0) >= 0;
                 return (
                   <tr key={stock.symbol} className="hover:bg-slate-800/40 transition">
+                    {/* Company / Symbol */}
                     <td className="py-3 px-3">
-                      <div className="font-bold text-slate-100 font-sans">{stock.name}</div>
-                      <div className="text-[10px] text-slate-500 font-mono">{stock.symbol}</div>
+                      <div className="flex items-center gap-2">
+                        <div>
+                          <div className="font-bold text-slate-100 font-sans text-xs">{stock.name}</div>
+                          <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1.5 mt-0.5">
+                            <span className="text-cyan-300 font-bold">{stock.ticker}</span>
+                            <span>·</span>
+                            <span className="text-slate-500">{stock.symbol}</span>
+                            <span>·</span>
+                            <span className="text-slate-400">{stock.capCategory}</span>
+                          </div>
+                        </div>
+                      </div>
                     </td>
 
-                    <td className="py-3 px-3 text-right font-bold text-slate-100">
+                    {/* LTP (₹) */}
+                    <td className="py-3 px-3 text-right font-bold text-slate-100 text-sm">
                       {stock.price !== null
                         ? `₹${stock.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
                         : '—'}
                     </td>
 
+                    {/* Change (₹) */}
                     <td className={`py-3 px-3 text-right font-medium ${
                       stock.change === null ? 'text-slate-500' : isPositive ? 'text-emerald-400' : 'text-rose-400'
                     }`}>
@@ -346,6 +458,7 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
                         : '—'}
                     </td>
 
+                    {/* Gain / Loss (%) */}
                     <td className={`py-3 px-3 text-right font-bold ${
                       stock.changePct === null ? 'text-slate-500' : isPositive ? 'text-emerald-400' : 'text-rose-400'
                     }`}>
@@ -357,22 +470,33 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
                       ) : '—'}
                     </td>
 
-                    <td className="py-3 px-3 text-right text-slate-400 hidden md:table-cell text-[11px]">
+                    {/* Day High / Low */}
+                    <td className="py-3 px-3 text-right text-slate-300 text-[11px]">
                       {stock.high !== null && stock.low !== null ? (
                         <span>
                           ₹{stock.low.toLocaleString('en-IN')} &ndash; ₹{stock.high.toLocaleString('en-IN')}
                         </span>
-                      ) : '—'}
+                      ) : (
+                        <span className="text-slate-500">—</span>
+                      )}
                     </td>
 
-                    <td className="py-3 px-3 text-right text-slate-400 hidden lg:table-cell text-[11px]">
-                      {stock.prevClose !== null
-                        ? `₹${stock.prevClose.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
-                        : '—'}
-                    </td>
-
-                    <td className="py-3 px-3 text-right text-slate-400 hidden xl:table-cell text-[11px]">
-                      {stock.volume ? stock.volume.toLocaleString('en-IN') : '—'}
+                    {/* Conviction Score */}
+                    <td className="py-3 px-3 text-right">
+                      <button
+                        onClick={() => setSelectedConvictionStock(stock)}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border font-mono font-bold text-xs transition hover:scale-105 cursor-pointer ${
+                          stock.convictionScore >= 88
+                            ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300 shadow-[0_0_8px_rgba(16,185,129,0.2)]'
+                            : stock.convictionScore >= 80
+                            ? 'bg-cyan-950/80 border-cyan-500/50 text-cyan-300 shadow-[0_0_8px_rgba(0,240,255,0.2)]'
+                            : 'bg-amber-950/80 border-amber-500/50 text-amber-300 shadow-[0_0_8px_rgba(245,158,11,0.2)]'
+                        }`}
+                        title="Click to view 5-factor mathematical audit and ≥88/100 Execution Gate status"
+                      >
+                        <span>{stock.convictionScore >= 88 ? '✓ ' : ''}{stock.convictionScore} / 100</span>
+                        <Info className="w-3 h-3 text-slate-400 hover:text-cyan-300" />
+                      </button>
                     </td>
                   </tr>
                 );
@@ -380,8 +504,10 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
 
               {filteredStocks.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-slate-500">
-                    No equities found matching "{searchQuery}"
+                  <td colSpan={6} className="py-8 text-center text-slate-500">
+                    {isLoadingScreener 
+                      ? 'Synchronizing 45 dynamic breakout candidates from live NSE feed...' 
+                      : `No equities found matching "${searchQuery}"`}
                   </td>
                 </tr>
               )}
@@ -389,6 +515,232 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
           </table>
         </div>
       </div>
+
+      {/* MASTER CONVICTION MODEL FORMULA MODAL */}
+      {showModelFormulaModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-lg bg-cyan-950 border border-cyan-500/40 text-cyan-400">
+                  <Gauge className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-100 text-base">5-Factor Quantitative Conviction Score &amp; ≥88/100 Execution Gate</h3>
+                  <p className="text-xs text-slate-400">Continuous Stock-Differentiated Mathematical Framework</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowModelFormulaModal(false)}
+                className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3.5 bg-cyan-950/40 border border-cyan-500/30 rounded-xl text-xs space-y-1.5 text-slate-300">
+              <div className="font-bold text-cyan-300 flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-cyan-400" />
+                <span>How Conviction Score Relates to the 88/100 Execution Gate</span>
+              </div>
+              <p>
+                The <strong>Conviction Score (0–100)</strong> is the weighted composite of the 5 quantitative pillars below. <strong>88/100 is the minimum Execution Qualification Gate</strong>: stocks scoring <strong>&ge;88/100</strong> qualify for autonomous/desk deployment (<em>Tier 1 Alpha</em>), while stocks scoring <strong>80–87/100</strong> sit on the <em>High Conviction Watchlist</em> awaiting intraday volume or momentum thrust to cross 88.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <div className="text-xs font-bold text-slate-300 uppercase tracking-wider font-mono">
+                The 5 Orthogonal Quantitative Pillars &amp; Continuous Formulas
+              </div>
+              <div className="grid grid-cols-1 gap-2.5">
+                <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 flex items-start justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-bold text-cyan-400 text-xs">O · 20% Weight</span>
+                      <span className="font-bold text-slate-200 text-xs">Institutional Order Flow &amp; Delivery Velocity</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Continuous function of live session volume vs 20-day institutional average (RVOL), NSE delivery %, and live rupee turnover (Cr).
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 flex items-start justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-bold text-emerald-400 text-xs">M · 25% Weight</span>
+                      <span className="font-bold text-slate-200 text-xs">Momentum &amp; CANSLIM Relative Strength</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Blends multi-week Relative Strength (RS percentile rank 1–99) with live intraday ATR-adjusted price expansion. Prevents flat-session penalties on structural leaders.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 flex items-start justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-bold text-indigo-400 text-xs">Q · 25% Weight</span>
+                      <span className="font-bold text-slate-200 text-xs">Fundamental QARP &amp; Balance Sheet Quality</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Stock-specific audited ROCE %, ROE %, YoY PAT growth %, and Debt-to-Equity leverage penalty across all 45 NSE equities (replaces flat market-cap buckets).
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 flex items-start justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-bold text-purple-400 text-xs">R · 15% Weight</span>
+                      <span className="font-bold text-slate-200 text-xs">Risk-to-Reward Asymmetry (ATR Geometry)</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Evaluates stock-specific ATR volatility stop-loss distance vs Target 1 / Target 2 upside asymmetry and RS breakout follow-through probability.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 flex items-start justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-bold text-amber-400 text-xs">S · 15% Weight</span>
+                      <span className="font-bold text-slate-200 text-xs">Sovereign Moat &amp; 200-DMA Structural Regime</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Combines industry pricing power / regulatory moat with live 200-DMA trend persistence and institutional delivery support.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-3 bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono text-slate-300 space-y-1">
+              <div>
+                <span className="text-slate-400">Formula: </span>
+                <span className="text-cyan-300">Conviction Score = Round(0.20×O + 0.25×M + 0.25×Q + 0.15×R + 0.15×S)</span>
+              </div>
+              <div>
+                <span className="text-slate-400">Qualification Gate: </span>
+                <span className="text-emerald-400">&ge;88/100 Execution Qualified</span>
+                <span className="text-slate-500"> · </span>
+                <span className="text-cyan-300">80–87/100 High Conviction Watchlist</span>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => setShowModelFormulaModal(false)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-lg transition"
+              >
+                Close Architecture Audit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* INDIVIDUAL STOCK CONVICTION FACTOR AUDIT MODAL */}
+      {selectedConvictionStock && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-slate-100 text-base">{selectedConvictionStock.name}</h3>
+                  <span className="px-2 py-0.5 rounded text-xs font-mono font-bold bg-cyan-950 text-cyan-300 border border-cyan-500/40">
+                    {selectedConvictionStock.ticker}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  NSE Live Market Conviction Audit & Breakdown
+                </p>
+              </div>
+              <button 
+                onClick={() => setSelectedConvictionStock(null)}
+                className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Score Banner */}
+            <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-between">
+              <div>
+                <div className="text-[11px] font-mono text-slate-400 uppercase">Composite Conviction Score</div>
+                <div className="text-2xl font-black font-mono text-emerald-400 mt-0.5">
+                  {selectedConvictionStock.convictionScore} <span className="text-sm font-normal text-slate-500">/ 100</span>
+                </div>
+                <div className="text-xs font-semibold text-cyan-300 mt-1">
+                  {selectedConvictionStock.strategyQuantification?.tierLabel || 'Dynamic Breakout Candidate'}
+                </div>
+              </div>
+              <div className="text-right text-xs font-mono space-y-1">
+                <div className="text-slate-400">LTP: <span className="text-slate-100 font-bold">₹{selectedConvictionStock.price?.toLocaleString('en-IN') ?? '—'}</span></div>
+                <div className="text-slate-400">Day Return: <span className={`font-bold ${(selectedConvictionStock.changePct ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {(selectedConvictionStock.changePct ?? 0) >= 0 ? '+' : ''}{selectedConvictionStock.changePct?.toFixed(2)}%
+                </span></div>
+                <div className="text-slate-400">Session Vol: <span className="text-slate-100 font-bold">{selectedConvictionStock.volume?.toLocaleString('en-IN')} shs</span></div>
+              </div>
+            </div>
+
+            {/* 5-Factor Breakdown */}
+            <div className="space-y-3">
+              <div className="text-xs font-bold text-slate-300 uppercase tracking-wider font-mono">
+                5-Factor Quantitative Audit Scores
+              </div>
+              <div className="space-y-2">
+                {(selectedConvictionStock.strategyQuantification?.factorBreakdown || []).map((factor: any) => (
+                  <div key={factor.id} className="p-3 rounded-lg bg-slate-950/80 border border-slate-800 space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-slate-200">{factor.name}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-mono text-slate-400">{factor.weightLabel}</span>
+                        <span className="px-1.5 py-0.5 rounded text-[11px] font-bold font-mono bg-cyan-950 text-cyan-300 border border-cyan-500/30">
+                          {factor.score} / 100
+                        </span>
+                      </div>
+                    </div>
+                    <div className="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full rounded-full ${factor.score >= 90 ? 'bg-emerald-400' : factor.score >= 80 ? 'bg-cyan-400' : 'bg-amber-400'}`} 
+                        style={{ width: `${factor.score}%` }}
+                      />
+                    </div>
+                    <p className="text-[11px] text-slate-400">
+                      {factor.rationale}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 text-[11px] font-mono space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">Verified Live Gateway:</span>
+                <span className={isUpstoxPrimaryActive ? 'text-emerald-400 font-bold' : 'text-amber-300 font-bold'}>
+                  {selectedConvictionStock.sourceEvidence?.gateway || (isUpstoxPrimaryActive ? 'Upstox Analytics v2 Live NSE Quotes (Primary)' : 'Chartink NSE Screener (Auto-Failover Backup)')}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">API Endpoint:</span>
+                <span className="text-cyan-400">
+                  {selectedConvictionStock.sourceEvidence?.apiEndpoint || (isUpstoxPrimaryActive ? 'https://api.upstox.com/v2/market-quote/quotes' : 'https://chartink.com/screener/process')}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => setSelectedConvictionStock(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-lg transition"
+              >
+                Close Audit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

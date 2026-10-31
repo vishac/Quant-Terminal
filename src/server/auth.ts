@@ -72,6 +72,7 @@ export function extractToken(req: express.Request): string {
   const headerKeys = [
     'x-owner-token',
     'x-owner-access-token',
+    'x-jarvis-owner-token',
     'x-access-token',
     'x-admin-token',
     'x-secret-token',
@@ -130,7 +131,7 @@ export function requireOwner(
 // ---------------------------------------------------------------------------
 
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
-const RATE_LIMIT_MAX = 20;
+const RATE_LIMIT_MAX = 120;
 const rateBuckets = new Map<string, { count: number; windowStart: number }>();
 
 export function rateLimit(

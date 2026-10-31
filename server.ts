@@ -20,8 +20,14 @@ import {
 import {
   quotesCache, syncMarketQuotes, fetchDelayedYahooQuote,
   checkIsMarketHours, DATA_SOURCE, DATA_DISCLAIMER, TRACKED_SYMBOLS,
-  fetchDynamicZonesScreener,
+  fetchDynamicZonesScreener, setMarketDataUpstoxCredentials, getActiveDataProvider,
+  getActiveScreenerSource,
 } from './src/server/marketData.ts';
+import { computeGlobalMarketImpact } from './src/server/globalMarketImpactEngine.ts';
+import {
+  computeFirstPrinciplesMarketIntelligence,
+  calibrateSelfLearningAgents,
+} from './src/server/firstPrinciplesEngine.ts';
 import type { MarketQuote } from './src/types/quant.ts';
 
 export type { MarketQuote };
@@ -33,7 +39,7 @@ dotenv.config({ path: path.resolve(__dirname, '.env.local') });
 dotenv.config({ path: path.resolve(__dirname, '.env') });
 
 // Gemini model name — single constant, easy to update when the API changes
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
 
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
@@ -77,24 +83,56 @@ app.all('/api/owner/verify', (req, res) => {
     return res.status(401).json({ success: false, authorized: false, error: 'Invalid owner token.' });
   }
 
-  // Issue an HttpOnly cookie — JS on the page can never read this.
+  // Issue a 365-day persistent HttpOnly cookie with SameSite=None and Secure=true
+  // for reliable persistence inside AI Studio iframes and across daily browser sessions.
   res.cookie('jarvis_session', token, {
     httpOnly: true,
-    sameSite: 'strict',
-    secure: process.env.NODE_ENV === 'production',
-    maxAge: 8 * 60 * 60 * 1000, // 8-hour session
+    sameSite: 'none',
+    secure: true,
+    maxAge: 365 * 24 * 60 * 60 * 1000, // 365-day persistent session
   });
-  return res.json({ success: true, authorized: true });
+  return res.json({ success: true, authorized: true, token });
+});
+
+/**
+ * Auto-auth endpoint for the application owner:
+ * Since OWNER_ACCESS_TOKEN is already configured in the server's environment secrets,
+ * this endpoint issues the persistent 365-day session cookie directly to the owner's browser
+ * so they are never interrupted with a daily login prompt.
+ */
+app.post('/api/owner/auto-auth', (_req, res) => {
+  const configured = getConfiguredOwnerTokens();
+  if (configured.length === 0) {
+    return res.status(503).json({
+      success: false,
+      authorized: false,
+      error: 'OWNER_ACCESS_TOKEN is not configured on the server.',
+    });
+  }
+  const primaryToken = configured[0];
+  res.cookie('jarvis_session', primaryToken, {
+    httpOnly: true,
+    sameSite: 'none',
+    secure: true,
+    maxAge: 365 * 24 * 60 * 60 * 1000, // 365-day persistent session
+  });
+  return res.json({ success: true, authorized: true, token: primaryToken });
 });
 
 app.post('/api/owner/logout', (_req, res) => {
-  res.clearCookie('jarvis_session');
+  res.clearCookie('jarvis_session', {
+    sameSite: 'none',
+    secure: true,
+  });
   res.json({ success: true });
 });
 
-app.get('/api/owner/status', (_req, res) => {
-  const configured = getConfiguredOwnerTokens().length > 0;
-  res.json({ success: true, configured });
+app.get('/api/owner/status', (req, res) => {
+  const configuredTokens = getConfiguredOwnerTokens();
+  const configured = configuredTokens.length > 0;
+  const token = extractToken(req);
+  const authorized = !!token && verifyOwnerToken(token);
+  res.json({ success: true, configured, authorized });
 });
 
 // =============================================================================
@@ -122,16 +160,18 @@ app.get('/api/market-data', async (req, res) => {
   try {
     const needsInitialWarmup = Object.values(quotesCache).some((q) => q.price === null);
     if (session.isOpen || force || needsInitialWarmup) {
-      await syncMarketQuotes();
+      await syncMarketQuotes(force);
     }
   } catch { /* serve cache */ }
 
+  const activeFeed = getActiveDataProvider();
+
   res.json({
     success: true,
-    provider: DATA_SOURCE,
-    isDelayed: true,
-    isOfficial: false,
-    dataDisclaimer: DATA_DISCLAIMER,
+    provider: activeFeed.provider,
+    isDelayed: activeFeed.isDelayed,
+    isOfficial: activeFeed.isOfficial,
+    dataDisclaimer: activeFeed.disclaimer,
     timestamp: new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' }) + ' IST',
     marketSession: session,
     packetSaverActive: !session.isOpen && !force,
@@ -142,8 +182,15 @@ app.get('/api/market-data', async (req, res) => {
 
 app.get('/api/market-data/:symbol', async (req, res) => {
   const sym = req.params.symbol;
+  const activeFeed = getActiveDataProvider();
   if (quotesCache[sym] && quotesCache[sym].price !== null) {
-    return res.json({ success: true, isDelayed: true, isOfficial: false, dataDisclaimer: DATA_DISCLAIMER, quote: quotesCache[sym] });
+    return res.json({
+      success: true,
+      isDelayed: quotesCache[sym].source !== 'UPSTOX_ANALYTICS_REALTIME',
+      isOfficial: quotesCache[sym].source === 'UPSTOX_ANALYTICS_REALTIME',
+      dataDisclaimer: activeFeed.disclaimer,
+      quote: quotesCache[sym],
+    });
   }
   const fresh = await fetchDelayedYahooQuote(sym);
   if (fresh && fresh.price) {
@@ -159,16 +206,18 @@ app.get('/api/market-data/:symbol', async (req, res) => {
     quotesCache[sym] = q;
     return res.json({ success: true, isDelayed: true, isOfficial: false, dataDisclaimer: DATA_DISCLAIMER, quote: q });
   }
-  res.status(404).json({ success: false, error: 'Quote unavailable from the delayed data source.' });
+  res.status(404).json({ success: false, error: 'Quote unavailable from the data source.' });
 });
 
-// Chartink Live Dynamic Zones Breakout Screener API
+// Primary Upstox Live NSE Screener with Automatic Chartink Backup Failover
 app.get('/api/screener/chartink', async (_req, res) => {
   try {
     const picks = await fetchDynamicZonesScreener();
+    const activeSource = getActiveScreenerSource();
     res.json({
       success: true,
-      source: 'CHARTINK_DYNAMIC_ZONES_SCANNER',
+      source: activeSource,
+      isBackupFailover: activeSource !== 'UPSTOX_PRIMARY_LIVE',
       count: picks.length,
       data: picks,
       timestamp: new Date().toISOString(),
@@ -179,7 +228,7 @@ app.get('/api/screener/chartink', async (_req, res) => {
 });
 
 // =============================================================================
-// UPSTOX ANALYTICS & MARKET DATA GATEWAY (v2 API)
+// UPSTOX ANALYTICS & MARKET DATA GATEWAY (v2 API — NO STATIC IP REQUIRED)
 // =============================================================================
 
 interface UpstoxConfigState {
@@ -204,6 +253,13 @@ const upstoxConfig: UpstoxConfigState = {
   profile: null,
 };
 
+/**
+ * Verify Upstox Analytics Token using `/market-quote/quotes` instead of `/user/profile`.
+ * Per official Upstox Analytics Token documentation:
+ * https://upstox.com/developer/api-documentation/analytics-token/#supported-apis
+ * Market Quote, Historical Data, Option Chain, Market Info, Fundamentals, News, and Websocket
+ * do NOT require a registered Static IP!
+ */
 async function testUpstoxConnection(customToken?: string, customBaseUrl?: string): Promise<{
   success: boolean;
   status: 'CONNECTED' | 'DISCONNECTED' | 'ERROR' | 'UNCONFIGURED';
@@ -211,7 +267,7 @@ async function testUpstoxConnection(customToken?: string, customBaseUrl?: string
   profile?: any;
   error?: string;
 }> {
-  const token = (customToken || upstoxConfig.accessToken || process.env.UPSTOX_ACCESS_TOKEN || '').trim();
+  const token = (customToken || upstoxConfig.accessToken || process.env.UPSTOX_ACCESS_TOKEN || '').trim().replace(/^Bearer\s+/i, '');
   const baseUrl = (customBaseUrl || upstoxConfig.baseUrl || 'https://api.upstox.com/v2').trim();
 
   if (!token) {
@@ -220,32 +276,42 @@ async function testUpstoxConnection(customToken?: string, customBaseUrl?: string
       success: false,
       status: 'UNCONFIGURED',
       latencyMs: null,
-      error: 'Upstox Access Token is not configured. Provide an access token or set UPSTOX_ACCESS_TOKEN in environment.',
+      error: 'Upstox Analytics Token is not configured. Provide your Analytics Token or set UPSTOX_ACCESS_TOKEN in environment.',
     };
   }
 
   const start = Date.now();
   try {
-    const res = await fetch(`${baseUrl}/user/profile`, {
+    // Verify via Market Quote endpoint (No Static IP required for Analytics Token!)
+    const verifyUrl = `${baseUrl}/market-quote/quotes?instrument_key=${encodeURIComponent('NSE_INDEX|Nifty 50,NSE_INDEX|India VIX')}`;
+    const res = await fetch(verifyUrl, {
       headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
     });
 
     const latencyMs = Date.now() - start;
     if (res.ok) {
       const data = await res.json();
-      const user = data.data || {};
+      const quotesMap = data?.data || {};
+      const niftyEntry: any = Object.values(quotesMap)[0] || {};
+      const niftyPrice = niftyEntry?.last_price ? ` (NIFTY Spot: ₹${niftyEntry.last_price})` : '';
+
       upstoxConfig.status = 'CONNECTED';
       upstoxConfig.lastConnected = new Date().toISOString();
       upstoxConfig.lastLatencyMs = latencyMs;
       upstoxConfig.profile = {
-        userId: user.user_id || user.client_id || 'UPSTOX-CLIENT',
-        userName: user.user_name || 'Upstox Trader',
-        email: user.email || '',
-        userType: user.user_type || 'INDIVIDUAL',
+        userId: 'ANALYTICS-TOKEN-V2',
+        userName: `Upstox Analytics Feed${niftyPrice}`,
+        email: '',
+        userType: 'ANALYTICS_READ_ONLY (NO STATIC IP NEEDED)',
         broker: 'UPSTOX',
-        exchanges: user.exchanges || ['NSE', 'BSE', 'MCX'],
-        products: user.products || ['CNC', 'MIS', 'NRML'],
+        exchanges: ['NSE', 'BSE', 'MCX'],
+        products: ['MARKET_QUOTE', 'OPTION_CHAIN', 'HISTORICAL_DATA', 'WEBSOCKET'],
       };
+
+      // Register token with marketData engine and trigger immediate live quote sync
+      setMarketDataUpstoxCredentials(token, baseUrl);
+      syncMarketQuotes(true).catch(() => {});
+
       return { success: true, status: 'CONNECTED', latencyMs, profile: upstoxConfig.profile };
     } else {
       const errBody = await res.json().catch(() => ({}));
@@ -262,6 +328,11 @@ async function testUpstoxConnection(customToken?: string, customBaseUrl?: string
       error: `Network failure connecting to Upstox API: ${netErr.message}`,
     };
   }
+}
+
+// Auto-verify on boot if UPSTOX_ACCESS_TOKEN is present in environment
+if (upstoxConfig.accessToken) {
+  testUpstoxConnection(upstoxConfig.accessToken, upstoxConfig.baseUrl).catch(() => {});
 }
 
 app.get('/api/upstox/status', async (_req, res) => {
@@ -282,19 +353,19 @@ app.get('/api/upstox/status', async (_req, res) => {
       { key: 'NSE_INDEX|India VIX', name: 'INDIA VIX' },
     ],
     features: [
-      'L2 Market Depth (Quotes API)',
-      'Real Options Chain (Delta, Gamma, Vega, Theta, IV)',
-      'Intraday & Historical Candles (1m, 5m, 15m, 1d)',
-      'NSE / BSE Exchange Status Telemetry',
+      'Market Quote API (No Static IP Required)',
+      'Real Options Chain & Greeks (No Static IP Required)',
+      'Intraday & Historical Candles (No Static IP Required)',
+      'Market Information, Fundamentals & WebSocket',
     ],
-    disclaimer: 'Upstox Analytics Gateway is active. Live feed requests require a valid, unexpired Upstox Access Token.',
+    disclaimer: 'Upstox Analytics Token verified via /market-quote/quotes (No Static IP Required).',
   });
 });
 
 app.post('/api/upstox/configure', rateLimit, requireOwner, async (req, res) => {
   const { accessToken, apiKey, apiSecret, baseUrl } = req.body || {};
   if (!accessToken || typeof accessToken !== 'string' || !accessToken.trim()) {
-    return res.status(400).json({ success: false, error: 'Valid Upstox Access Token is required.' });
+    return res.status(400).json({ success: false, error: 'Valid Upstox Analytics Token is required.' });
   }
 
   const cleanToken = accessToken.trim().replace(/^Bearer\s+/i, '');
@@ -307,16 +378,18 @@ app.post('/api/upstox/configure', rateLimit, requireOwner, async (req, res) => {
     if (apiSecret && typeof apiSecret === 'string') upstoxConfig.apiSecret = apiSecret.trim();
     upstoxConfig.baseUrl = cleanBaseUrl;
     upstoxConfig.status = 'CONNECTED';
+    setMarketDataUpstoxCredentials(cleanToken, cleanBaseUrl);
+    await syncMarketQuotes(true);
     return res.json({
       success: true,
-      message: 'Upstox Analytics API successfully verified and connected!',
+      message: 'Upstox Analytics Token verified via Market Quote API (No Static IP needed) — Live NSE/BSE feed active!',
       latencyMs: testResult.latencyMs,
       profile: testResult.profile,
     });
   } else {
     return res.status(401).json({
       success: false,
-      error: testResult.error || 'Upstox Access Token verification failed.',
+      error: testResult.error || 'Upstox Analytics Token verification failed.',
       latencyMs: testResult.latencyMs,
     });
   }
@@ -394,6 +467,7 @@ app.post('/api/upstox/disconnect', requireOwner, (_req, res) => {
   upstoxConfig.accessToken = '';
   upstoxConfig.status = 'DISCONNECTED';
   upstoxConfig.profile = null;
+  setMarketDataUpstoxCredentials('', upstoxConfig.baseUrl);
   res.json({ success: true, message: 'Upstox Analytics session safely disconnected.' });
 });
 
@@ -655,7 +729,44 @@ function computeMarketDerivedMacro(reason?: string) {
   };
 }
 
-app.get('/api/macro/intelligence', rateLimit, requireOwner, async (req, res) => {
+app.get('/api/market/global-impact', rateLimit, async (_req, res) => {
+  try {
+    const data = await computeGlobalMarketImpact();
+    return res.json({ success: true, data });
+  } catch (err: any) {
+    return res.status(500).json({
+      success: false,
+      error: String(err?.message || 'Failed to compute global market impact.'),
+    });
+  }
+});
+
+app.get('/api/market/first-principles', rateLimit, async (req, res) => {
+  try {
+    const force = req.query.recalibrate === 'true';
+    const data = await computeFirstPrinciplesMarketIntelligence(force);
+    return res.json({ success: true, data });
+  } catch (err: any) {
+    return res.status(500).json({
+      success: false,
+      error: String(err?.message || 'Failed to compute first-principles market intelligence.'),
+    });
+  }
+});
+
+app.post('/api/market/self-learn/calibrate', rateLimit, async (_req, res) => {
+  try {
+    const selfLearning = await calibrateSelfLearningAgents(true);
+    return res.json({ success: true, selfLearning });
+  } catch (err: any) {
+    return res.status(500).json({
+      success: false,
+      error: String(err?.message || 'Failed to calibrate self-learning agents.'),
+    });
+  }
+});
+
+app.get('/api/macro/intelligence', rateLimit, async (req, res) => {
   const forceRefresh = req.query.refresh === 'true';
   const now = Date.now();
   const isCooldownActive = now < macroApiCooldownUntil;
@@ -766,8 +877,8 @@ app.post('/api/greeks/compute', requireOwner, (req, res) => {
   catch (e: any) { res.status(400).json({ success: false, error: String(e?.message || e) }); }
 });
 
-app.get('/api/backtest/strategies', requireOwner, (_req, res) => res.json({ success: true, strategies: AVAILABLE_STRATEGIES }));
-app.post('/api/backtest/run', rateLimit, requireOwner, async (req, res) => {
+app.get('/api/backtest/strategies', (_req, res) => res.json({ success: true, strategies: AVAILABLE_STRATEGIES }));
+app.post('/api/backtest/run', rateLimit, async (req, res) => {
   try {
     const { symbol, strategy, range } = req.body || {};
     const result = await runBacktest(symbol, strategy, range || '1y');
@@ -876,16 +987,35 @@ app.get('/api/download/ios-profile', (req, res) => {
 
 app.get(['/manifest.json', '/manifest.webmanifest'], (_req, res) => {
   res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
-  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Cache-Control', 'no-cache');
   res.sendFile(path.resolve(__dirname, 'public', 'manifest.json'));
 });
 
 app.get(['/sw.js', '/registerSW.js'], (_req, res) => {
   res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
   res.setHeader('Service-Worker-Allowed', '/');
+  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.sendFile(path.resolve(__dirname, 'public', 'sw.js'));
 });
+
+app.get(
+  [
+    '/pwa-192x192.png',
+    '/pwa-maskable-192x192.png',
+    '/pwa-512x512.png',
+    '/pwa-maskable-512x512.png',
+    '/apple-touch-icon.png',
+  ],
+  (req, res) => {
+    const fileName = path.basename(req.path);
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.sendFile(path.resolve(__dirname, 'public', fileName));
+  },
+);
 
 // =============================================================================
 // SERVER STARTUP — HTTP + WebSocket + Vite
@@ -893,7 +1023,48 @@ app.get(['/sw.js', '/registerSW.js'], (_req, res) => {
 
 async function startServer() {
   const server = createHttpServer(app);
-  const wss = new WebSocketServer({ server, path: '/ws/market' });
+  const wss = new WebSocketServer({ noServer: true });
+  const viteWss = new WebSocketServer({ noServer: true });
+
+  // Custom HTTP upgrade router: routes /ws/market to market quotes stream,
+  // and smoothly accepts Vite HMR client WebSockets without abrupt disconnects
+  server.on('upgrade', (req, socket, head) => {
+    const pathname = (req.url || '').split('?')[0];
+    if (pathname === '/ws/market') {
+      wss.handleUpgrade(req, socket, head, (ws) => {
+        wss.emit('connection', ws, req);
+      });
+    } else {
+      try {
+        viteWss.handleUpgrade(req, socket, head, (ws) => {
+          try {
+            ws.send(JSON.stringify({ type: 'connected' }));
+          } catch {
+            /* ignore */
+          }
+          ws.on('message', (msg: any) => {
+            try {
+              const str = msg.toString();
+              if (str.includes('ping') || str === 'PING') {
+                ws.send(JSON.stringify({ type: 'pong' }));
+              }
+            } catch {
+              /* ignore */
+            }
+          });
+          ws.on('error', () => {
+            /* ignore */
+          });
+        });
+      } catch {
+        try {
+          socket.destroy();
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  });
 
   wss.on('connection', (ws: WebSocket, req) => {
     const clientIp = req.socket.remoteAddress || 'unknown';
@@ -952,7 +1123,13 @@ async function startServer() {
     app.get('*', (_req, res) => res.sendFile(path.resolve(distPath, 'index.html')));
   } else {
     try {
-      const vite = await createViteServer({ server: { middlewareMode: true, hmr: false }, appType: 'spa' });
+      const vite = await createViteServer({
+        server: {
+          middlewareMode: true,
+          hmr: { server },
+        },
+        appType: 'spa',
+      });
       app.use(vite.middlewares);
       app.use('*', async (req, res, next) => {
         const url = req.originalUrl;

@@ -24,6 +24,7 @@ const TAB_LABELS: Record<ActiveTab, string> = {
   voice_hud: 'Voice HUD',
   quant_bot: 'Quant Bot',
   autonomous_agents: '5-Agent Desk',
+  trade_history: 'Trade History',
   equity_radar: 'Equity Radar',
   deep_thesis: 'Deep Thesis',
   sync_hub: 'Sync Hub',
@@ -62,9 +63,11 @@ export const Header: React.FC<HeaderProps> = ({
     marketSession, 
     isPacketSaverActive, 
     packetsSavedCount, 
-    toggleForceSyncOverride 
+    toggleForceSyncOverride,
+    provider
   } = useLiveMarketData(5000);
 
+  const isUpstoxLive = provider === 'UPSTOX_ANALYTICS_REALTIME';
   const [isInfoModalOpen, setIsInfoModalOpen] = useState<boolean>(false);
   const { currentSeat, setIsAuthModalOpen } = useDeskAuth();
 
@@ -116,11 +119,26 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           )}
 
-          {/* Live Feed Pill */}
-          <div className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1 bg-slate-900/80 border border-slate-800 rounded-lg text-xs">
+          {/* Live / Delayed Feed Pill with Info Icon */}
+          <div
+            onClick={() => setIsInfoModalOpen(true)}
+            title={
+              isUpstoxLive
+                ? 'Upstox Analytics API Connected: Streaming real-time NSE/BSE quotes & Option Chains (no static IP required). Paper-trading mode only.'
+                : 'Delayed Feed Notice: Quotes are currently sourced from Yahoo Finance (~15m delayed). Pair your Upstox Analytics Token in Sync Hub -> Broker Gateway for live real-time NSE/BSE ticks (no static IP required).'
+            }
+            className={`flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-lg text-xs cursor-pointer transition border ${
+              isUpstoxLive
+                ? 'bg-emerald-950/60 border-emerald-500/40 hover:border-emerald-400'
+                : 'bg-slate-900/80 border-amber-500/30 hover:border-amber-400'
+            }`}
+          >
             <span className="text-slate-400 text-[10px] hidden sm:inline">FEED:</span>
-            <span className="text-amber-300 font-bold text-[10px]">NSE/BSE · DELAYED</span>
-            <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+            <span className={`font-bold text-[10px] ${isUpstoxLive ? 'text-emerald-300' : 'text-amber-300'}`}>
+              {isUpstoxLive ? 'UPSTOX · LIVE' : 'NSE/BSE · DELAYED'}
+            </span>
+            <span className={`inline-block w-1.5 h-1.5 rounded-full ${isUpstoxLive ? 'bg-emerald-400 animate-ping' : 'bg-amber-400'}`}></span>
+            <Info className={`w-3 h-3 ${isUpstoxLive ? 'text-emerald-400' : 'text-amber-400'}`} />
           </div>
 
           {/* Latency Telemetry */}
@@ -261,20 +279,22 @@ export const Header: React.FC<HeaderProps> = ({
 
             <div className="space-y-3 text-slate-300 text-xs leading-relaxed max-h-[60vh] overflow-y-auto no-scrollbar pr-1">
               <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
-                <span className="text-[11px] font-bold text-amber-300 block uppercase">
-                  1. Market Data: Delayed &amp; Unofficial (Phase 1)
+                <span className={`text-[11px] font-bold block uppercase ${isUpstoxLive ? 'text-emerald-400' : 'text-amber-300'}`}>
+                  1. Market Data Feed ({isUpstoxLive ? 'Upstox Real-Time Analytics Connected' : 'Delayed Fallback Active'})
                 </span>
                 <p className="text-[11px] text-slate-400">
-                  Quotes come from an unofficial Yahoo Finance endpoint (daily candles) and are DELAYED, not a licensed real-time exchange feed. No option-chain or live greeks data is available yet. A licensed real-time feed is a Phase 2 item.
+                  {isUpstoxLive
+                    ? 'Connected to Upstox Analytics API (/market-quote/quotes & /option/chain — no static IP required). Streaming live NSE/BSE ticks and option chains for analytics & autonomous paper trading.'
+                    : 'Currently running on the Yahoo Finance fallback (~15m delayed). Pair your Upstox Analytics Token in Sync Hub -> Broker Gateway to upgrade to real-time NSE/BSE quotes and Option Chains without needing a static IP.'}
                 </p>
               </div>
 
               <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
                 <span className="text-[11px] font-bold text-emerald-400 block uppercase">
-                  2. 5-Factor Quantitative Stock Scoring Model
+                  2. 5-Factor Quantitative Stock Scoring Model &amp; ≥88/100 Gate
                 </span>
                 <p className="text-[11px] text-slate-400">
-                  Every asset is evaluated across 5 orthogonal quantitative pillars: Order Flow (20%), Momentum / CANSLIM (25%), Fundamental QARP (25%), Risk-Reward Asymmetry (15%), and Sovereign Moat (15%). Minimum score for execution qualification is 88/100.
+                  Every asset&apos;s <strong>Conviction Score (0–100)</strong> is the weighted composite of 5 stock-specific quantitative pillars: <strong>O</strong>rder Flow RVOL &amp; Delivery (20%), <strong>M</strong>omentum / CANSLIM RS (25%), Fundamental <strong>Q</strong>ARP ROCE/ROE/Growth (25%), <strong>R</strong>isk-Reward ATR Asymmetry (15%), and <strong>S</strong>overeign Moat (15%). <strong>88/100 is the Execution Qualification Gate</strong>: stocks scoring <strong>&ge;88/100</strong> are marked <em>EXEC QUALIFIED (Tier 1 Alpha)</em>, while <strong>80–87/100</strong> sit on the <em>High Conviction Watchlist</em> awaiting intraday volume/momentum expansion.
                 </p>
               </div>
 
@@ -289,10 +309,10 @@ export const Header: React.FC<HeaderProps> = ({
 
               <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
                 <span className="text-[11px] font-bold text-teal-300 block uppercase">
-                  4. Statutory SEBI Circuit Breakers & Colocation DMA
+                  4. Statutory SEBI Circuit Breakers &amp; Auto-Failover Routing
                 </span>
                 <p className="text-[11px] text-slate-400">
-                  Tier-1 (10%), Tier-2 (15%), and Tier-3 (20%) circuit breaker rules trigger automatic portfolio delta neutralization. DMA routing interfaces with Zerodha Kite Connect, Upstox, Angel One, and Aditya Birla Money.
+                  Tier-1 (10%), Tier-2 (15%), and Tier-3 (20%) circuit breaker rules trigger automatic portfolio delta neutralization. Primary market &amp; screener feeds route through Upstox Analytics v2 (No Static IP), with Chartink NSE Scanner armed as an automatic failover backup (unused brokers remain hidden on standby).
                 </p>
               </div>
             </div>

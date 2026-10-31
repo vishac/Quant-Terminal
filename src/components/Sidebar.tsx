@@ -36,6 +36,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: <span className="material-symbols-outlined text-[18px]">group_work</span> 
     },
     { 
+      id: 'trade_history', 
+      label: 'Trade History', 
+      icon: <span className="material-symbols-outlined text-[18px]">receipt_long</span> 
+    },
+    { 
       id: 'equity_radar', 
       label: 'Equity Radar', 
       icon: <span className="material-symbols-outlined text-[18px]">candlestick_chart</span> 

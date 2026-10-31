@@ -13,6 +13,7 @@ import { BacktestLab } from './components/BacktestLab';
 import { SettingsTerminal } from './components/SettingsTerminal';
 import { InstitutionalEquityRadar } from './components/InstitutionalEquityRadar';
 import { AutonomousAgentsDesk } from './components/AutonomousAgentsDesk';
+import { TradeHistory } from './components/TradeHistory';
 import { CircuitBreakerModal } from './components/CircuitBreakerModal';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { OwnerGate } from './components/OwnerGate';
@@ -29,6 +30,7 @@ import { Radio } from 'lucide-react';
 const MOBILE_NAV_TABS: { id: ActiveTab; icon: string; label: string }[] = [
   { id: 'quant_bot',         icon: 'monitoring',       label: 'Quant'    },
   { id: 'autonomous_agents', icon: 'group_work',       label: '5-Agents' },
+  { id: 'trade_history',     icon: 'receipt_long',     label: 'Trades'   },
   { id: 'equity_radar',      icon: 'candlestick_chart',label: 'Radar'    },
   { id: 'risk_engine',       icon: 'security',         label: 'Risk'     },
   { id: 'sync_hub',          icon: 'hub',              label: 'Sync'     },
@@ -72,32 +74,65 @@ function AppInner() {
   const [gateOpen, setGateOpen] = useState<boolean>(false);
 
   /**
-   * Switching to admin now verifies with the server (which checks the
-   * HttpOnly session cookie). We no longer read/write the raw token from
-   * localStorage — that is handled entirely by the server and OwnerGate.
+   * Seamless owner verification:
+   * 1. Check if existing session cookie is already valid.
+   * 2. If not, try stored token from localStorage.
+   * 3. If server has OWNER_ACCESS_TOKEN configured in secrets, auto-auth seamlessly.
+   * 4. Only open OwnerGate if none of the above are valid.
    */
+  const ensureOwnerAccess = async (): Promise<boolean> => {
+    // 1. Check if session cookie is already valid
+    try {
+      const res = await fetch('/api/owner/status', { credentials: 'include' });
+      const data = await res.json();
+      if (!data.configured) return true; // No token configured on server
+      if (data.authorized) return true;  // Cookie already authorized
+    } catch {}
+
+    // 2. Try with stored token from localStorage if available
+    let storedToken = '';
+    try { storedToken = localStorage.getItem('jarvis_owner_token') || ''; } catch {}
+    if (storedToken) {
+      try {
+        const verifyRes = await fetch('/api/owner/verify', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-owner-token': storedToken,
+            'Authorization': `Bearer ${storedToken}`,
+          },
+          body: JSON.stringify({ token: storedToken }),
+          credentials: 'include',
+        });
+        const vData = await verifyRes.json();
+        if (verifyRes.ok && vData?.authorized) {
+          return true;
+        }
+      } catch {}
+    }
+
+    // 3. Auto-authenticate from configured server secrets (owner workspace)
+    try {
+      const autoRes = await fetch('/api/owner/auto-auth', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const autoData = await autoRes.json();
+      if (autoRes.ok && autoData?.authorized) {
+        if (autoData.token) {
+          try { localStorage.setItem('jarvis_owner_token', autoData.token); } catch {}
+        }
+        return true;
+      }
+    } catch {}
+
+    return false;
+  };
+
   const setUserRole = async (role: UserRole) => {
     if (role === 'admin') {
-      // Ask the server whether the current session cookie is valid
-      try {
-        const res = await fetch('/api/owner/status', { credentials: 'include' });
-        const data = await res.json();
-        if (!data.configured) {
-          // Server has no token configured — no point opening the gate
-          setUserRoleState(role);
-          return;
-        }
-      } catch { /* network error — fall through to gate */ }
-
-      // Check if the session cookie is already valid
-      try {
-        const res = await fetch('/api/owner/verify', { credentials: 'include' });
-        if (!res.ok) {
-          // Not yet authenticated — open the gate to collect the token
-          setGateOpen(true);
-          return;
-        }
-      } catch {
+      const hasAccess = await ensureOwnerAccess();
+      if (!hasAccess) {
         setGateOpen(true);
         return;
       }
@@ -106,13 +141,21 @@ function AppInner() {
     try { localStorage.setItem('jarvis_user_role', role); } catch { /* ignore */ }
   };
 
-  const handleGateSuccess = (_token: string) => {
-    // The server has already set the HttpOnly cookie in /api/owner/verify.
-    // We only update the local role state; the raw token is never stored in JS.
-    try { localStorage.setItem('jarvis_user_role', 'admin'); } catch { /* ignore */ }
+  const handleGateSuccess = (token: string) => {
+    try {
+      localStorage.setItem('jarvis_owner_token', token);
+      localStorage.setItem('jarvis_user_role', 'admin');
+    } catch { /* ignore */ }
     setUserRoleState('admin');
     setGateOpen(false);
   };
+
+  // Background auto-handshake on mount so owner is permanently authenticated
+  useEffect(() => {
+    if (userRole === 'admin') {
+      ensureOwnerAccess().catch(() => {});
+    }
+  }, []);
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('quant_bot');
   const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
@@ -268,7 +311,13 @@ function AppInner() {
                 <QuantTerminal3D onNavigateToAgents={() => setActiveTab('autonomous_agents')} />
               )}
               {activeTab === 'autonomous_agents' && (
-                <AutonomousAgentsDesk onOpenCircuitBreaker={() => setIsCircuitBreakerOpen(true)} />
+                <AutonomousAgentsDesk 
+                  onOpenCircuitBreaker={() => setIsCircuitBreakerOpen(true)}
+                  onNavigateToTradeHistory={() => setActiveTab('trade_history')}
+                />
+              )}
+              {activeTab === 'trade_history' && (
+                <TradeHistory onNavigateToAgents={() => setActiveTab('autonomous_agents')} />
               )}
               {activeTab === 'equity_radar' && <InstitutionalEquityRadar />}
               {activeTab === 'deep_thesis' && <MacroPolicyThesis />}

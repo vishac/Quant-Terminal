@@ -1,11 +1,12 @@
 {
   "id": "/",
-  "name": "JARVIS Institutional Quant Terminal",
+  "name": "J.A.R.V.I.S. Institutional Quant Terminal",
   "short_name": "JARVIS Quant",
-  "description": "Executive AI financial assistant, 3D volatility matrix, real-time risk engine, macro policy thesis generator, and broker feed router.",
+  "description": "First-principles Indian market decision engine, self-learning 5-agent desk, live global-to-NSE stock impact analyzer, and risk terminal.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "orientation": "any",
   "background_color": "#060913",
   "theme_color": "#060913",
@@ -41,54 +42,44 @@
   ],
   "shortcuts": [
     {
-      "name": "Voice HUD",
-      "short_name": "Voice",
-      "description": "Executive AI Financial Voice Terminal",
-      "url": "/?tab=voice_hud",
-      "icons": [
-        {
-          "src": "/pwa-192x192.png",
-          "sizes": "192x192",
-          "type": "image/png"
-        }
-      ]
-    },
-    {
-      "name": "3D Quant Matrix",
-      "short_name": "Quant 3D",
-      "description": "3D Volatility Surface & Autonomous Bots",
+      "name": "Market Decisions",
+      "short_name": "Decisions",
+      "description": "Live Stocks Set to Rise & Fall with Causal Reasons",
       "url": "/?tab=quant_bot",
       "icons": [
         {
           "src": "/pwa-192x192.png",
           "sizes": "192x192",
-          "type": "image/png"
+          "type": "image/png",
+          "purpose": "any"
         }
       ]
     },
     {
-      "name": "Risk Engine",
-      "short_name": "Risk Engine",
-      "description": "SEBI Peak Margin & VaR Monitor",
-      "url": "/?tab=risk_engine",
+      "name": "5-Agent Desk",
+      "short_name": "5 Agents",
+      "description": "Self-Learning 5 Autonomous Quant Agents",
+      "url": "/?tab=autonomous_agents",
       "icons": [
         {
           "src": "/pwa-192x192.png",
           "sizes": "192x192",
-          "type": "image/png"
+          "type": "image/png",
+          "purpose": "any"
         }
       ]
     },
     {
-      "name": "Equity Radar",
-      "short_name": "Radar",
-      "description": "15 Institutional Equities LTP Radar",
-      "url": "/?tab=equity_radar",
+      "name": "Backtest Lab",
+      "short_name": "Backtest",
+      "description": "Walk-Forward Historical Strategy Backtester",
+      "url": "/?tab=backtest_lab",
       "icons": [
         {
           "src": "/pwa-192x192.png",
           "sizes": "192x192",
-          "type": "image/png"
+          "type": "image/png",
+          "purpose": "any"
         }
       ]
     }

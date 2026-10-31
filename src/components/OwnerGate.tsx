@@ -44,6 +44,9 @@ export const OwnerGate: React.FC<OwnerGateProps> = ({ isOpen, onClose, onSuccess
       });
       const data = await res.json().catch(() => null);
       if (res.ok && data?.authorized) {
+        try {
+          localStorage.setItem('jarvis_owner_token', t);
+        } catch { /* ignore */ }
         onSuccess(t);
         setToken('');
       } else if (res.status === 503) {
