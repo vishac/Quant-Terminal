@@ -318,3 +318,4 @@ export async function getOptionChainData(
   // Fallback to Black-Scholes synthetic chain
   return synthesizeOptionChain(upper, expiry, spotPriceFallback);
 }
+

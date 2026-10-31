@@ -198,3 +198,4 @@ export function getMCXLotSize(symbol: string): number {
 }
 
 export const ALL_MCX_SYMBOLS = Object.keys(MCX_CONTRACT_REGISTRY);
+
