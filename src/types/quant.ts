@@ -1,4 +1,4 @@
-export type ActiveTab = 'voice_hud' | 'quant_bot' | 'multi_user_desk' | 'autonomous_agents' | 'equity_radar' | 'deep_thesis' | 'sync_hub' | 'risk_engine' | 'risk_guard' | 'backtest_lab' | 'settings';
+export type ActiveTab = 'voice_hud' | 'quant_bot' | 'multi_user_desk' | 'autonomous_agents' | 'trade_history' | 'equity_radar' | 'deep_thesis' | 'sync_hub' | 'risk_engine' | 'risk_guard' | 'backtest_lab' | 'settings';
 
 export type UserDeskRole = 'admin' | 'risk_officer' | 'quant_trader' | 'analyst';
 
@@ -67,7 +67,7 @@ export interface AgentDecisionScript {
   agentId: string;
   symbol: string;
   name: string;
-  segment: 'NSE_CASH' | 'NSE_FNO' | 'MCX';
+  segment: 'NSE_CASH' | 'BSE_CASH' | 'NSE_FNO' | 'MCX' | 'MCX_FUTURES' | 'MCX_OPTIONS';
   action: 'BUY' | 'SELL' | 'SPREAD';
   entryTrigger: string;
   targetPrice: string;
@@ -100,6 +100,47 @@ export interface AgentMarketInsight {
   decisionScript?: AgentDecisionScript;
 }
 
+export interface AgentStrategyHealingReport {
+  id: string;
+  agentId: string;
+  agentName: string;
+  timestamp: string;
+  triggerReason: string;
+  lossAmountINR: number;
+  rootCauseCategory: 'MACRO_NEWS_SHOCK' | 'REGIME_MISMATCH' | 'SLIPPAGE_AND_SIZING' | 'SECTOR_ROTATION_HEADWIND';
+  rootCauseAnalysis: string;
+  newsAndSentimentEvidence: {
+    headline: string;
+    source: string;
+    sentimentScore: number;
+    marketImpact: string;
+  }[];
+  backtestDiagnostic: {
+    testedSymbol: string;
+    originalParameters: {
+      stopLossPct: number;
+      takeProfitPct: number;
+      entryFilter: string;
+      maxRiskPerTradeINR: number;
+    };
+    optimizedParameters: {
+      stopLossPct: number;
+      takeProfitPct: number;
+      entryFilter: string;
+      maxRiskPerTradeINR: number;
+    };
+    backtestImprovement: {
+      originalWinRatePct: number;
+      optimizedWinRatePct: number;
+      drawdownReductionPct: number;
+      sharpeRatio: number;
+      sampleBarsCount: number;
+    };
+  };
+  recalibratedRules: string[];
+  status: 'PENDING_REVIEW' | 'APPLIED';
+}
+
 export interface AutonomousAgent {
   id: string;
   name: string;
@@ -108,12 +149,21 @@ export interface AutonomousAgent {
   targetMarket: string;
   strategyType: string;
   status: 'ACTIVE_HEDGING' | 'SCANNING' | 'STANDBY_RULES' | 'SQUARED_OFF';
+  tradingState?: 'ACTIVE' | 'DAILY_HALTED' | 'WEEKLY_HALTED' | 'SELF_HEALING' | 'MANUAL_PAUSE';
   allocatedCapitalINR: number;
   utilizedMarginINR: number;
   winRatePct: number | null;
   tradesToday: number;
   realizedPnlINR: number;
   unrealizedPnlINR: number;
+  dailyLossLimitINR?: number; // Capped at ₹2,000 INR
+  weeklyLossLimitINR?: number; // Capped at ₹5,000 INR
+  weeklyRealizedPnlINR?: number;
+  weeklyUnrealizedPnlINR?: number;
+  weeklyDrawdownINR?: number;
+  haltReason?: string | null;
+  haltTimestamp?: string | null;
+  lastHealingReport?: AgentStrategyHealingReport | null;
   strictRuleSet: string[];
   lastAction: string;
   lastActionTimestamp: string;
@@ -135,14 +185,21 @@ export interface PaperTradeOrder {
     price: number;
     strike?: number;
     optionType?: 'CE' | 'PE';
+    exitPrice?: number;
   }[];
   totalInvestmentINR: number;
   maxDefinedLossINR: number; // Strictly capped
   targetProfitINR: number;
   riskRewardRatio: string;
   timestamp: string;
+  orderDate?: string; // dd-mmm-yyyy (e.g. 29-Oct-2026)
+  orderTime?: string; // [hh]:mm:ss (no AM/PM, e.g. [14]:32:15)
   status: 'OPEN' | 'SQUARED_OFF' | 'TARGET_HIT' | 'STOP_HIT';
   pnlINR: number;
+  entryPrice?: number;
+  exitPrice?: number;
+  side?: 'BUY' | 'SELL';
+  qty?: number;
   sebiComplianceVerified: boolean;
   isSimulation?: boolean;
 }

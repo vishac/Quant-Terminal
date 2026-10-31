@@ -24,6 +24,7 @@ const TAB_LABELS: Record<ActiveTab, string> = {
   voice_hud: 'Voice HUD',
   quant_bot: 'Quant Bot',
   autonomous_agents: '5-Agent Desk',
+  trade_history: 'Trade History',
   equity_radar: 'Equity Radar',
   deep_thesis: 'Deep Thesis',
   sync_hub: 'Sync Hub',

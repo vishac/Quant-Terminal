@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import { quotesCache } from './marketData';
-import { computeGlobalMarketImpact, GlobalMarketImpactResponse } from './globalMarketImpactEngine';
+import { quotesCache } from './marketData.ts';
+import { computeGlobalMarketImpact, type GlobalMarketImpactResponse } from './globalMarketImpactEngine.ts';
 
 export interface FirstPrinciplePillar {
   id: 'MARKET_BASICS' | 'CROWD_EMOTIONS' | 'GOVT_AND_INSTITUTIONS' | 'GEOPOLITICS_AND_GLOBAL';
@@ -990,11 +990,11 @@ export async function computeFirstPrinciplesMarketIntelligence(forceRecalibrate 
       basicsReason: 'Inelastic demand, expanding complex-generics margins, and strong cash flows with low debt.',
       emotionsReason: 'Institutions use Pharma as a high-conviction defensive harbor during global volatility without retail euphoria.',
       policyReason: 'PLI bulk-drug incentives and US Biosecure China+1 sourcing shift support multi-quarter export visibility.',
-      geoReason: `Weak Rupee (₹${usdinr.price?.toFixed(2) || '93.15'}) directly boosts USD export realizations while crude spikes have minimal impact on formulation margins.`,
+      geoReason: `Weak Rupee (₹${usdinr.price?.toFixed(2) || '93.15'}) directly boosts USD export realizations while crude movements have minimal impact on formulation margins.`,
       dominantAgent: 'Agent Bhishma & Agent Vidura',
       buyPicks: [
-        { sym: 'CIPLA.NS', name: 'Cipla Ltd', reason: `Up ${getQuote('CIPLA.NS').changePct.toFixed(2)}%; respiratory & domestic chronic leadership with USD export tailwind.` },
-        { sym: 'SUNPHARMA.NS', name: 'Sun Pharma', reason: `Up ${getQuote('SUNPHARMA.NS').changePct.toFixed(2)}%; specialty portfolio margin expansion and defensive institutional inflow.` },
+        { sym: 'CIPLA.NS', name: 'Cipla Ltd', reason: `${getQuote('CIPLA.NS').changePct >= 0 ? 'Up +' : 'Down '}${getQuote('CIPLA.NS').changePct.toFixed(2)}%; respiratory & domestic chronic leadership with USD export tailwind.` },
+        { sym: 'SUNPHARMA.NS', name: 'Sun Pharma', reason: `${getQuote('SUNPHARMA.NS').changePct >= 0 ? 'Up +' : 'Down '}${getQuote('SUNPHARMA.NS').changePct.toFixed(2)}%; specialty portfolio margin expansion and defensive institutional inflow.` },
       ],
       avoidPicks: [],
     },
@@ -1009,14 +1009,20 @@ export async function computeFirstPrinciplesMarketIntelligence(forceRecalibrate 
       basicsReason: 'Strong volume dispatch visibility, industry consolidation pricing power, and multi-year EPC order books.',
       emotionsReason: 'Steady institutional accumulation on dips; free from retail FOMO froth.',
       policyReason: 'Direct beneficiary of ₹11.11 Lakh Cr Union Budget infrastructure, highways, railways, and housing capex.',
-      geoReason: '100% domestic revenue base for Cement insulates it from US tariffs and global tech slowdowns; L&T additionally benefits from Middle East petrodollar capex.',
+      geoReason: '100% domestic revenue base for Cement insulates it from US tariffs and global tech slowdowns; L&T additionally benefits from Middle East capex.',
       dominantAgent: 'Agent Chanakya',
       buyPicks: [
-        { sym: 'ULTRACEMCO.NS', name: 'UltraTech Cement', reason: `Up ${getQuote('ULTRACEMCO.NS').changePct.toFixed(2)}%; industry-leading capacity utilization & govt infra demand.` },
-        { sym: 'LT.NS', name: 'Larsen & Toubro', reason: `Up ${getQuote('LT.NS').changePct.toFixed(2)}%; domestic + Middle East hydrocarbon EPC order book hedge.` },
-        { sym: 'INDIACEM.NS', name: 'India Cements', reason: `Up ${getQuote('INDIACEM.NS').changePct.toFixed(2)}%; Southern India consolidation & operating turn-around.` },
+        { sym: 'ULTRACEMCO.NS', name: 'UltraTech Cement', reason: `${getQuote('ULTRACEMCO.NS').changePct >= 0 ? 'Up +' : 'Down '}${getQuote('ULTRACEMCO.NS').changePct.toFixed(2)}%; industry-leading capacity utilization & govt infra demand.` },
+        { sym: 'LT.NS', name: 'Larsen & Toubro', reason: `${getQuote('LT.NS').changePct >= 0 ? 'Up +' : 'Down '}${getQuote('LT.NS').changePct.toFixed(2)}%; domestic + Middle East hydrocarbon EPC order book hedge.` },
+        ...(getQuote('INDIACEM.NS').changePct >= 0
+          ? [{ sym: 'INDIACEM.NS', name: 'India Cements', reason: `Up +${getQuote('INDIACEM.NS').changePct.toFixed(2)}%; Southern India consolidation & operating turn-around.` }]
+          : []),
       ],
-      avoidPicks: [],
+      avoidPicks: [
+        ...(getQuote('INDIACEM.NS').changePct < -1.0
+          ? [{ sym: 'INDIACEM.NS', name: 'India Cements (Pullback)', reason: `Down ${getQuote('INDIACEM.NS').changePct.toFixed(2)}%; short-term profit booking pullback after multi-session volume runup.` }]
+          : []),
+      ],
     },
     {
       sectorId: 'corporate_psu_banks',
@@ -1032,11 +1038,13 @@ export async function computeFirstPrinciplesMarketIntelligence(forceRecalibrate 
       geoReason: 'Zero direct tariff or crude input cost, though FII ETF outflows weigh on HDFC Bank when US yields rise.',
       dominantAgent: 'Agent Chanakya',
       buyPicks: [
-        { sym: 'ICICIBANK.NS', name: 'ICICI Bank', reason: `Up ${getQuote('ICICIBANK.NS').changePct.toFixed(2)}%; #1 institutional relative-strength bank with best-in-class RoA.` },
-        { sym: 'SBIN.NS', name: 'State Bank of India', reason: `Up ${getQuote('SBIN.NS').changePct.toFixed(2)}%; domestic corporate credit leader backed by DII inflows.` },
+        { sym: 'ICICIBANK.NS', name: 'ICICI Bank', reason: `${getQuote('ICICIBANK.NS').changePct >= 0 ? 'Up +' : 'Down '}${getQuote('ICICIBANK.NS').changePct.toFixed(2)}%; #1 institutional relative-strength bank with best-in-class RoA.` },
+        { sym: 'SBIN.NS', name: 'State Bank of India', reason: `${getQuote('SBIN.NS').changePct >= 0 ? 'Up +' : 'Down '}${getQuote('SBIN.NS').changePct.toFixed(2)}%; domestic corporate credit leader backed by DII inflows.` },
       ],
       avoidPicks: [
-        { sym: 'HDFCBANK.NS', name: 'HDFC Bank', reason: `Down ${getQuote('HDFCBANK.NS').changePct.toFixed(2)}%; bearing the brunt of FII global risk-off basket selling.` },
+        ...(getQuote('HDFCBANK.NS').changePct < 0
+          ? [{ sym: 'HDFCBANK.NS', name: 'HDFC Bank', reason: `Down ${getQuote('HDFCBANK.NS').changePct.toFixed(2)}%; bearing the brunt of FII global risk-off basket selling.` }]
+          : []),
       ],
     },
     {
@@ -1050,11 +1058,11 @@ export async function computeFirstPrinciplesMarketIntelligence(forceRecalibrate 
       basicsReason: 'Regulated Assured RoE for Power Grid/NTPC and direct crude realization benefit for ONGC.',
       emotionsReason: 'Low-beta institutional compounding without speculative excess.',
       policyReason: 'National peak power demand and grid modernization capex guarantee regulated earnings visibility.',
-      geoReason: `Brent Crude at $${brent.price?.toFixed(2) || '111.95'} supports upstream ONGC realizations.`,
+      geoReason: `Brent Crude at $${brent.price?.toFixed(2) || '111.95'} (${brent.changePct >= 0 ? '+' : ''}${brent.changePct.toFixed(2)}%) anchors domestic energy upstream realizations.`,
       dominantAgent: 'Agent Chanakya & Agent Vidura',
       buyPicks: [
         { sym: 'NTPC.NS', name: 'NTPC Ltd', reason: 'Regulated thermal + renewable capacity addition with sovereign dividend yield.' },
-        { sym: 'ONGC.NS', name: 'ONGC', reason: 'Natural portfolio hedge against rising global Brent Crude prices.' },
+        { sym: 'ONGC.NS', name: 'ONGC', reason: 'Natural portfolio hedge against rising global energy price levels.' },
       ],
       avoidPicks: [],
     },
@@ -1075,7 +1083,7 @@ export async function computeFirstPrinciplesMarketIntelligence(forceRecalibrate 
         { sym: 'ITC.NS', name: 'ITC Ltd', reason: 'High free-cash-flow yield, hotels/agri resilience, and low foreign beta.' },
       ],
       avoidPicks: [
-        { sym: 'HINDUNILVR.NS', name: 'Hindustan Unilever', reason: 'Crude-linked packaging & palm oil input inflation limits near-term margin upside.' },
+        { sym: 'HINDUNILVR.NS', name: 'Hindustan Unilever', reason: 'Packaging & palm oil input inflation limits near-term margin upside.' },
       ],
     },
     {
@@ -1089,11 +1097,11 @@ export async function computeFirstPrinciplesMarketIntelligence(forceRecalibrate 
       basicsReason: 'Domestic SUV/tractor demand (M&M) is solid, but global luxury auto (JLR in Tata Motors) faces EU/China/US tariff headwinds.',
       emotionsReason: 'Retail remains heavily long auto stocks while institutions trim global-exposed names.',
       policyReason: 'EV FAME/PLI policy supports domestic transition, but higher fuel prices dampen two-wheeler/entry car sentiment.',
-      geoReason: `Rising fuel prices (Brent $${brent.price?.toFixed(2) || '111.95'}) and global trade tariffs create headwinds for Tata Motors (JLR).`,
+      geoReason: `Fuel price levels and global trade tariffs create headwinds for Tata Motors (JLR).`,
       dominantAgent: 'Agent Arjuna',
       buyPicks: [],
       avoidPicks: [
-        { sym: 'TATAMOTORS.NS', name: 'Tata Motors', reason: `Down ${getQuote('TATAMOTORS.NS').changePct.toFixed(2)}%; JLR exposure to US/EU tariffs & China luxury slowdown.` },
+        { sym: 'TATAMOTORS.NS', name: 'Tata Motors', reason: `${getQuote('TATAMOTORS.NS').changePct >= 0 ? 'Up +' : 'Down '}${getQuote('TATAMOTORS.NS').changePct.toFixed(2)}%; JLR exposure to US/EU tariffs & China luxury slowdown.` },
       ],
     },
     {
@@ -1107,11 +1115,11 @@ export async function computeFirstPrinciplesMarketIntelligence(forceRecalibrate 
       basicsReason: 'LME base metal realization pressure compresses smelter spreads despite domestic infra steel demand.',
       emotionsReason: 'High-beta cyclical long unwinding whenever China/global growth data disappoints.',
       policyReason: 'Domestic safeguard duty requests provide only partial cushion against Chinese steel dumping.',
-      geoReason: `Hang Seng (${hangSeng.changePct.toFixed(2)}%) and LME Copper (${copper.changePct.toFixed(2)}%) signal global industrial contraction.`,
+      geoReason: `Hang Seng (${hangSeng.changePct.toFixed(2)}%) and LME Copper (${copper.changePct.toFixed(2)}%) signal industrial cycle headwinds.`,
       dominantAgent: 'Agent Vidura',
       buyPicks: [],
       avoidPicks: [
-        { sym: 'HINDALCO.NS', name: 'Hindalco Industries', reason: `Down ${getQuote('HINDALCO.NS').changePct.toFixed(2)}%; LME copper/aluminium weakness and global cyclical pressure.` },
+        { sym: 'HINDALCO.NS', name: 'Hindalco Industries', reason: `${getQuote('HINDALCO.NS').changePct >= 0 ? 'Up +' : 'Down '}${getQuote('HINDALCO.NS').changePct.toFixed(2)}%; LME copper/aluminium weakness and global cyclical pressure.` },
       ],
     },
     {
@@ -1125,11 +1133,11 @@ export async function computeFirstPrinciplesMarketIntelligence(forceRecalibrate 
       basicsReason: 'Delayed discretionary deal ramp-ups in US BFSI & retail clients cap near-term constant-currency revenue growth.',
       emotionsReason: 'Retail keeps buying every dip ("IT has fallen so much") while FIIs systematically sell into bounces.',
       policyReason: 'US visa/offshoring scrutiny and higher-for-longer Fed rates keep enterprise tech budgets tight.',
-      geoReason: `NASDAQ down ${nasdaq.changePct.toFixed(2)}% and US 10Y yield at ${us10y.price?.toFixed(2) || '4.28'}% directly trigger FII ADR & cash selling in Indian IT.`,
+      geoReason: `NASDAQ (${nasdaq.changePct >= 0 ? '+' : ''}${nasdaq.changePct.toFixed(2)}%) and US 10Y yield at ${us10y.price?.toFixed(2) || '4.28'}% dictate FII ADR & cash flows in Indian IT.`,
       dominantAgent: 'Agent Vidura',
       buyPicks: [],
       avoidPicks: [
-        { sym: 'INFY.NS', name: 'Infosys Ltd', reason: `Down ${getQuote('INFY.NS').changePct.toFixed(2)}%; high US discretionary BFSI sensitivity & ADR selling pressure.` },
+        { sym: 'INFY.NS', name: 'Infosys Ltd', reason: `${getQuote('INFY.NS').changePct >= 0 ? 'Up +' : 'Down '}${getQuote('INFY.NS').changePct.toFixed(2)}%; high US discretionary BFSI sensitivity & ADR selling pressure.` },
         { sym: 'WIPRO.NS', name: 'Wipro Ltd', reason: `Weakest revenue growth conversion during US enterprise spending slowdowns.` },
       ],
     },
@@ -1141,16 +1149,24 @@ export async function computeFirstPrinciplesMarketIntelligence(forceRecalibrate 
       emotionsScore: -65,
       policyScore: -45,
       geoScore: -88,
-      basicsReason: 'Severe raw-material cost inflation: crude monomers, TiO2, and Aviation Turbine Fuel (ATF) directly compress EBITDA margins.',
+      basicsReason: 'Raw-material cost dynamics: crude monomers, TiO2, and Aviation Turbine Fuel (ATF) dictate EBITDA margins.',
       emotionsReason: 'Classic retail value-trap: retail buys Asian Paints looking at past 5-year reputation while ignoring live raw material physics.',
-      policyReason: 'OMCs (BPCL) cannot freely hike retail petrol/diesel prices in line with crude spikes due to inflation management.',
-      geoReason: `Brent Crude at $${brent.price?.toFixed(2) || '111.95'}/bbl (+${brent.changePct.toFixed(2)}%) is a direct structural headwind for oil-consuming sectors.`,
+      policyReason: 'OMCs (BPCL) face government retail fuel price freezes whenever crude trades elevated.',
+      geoReason: `Brent Crude at $${brent.price?.toFixed(2) || '111.95'}/bbl (${brent.changePct >= 0 ? '+' : ''}${brent.changePct.toFixed(2)}%) ${
+        brent.changePct > 0.5 ? 'acts as a direct cost shock on airline fuel & paint resins.' : 'easing provides short-term margin relief.'
+      }`,
       dominantAgent: 'Agent Vidura & Agent Bhishma',
-      buyPicks: [],
+      buyPicks: [
+        ...(getQuote('INDIGO.NS').changePct > 0.5
+          ? [{ sym: 'INDIGO.NS', name: 'InterGlobe Aviation (IndiGo)', reason: `Up +${getQuote('INDIGO.NS').changePct.toFixed(2)}%; counter-trend passenger volume surge and Brent crude pullback (${brent.changePct >= 0 ? '+' : ''}${brent.changePct.toFixed(2)}%).` }]
+          : []),
+      ],
       avoidPicks: [
-        { sym: 'ASIANPAINT.NS', name: 'Asian Paints', reason: `Down ${getQuote('ASIANPAINT.NS').changePct.toFixed(2)}%; ~55% of raw materials are crude derivatives — direct margin squeeze.` },
-        { sym: 'INDIGO.NS', name: 'InterGlobe Aviation (IndiGo)', reason: `Down ${getQuote('INDIGO.NS').changePct.toFixed(2)}%; ATF jet fuel cost surge + USD lease liability pressure.` },
-        { sym: 'BPCL.NS', name: 'Bharat Petroleum (BPCL)', reason: `Down ${getQuote('BPCL.NS').changePct.toFixed(2)}%; marketing margins compressed by elevated Brent crude.` },
+        { sym: 'ASIANPAINT.NS', name: 'Asian Paints', reason: `${getQuote('ASIANPAINT.NS').changePct >= 0 ? 'Up +' : 'Down '}${getQuote('ASIANPAINT.NS').changePct.toFixed(2)}%; ~55% of raw materials are crude derivatives — margin squeeze.` },
+        ...(getQuote('INDIGO.NS').changePct <= 0.5
+          ? [{ sym: 'INDIGO.NS', name: 'InterGlobe Aviation (IndiGo)', reason: `Down ${getQuote('INDIGO.NS').changePct.toFixed(2)}%; elevated ATF jet fuel costs & USD lease liability pressures.` }]
+          : []),
+        { sym: 'BPCL.NS', name: 'Bharat Petroleum (BPCL)', reason: `${getQuote('BPCL.NS').changePct >= 0 ? 'Up +' : 'Down '}${getQuote('BPCL.NS').changePct.toFixed(2)}%; marketing margins pressured by baseline international crude price levels.` },
       ],
     },
   ];

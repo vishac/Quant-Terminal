@@ -950,16 +950,35 @@ app.get('/api/download/ios-profile', (req, res) => {
 
 app.get(['/manifest.json', '/manifest.webmanifest'], (_req, res) => {
   res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
-  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Cache-Control', 'no-cache');
   res.sendFile(path.resolve(__dirname, 'public', 'manifest.json'));
 });
 
 app.get(['/sw.js', '/registerSW.js'], (_req, res) => {
   res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
   res.setHeader('Service-Worker-Allowed', '/');
+  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.sendFile(path.resolve(__dirname, 'public', 'sw.js'));
 });
+
+app.get(
+  [
+    '/pwa-192x192.png',
+    '/pwa-maskable-192x192.png',
+    '/pwa-512x512.png',
+    '/pwa-maskable-512x512.png',
+    '/apple-touch-icon.png',
+  ],
+  (req, res) => {
+    const fileName = path.basename(req.path);
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.sendFile(path.resolve(__dirname, 'public', fileName));
+  },
+);
 
 // =============================================================================
 // SERVER STARTUP — HTTP + WebSocket + Vite
@@ -967,7 +986,48 @@ app.get(['/sw.js', '/registerSW.js'], (_req, res) => {
 
 async function startServer() {
   const server = createHttpServer(app);
-  const wss = new WebSocketServer({ server, path: '/ws/market' });
+  const wss = new WebSocketServer({ noServer: true });
+  const viteWss = new WebSocketServer({ noServer: true });
+
+  // Custom HTTP upgrade router: routes /ws/market to market quotes stream,
+  // and smoothly accepts Vite HMR client WebSockets without abrupt disconnects
+  server.on('upgrade', (req, socket, head) => {
+    const pathname = (req.url || '').split('?')[0];
+    if (pathname === '/ws/market') {
+      wss.handleUpgrade(req, socket, head, (ws) => {
+        wss.emit('connection', ws, req);
+      });
+    } else {
+      try {
+        viteWss.handleUpgrade(req, socket, head, (ws) => {
+          try {
+            ws.send(JSON.stringify({ type: 'connected' }));
+          } catch {
+            /* ignore */
+          }
+          ws.on('message', (msg: any) => {
+            try {
+              const str = msg.toString();
+              if (str.includes('ping') || str === 'PING') {
+                ws.send(JSON.stringify({ type: 'pong' }));
+              }
+            } catch {
+              /* ignore */
+            }
+          });
+          ws.on('error', () => {
+            /* ignore */
+          });
+        });
+      } catch {
+        try {
+          socket.destroy();
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  });
 
   wss.on('connection', (ws: WebSocket, req) => {
     const clientIp = req.socket.remoteAddress || 'unknown';
@@ -1026,7 +1086,13 @@ async function startServer() {
     app.get('*', (_req, res) => res.sendFile(path.resolve(distPath, 'index.html')));
   } else {
     try {
-      const vite = await createViteServer({ server: { middlewareMode: true, hmr: false }, appType: 'spa' });
+      const vite = await createViteServer({
+        server: {
+          middlewareMode: true,
+          hmr: { server },
+        },
+        appType: 'spa',
+      });
       app.use(vite.middlewares);
       app.use('*', async (req, res, next) => {
         const url = req.originalUrl;

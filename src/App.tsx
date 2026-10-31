@@ -13,6 +13,7 @@ import { BacktestLab } from './components/BacktestLab';
 import { SettingsTerminal } from './components/SettingsTerminal';
 import { InstitutionalEquityRadar } from './components/InstitutionalEquityRadar';
 import { AutonomousAgentsDesk } from './components/AutonomousAgentsDesk';
+import { TradeHistory } from './components/TradeHistory';
 import { CircuitBreakerModal } from './components/CircuitBreakerModal';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { OwnerGate } from './components/OwnerGate';
@@ -29,6 +30,7 @@ import { Radio } from 'lucide-react';
 const MOBILE_NAV_TABS: { id: ActiveTab; icon: string; label: string }[] = [
   { id: 'quant_bot',         icon: 'monitoring',       label: 'Quant'    },
   { id: 'autonomous_agents', icon: 'group_work',       label: '5-Agents' },
+  { id: 'trade_history',     icon: 'receipt_long',     label: 'Trades'   },
   { id: 'equity_radar',      icon: 'candlestick_chart',label: 'Radar'    },
   { id: 'risk_engine',       icon: 'security',         label: 'Risk'     },
   { id: 'sync_hub',          icon: 'hub',              label: 'Sync'     },
@@ -309,7 +311,13 @@ function AppInner() {
                 <QuantTerminal3D onNavigateToAgents={() => setActiveTab('autonomous_agents')} />
               )}
               {activeTab === 'autonomous_agents' && (
-                <AutonomousAgentsDesk onOpenCircuitBreaker={() => setIsCircuitBreakerOpen(true)} />
+                <AutonomousAgentsDesk 
+                  onOpenCircuitBreaker={() => setIsCircuitBreakerOpen(true)}
+                  onNavigateToTradeHistory={() => setActiveTab('trade_history')}
+                />
+              )}
+              {activeTab === 'trade_history' && (
+                <TradeHistory onNavigateToAgents={() => setActiveTab('autonomous_agents')} />
               )}
               {activeTab === 'equity_radar' && <InstitutionalEquityRadar />}
               {activeTab === 'deep_thesis' && <MacroPolicyThesis />}

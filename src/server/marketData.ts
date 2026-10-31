@@ -220,13 +220,16 @@ function computeDynamicStrategyQuantification(
     qarpRationale = 'Mid-cap sector performer offering balanced upside beta and institutional market capitalization.';
   }
 
-  // 4. RISK-REWARD & EXECUTION GEOMETRY (Weight 15%)
-  const riskPct = cap === 'Large Cap' ? -4.50 : cap === 'Mid Cap' ? -6.00 : -7.50;
-  const target1Upside = isShortTerm ? 6.00 : 8.00;
-  const target2Upside = isShortTerm ? 12.00 : 16.00;
-  const target3Upside = isShortTerm ? 22.00 : 28.00;
+  // 4. RISK-REWARD & EXECUTION GEOMETRY (Weight 15%) - Derived from real stock velocity & cap category
+  const baseRisk = cap === 'Large Cap' ? 4.20 : cap === 'Mid Cap' ? 5.80 : 7.20;
+  const momAdjustment = Math.max(-0.8, Math.min(1.5, changePct * 0.25));
+  const riskPct = -Number((baseRisk + Math.abs(momAdjustment * 0.4)).toFixed(2));
+  const baseTarget = isShortTerm ? 6.80 : 9.20;
+  const target1Upside = Number(Math.max(4.5, baseTarget + momAdjustment).toFixed(2));
+  const target2Upside = Number((target1Upside * 1.95).toFixed(2));
+  const target3Upside = Number((target1Upside * 3.35).toFixed(2));
   const rr = Math.abs(target1Upside / riskPct);
-  const riskRewardRatio = `1:${rr.toFixed(1)}`;
+  const riskRewardRatio = `1:${rr.toFixed(2)}`;
   
   let riskRewardScore = rr >= 1.5 ? 90 : 82;
   let riskRewardVerdict: 'EXEMPLARY' | 'STRONG' | 'OPTIMAL' | 'ACCEPTABLE' = rr >= 1.5 ? 'OPTIMAL' : 'ACCEPTABLE';

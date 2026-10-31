@@ -1036,8 +1036,24 @@ export async function computeGlobalMarketImpact(): Promise<GlobalMarketImpactRes
       if (profile.globalSensitivity.domesticCapex) macroScore += 14;
     }
 
-    // Determine direction from live price action + macro transmission
-    const isRising = changePct > 0 || (changePct > -0.3 && macroScore >= 15);
+    // Strict causal consistency:
+    // 1. If stock has structural macro headwind (e.g. crude spike for paints/aviation INDIGO, ASIANPAINT), it can NEVER be classified as RISING.
+    // 2. If stock is in a gaining domestic capex/M&A sector (e.g. INDIACEM, ULTRACEMCO) and holding near flat, it is an accumulation candidate, not a short/avoid.
+    const hasSevereMacroHeadwind = (profile.globalSensitivity.crudeUp === 'NEGATIVE' && crudeUp);
+    const isDomesticCapexConsolidation = profile.globalSensitivity.domesticCapex;
+
+    let isRising = false;
+    if (hasSevereMacroHeadwind) {
+      isRising = false;
+    } else if (changePct > 0) {
+      isRising = true;
+    } else if (isDomesticCapexConsolidation && changePct > -0.6) {
+      isRising = true; // Consolidating pullback in structural capex/M&A sector leader
+    } else if (changePct > -0.2 && macroScore >= 15) {
+      isRising = true;
+    } else {
+      isRising = false;
+    }
     const direction: 'RISING' | 'FALLING' = isRising ? 'RISING' : 'FALLING';
 
     // Match live news headline
@@ -1202,23 +1218,9 @@ export async function computeGlobalMarketImpact(): Promise<GlobalMarketImpactRes
     .sort((a, b) => a.changePct - b.changePct || b.convictionScore - a.convictionScore)
     .slice(0, 6);
 
-  // Ensure if all stocks happen to be one-sided on an extreme day, we still populate both lists by relative strength
-  if (risingStocks.length < 3) {
-    const sortedByRel = [...evaluatedStocks].sort((a, b) => b.relativeAlphaVsNifty - a.relativeAlphaVsNifty);
-    for (const item of sortedByRel.slice(0, 4)) {
-      if (!risingStocks.some((r) => r.symbol === item.symbol)) {
-        risingStocks.push({ ...item, direction: 'RISING', actionBadge: 'BUY ON DIP' });
-      }
-    }
-  }
-  if (fallingStocks.length < 3) {
-    const sortedByWeak = [...evaluatedStocks].sort((a, b) => a.relativeAlphaVsNifty - b.relativeAlphaVsNifty);
-    for (const item of sortedByWeak.slice(0, 4)) {
-      if (!fallingStocks.some((f) => f.symbol === item.symbol)) {
-        fallingStocks.push({ ...item, direction: 'FALLING', actionBadge: 'AVOID / EXIT LONGS' });
-      }
-    }
-  }
+  // ZERO SYNTHETIC DATA INJECTION:
+  // Never force declining stocks with negative macro transmission into risingStocks.
+  // If the market is broadly negative, the engine truthfully reflects only genuine relative-strength leaders.
 
   const topRise1 = risingStocks[0] || evaluatedStocks[0];
   const topRise2 = risingStocks[1] || topRise1;
