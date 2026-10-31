@@ -33,10 +33,10 @@ Under no circumstances should dummy, mock, or hardcoded static seed trades be in
    - Per official Upstox documentation (`https://upstox.com/developer/api-documentation/analytics-token/#supported-apis`), a Static IP is **NOT** required for Market Quote (`/market-quote/quotes`), Option Chain (`/option/chain`), Historical Candles, Market Information, Fundamentals, and WebSocket streams.
    - Because this terminal strictly operates in **Analytics & Paper-Trading Mode** (no live money orders are dispatched to brokers), Upstox token verification and ping checks must always use `/market-quote/quotes?instrument_key=NSE_INDEX|Nifty 50,NSE_INDEX|India VIX` rather than `/user/profile` (which triggers Static IP blocks).
 
-2. **Upstox Primary vs. Chartink Auto-Failover Backup (`fetchDynamicZonesScreener`)**:
-   - **Chartink is NOT required when Upstox API is paired and active.** When `activeUpstoxToken` is configured, `src/server/marketData.ts` pulls live batch quotes directly from Upstox v2 across **45 liquid NSE equities mapped by ISIN** + 4 benchmark indices (`^NSEI`, `^BSESN`, `^NSEBANK`, `^INDIAVIX`) and generates the 45 dynamic breakout/radar candidates directly from Upstox (`source: 'UPSTOX_PRIMARY_LIVE'`).
-   - **Automatic Failover to Chartink**: Chartink is placed strictly as an **automatic backup** (`source: 'CHARTINK_BACKUP_AUTO_FAILOVER'`). It auto-triggers **only** if Upstox is unconfigured or experiences an API/network issue.
-   - Both `ViewerDashboard.tsx` and `InstitutionalEquityRadar.tsx` dynamically display whether the terminal is running on **Upstox Live NSE Feed (Primary)** or **Chartink Backup Feed (Auto-Failover)** with an `Info` icon.
+2. **Upstox Primary vs. Chartink Auto-Failover Backup (`fetchDynamicZonesScreener`) & Dynamic UI Attribution**:
+   - **Chartink is NOT required when Upstox API is paired and active.** When `activeUpstoxToken` is configured, `src/server/marketData.ts` pulls live batch quotes directly from Upstox v2 across **45 liquid NSE equities mapped by ISIN** + 4 benchmark indices (`^NSEI`, `^BSESN`, `^NSEBANK`, `^INDIAVIX`) and generates the 45 dynamic breakout/radar candidates directly from Upstox (`source: 'UPSTOX_PRIMARY_LIVE'`, `apiEndpoint: 'https://api.upstox.com/v2/market-quote/quotes'`).
+   - **Automatic Failover to Chartink**: Chartink is placed strictly as an **automatic backup** (`source: 'CHARTINK_BACKUP_AUTO_FAILOVER'`, `apiEndpoint: 'https://chartink.com/screener/process'`). It auto-triggers **only** if Upstox is unconfigured or experiences an API/network issue.
+   - **Zero Contradictory Gateway Strings**: Every component (`ViewerDashboard.tsx`, `InstitutionalEquityRadar.tsx`, Split Dossier, Quick Full Thesis Modal footer, and Per-Stock Live Audit Evidence Modal) must dynamically switch its **Feed Tier** label (`Upstox Analytics v2 Live NSE Quotes (Primary)` vs `Chartink NSE Technical Screener (Auto-Failover Backup)`) and **API Gateway URL** (`https://api.upstox.com/v2/market-quote/quotes` vs `https://chartink.com/screener/process`) based on the live connection (`isUpstoxLive`), never hardcoding `https://chartink.com/screener/process` when Upstox is active.
 
 3. **Live vs. Delayed Fallback & Mandatory `Info` Icons**:
    - When Upstox is paired, the market quote stream runs in real time (`provider: 'UPSTOX_ANALYTICS_REALTIME'`, `isDelayed: false`). When Upstox is unpaired, quotes fall back to Yahoo Finance (`provider: 'YAHOO_DELAYED_UNOFFICIAL'`, `isDelayed: true`).
@@ -48,8 +48,28 @@ Under no circumstances should dummy, mock, or hardcoded static seed trades be in
 
 ---
 
-## 3. MANDATORY USER CONSULTATION & ENGINEERING HYGIENE
+## 3. 5-FACTOR QUANTITATIVE CONVICTION SCORE & ≥88/100 EXECUTION GATE
+1. **How Conviction Score Relates to the 88/100 Minimum Qualification Score**:
+   - The **Conviction Score (`0–100`)** is the 5-Factor Weighted Composite Score:
+     `Conviction Score = Round(0.20 * O + 0.25 * M + 0.25 * Q + 0.15 * R + 0.15 * S)`
+   - **`88/100` (`EXECUTION_QUALIFICATION_THRESHOLD = 88`) is the Minimum Execution Qualification Gate**:
+     - **`≥ 88 / 100`**: **`EXECUTION QUALIFIED (≥88 · Tier 1 Alpha)`** (`VERY_HIGH_CONVICTION`) — passes all 5 quantitative gates for autonomous/desk deployment.
+     - **`80 – 87 / 100`**: **`HIGH CONVICTION WATCHLIST (80–87 · Needs +X pts for ≥88 Gate)`** (`HIGH_CONVICTION`) — strong institutional thesis sitting 1–8 points below the execution cutoff (typically awaiting intraday volume or momentum breakout).
+     - **`< 80 / 100`**: **`MONITOR / HOLD (<80)`** (`MODERATE_CONVICTION`).
+2. **Continuous Stock-Differentiated Pillar Quantification (`NSE_EQUITY_QUANT_PROFILES`)**:
+   - Never use coarse step-buckets that assign identical pillar numbers (`M: 74, Q: 92, R: 90, S: 83`) across multiple stocks.
+   - Every stock in the 45-stock NSE universe (`src/server/marketData.ts`) is evaluated using continuous formulas anchored by audited stock-specific fundamentals (`roce`, `roe`, `patGrowthYoY`, `debtToEquity`, `avgVol20D`, `deliveryPct`, `rsRank`, `atrPct`, `moatBaseScore`) combined with live exchange price/volume ticks:
+     - **O — Institutional Order Flow (20%)**: Continuous function of Relative Volume (`RVOL = liveVolume / avgVol20D`), institutional delivery %, and live Rupee turnover (Cr).
+     - **M — Momentum & CANSLIM RS (25%)**: Blends multi-week Relative Strength percentile rank (`rsRank` 1–99) with live intraday ATR-adjusted price expansion (`changePct / atrPct`).
+     - **Q — Fundamental QARP Quality (25%)**: Continuous function of audited ROCE %, ROE %, YoY PAT growth %, and Debt-to-Equity leverage penalty.
+     - **R — Risk-Reward Asymmetry (15%)**: Derived from stock-specific ATR stop-loss distance vs Target 1/Target 2 upside geometry and RS follow-through probability.
+     - **S — Sovereign Moat & 200-DMA Regime (15%)**: Combines structural industry moat score with live 200-DMA trend persistence and institutional delivery support.
+
+---
+
+## 4. MANDATORY USER CONSULTATION & ENGINEERING HYGIENE
 1. **Always Ask Before Replacing Core Modules**:
    - Never unilaterally replace primary decision workspaces without user alignment.
 2. **No Purely Decorative 3D Gimmicks**:
    - Every visualization must function as an operational decision maker with explicit trade signals, entry bands, stop losses, profit targets, and risk parameters.
+

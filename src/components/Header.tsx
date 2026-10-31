@@ -291,10 +291,10 @@ export const Header: React.FC<HeaderProps> = ({
 
               <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
                 <span className="text-[11px] font-bold text-emerald-400 block uppercase">
-                  2. 5-Factor Quantitative Stock Scoring Model
+                  2. 5-Factor Quantitative Stock Scoring Model &amp; ≥88/100 Gate
                 </span>
                 <p className="text-[11px] text-slate-400">
-                  Every asset is evaluated across 5 orthogonal quantitative pillars: Order Flow (20%), Momentum / CANSLIM (25%), Fundamental QARP (25%), Risk-Reward Asymmetry (15%), and Sovereign Moat (15%). Minimum score for execution qualification is 88/100.
+                  Every asset&apos;s <strong>Conviction Score (0–100)</strong> is the weighted composite of 5 stock-specific quantitative pillars: <strong>O</strong>rder Flow RVOL &amp; Delivery (20%), <strong>M</strong>omentum / CANSLIM RS (25%), Fundamental <strong>Q</strong>ARP ROCE/ROE/Growth (25%), <strong>R</strong>isk-Reward ATR Asymmetry (15%), and <strong>S</strong>overeign Moat (15%). <strong>88/100 is the Execution Qualification Gate</strong>: stocks scoring <strong>&ge;88/100</strong> are marked <em>EXEC QUALIFIED (Tier 1 Alpha)</em>, while <strong>80–87/100</strong> sit on the <em>High Conviction Watchlist</em> awaiting intraday volume/momentum expansion.
                 </p>
               </div>
 

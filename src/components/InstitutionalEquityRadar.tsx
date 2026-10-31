@@ -69,7 +69,7 @@ function getSafeQuant(stock?: InstitutionalStockPick | null): StrategyQuantifica
 export const InstitutionalEquityRadar: React.FC = () => {
   // Radar Stocks LTP Polling Cadence: Default 10 seconds (10000ms)
   const [radarPollingIntervalMs, setRadarPollingIntervalMs] = useState<number>(10000);
-  const { quotes, latencyMs, lastUpdated, countdownSeconds, refetch } = useLiveMarketData(radarPollingIntervalMs);
+  const { quotes, latencyMs, lastUpdated, countdownSeconds, refetch, provider } = useLiveMarketData(radarPollingIntervalMs);
 
   // View Mode
   const [viewMode, setViewMode] = useState<ViewMode>('TABLE_MATRIX');
@@ -77,6 +77,7 @@ export const InstitutionalEquityRadar: React.FC = () => {
   // Filters & Sorting (100% Live & Verifiable)
   const [horizonFilter, setHorizonFilter] = useState<'ALL' | 'SHORT_TERM' | 'LONG_TERM'>('ALL');
   const [capFilter, setCapFilter] = useState<string>('ALL');
+  const [qualFilter, setQualFilter] = useState<'ALL' | 'QUALIFIED_88' | 'WATCHLIST_80_87'>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortField, setSortField] = useState<SortField>('CONVICTION');
   const [sortAscending, setSortAscending] = useState<boolean>(false);
@@ -133,7 +134,15 @@ export const InstitutionalEquityRadar: React.FC = () => {
       fetchLiveScreener();
     }, 60000);
     return () => clearInterval(timer);
-  }, []);
+  }, [provider]);
+
+  const isUpstoxLive = screenerSource === 'UPSTOX_PRIMARY_LIVE' || provider === 'UPSTOX_ANALYTICS_REALTIME';
+  const activeGatewayLabel = isUpstoxLive
+    ? 'Upstox Analytics v2 Live NSE Quotes (Primary)'
+    : 'Chartink NSE Technical Screener (Auto-Failover Backup)';
+  const activeApiEndpoint = isUpstoxLive
+    ? 'https://api.upstox.com/v2/market-quote/quotes'
+    : 'https://chartink.com/screener/process';
 
   // Notifications
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -161,9 +170,16 @@ export const InstitutionalEquityRadar: React.FC = () => {
   const midCapCount = useMemo(() => currentUniverse.filter(s => s.sector === 'MID_CAP').length, [currentUniverse]);
   const smallCapCount = useMemo(() => currentUniverse.filter(s => s.sector === 'SMALL_CAP').length, [currentUniverse]);
 
+  const qualified88Count = useMemo(() => currentUniverse.filter(s => (s.strategyQuantification?.compositeScore ?? 0) >= 88).length, [currentUniverse]);
+  const watchlist80Count = useMemo(() => currentUniverse.filter(s => {
+    const sc = s.strategyQuantification?.compositeScore ?? 0;
+    return sc >= 80 && sc < 88;
+  }).length, [currentUniverse]);
+
   // Filtered & Sorted stocks
   const filteredStocks = useMemo(() => {
     const list = currentUniverse.filter(stock => {
+      const score = stock.strategyQuantification?.compositeScore ?? 0;
       const matchesHorizon =
         horizonFilter === 'ALL' ||
         stock.horizon === horizonFilter;
@@ -172,6 +188,11 @@ export const InstitutionalEquityRadar: React.FC = () => {
         capFilter === 'ALL' ||
         stock.sector === capFilter;
 
+      const matchesQual =
+        qualFilter === 'ALL' ||
+        (qualFilter === 'QUALIFIED_88' && score >= 88) ||
+        (qualFilter === 'WATCHLIST_80_87' && score >= 80 && score < 88);
+
       const matchesSearch =
         searchQuery === '' ||
         stock.ticker.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -179,7 +200,7 @@ export const InstitutionalEquityRadar: React.FC = () => {
         stock.institutionalStrategy.modelName.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (stock.strategyQuantification?.primaryDriver && stock.strategyQuantification.primaryDriver.toLowerCase().includes(searchQuery.toLowerCase()));
 
-      return matchesHorizon && matchesCap && matchesSearch;
+      return matchesHorizon && matchesCap && matchesQual && matchesSearch;
     });
 
     return list.sort((a, b) => {
@@ -217,7 +238,7 @@ export const InstitutionalEquityRadar: React.FC = () => {
       }
       return sortAscending ? -comparison : comparison;
     });
-  }, [currentUniverse, horizonFilter, capFilter, searchQuery, sortField, sortAscending, quotes]);
+  }, [currentUniverse, horizonFilter, capFilter, qualFilter, searchQuery, sortField, sortAscending, quotes]);
 
   const activeStock = currentUniverse.find(s => s.id === selectedStockId) || filteredStocks[0] || currentUniverse[0];
   const modalStock = modalStockId ? currentUniverse.find(s => s.id === modalStockId) : null;
@@ -247,7 +268,8 @@ export const InstitutionalEquityRadar: React.FC = () => {
       const ltpVal = quotes[s.symbol]?.price ?? s.ltp ?? 0;
       const chgVal = quotes[s.symbol]?.changePct ?? s.changePct ?? 0;
       const volVal = quotes[s.symbol]?.volume ?? s.volume ?? 0;
-      return `"${s.ticker}","${s.name}","${s.capCategory}","${s.horizon}",${q.compositeScore},"${q.tierLabel}","${s.institutionalStrategy.modelName}",${ltpVal},"${chgVal}%",${volVal},${s.tacticalLevels.entryMin},${s.tacticalLevels.entryMax},${s.tacticalLevels.stopLoss},${s.tacticalLevels.target1.price},${s.tacticalLevels.target2.price},${s.tacticalLevels.target3.price},"${s.tacticalLevels.riskRewardRatio}","NSE","https://chartink.com/screener/process","${s.sourceEvidence?.tickTimestamp || lastRefreshedAt}"`;
+      const srcEndpoint = s.sourceEvidence?.apiEndpoint || (screenerSource === 'UPSTOX_PRIMARY_LIVE' ? 'https://api.upstox.com/v2/market-quote/quotes' : 'https://chartink.com/screener/process');
+      return `"${s.ticker}","${s.name}","${s.capCategory}","${s.horizon}",${q.compositeScore},"${q.tierLabel}","${s.institutionalStrategy.modelName}",${ltpVal},"${chgVal}%",${volVal},${s.tacticalLevels.entryMin},${s.tacticalLevels.entryMax},${s.tacticalLevels.stopLoss},${s.tacticalLevels.target1.price},${s.tacticalLevels.target2.price},${s.tacticalLevels.target3.price},"${s.tacticalLevels.riskRewardRatio}","NSE","${srcEndpoint}","${s.sourceEvidence?.tickTimestamp || lastRefreshedAt}"`;
     }).join('\n');
 
     const blob = new Blob([headers + rows], { type: 'text/csv' });
@@ -309,7 +331,9 @@ export const InstitutionalEquityRadar: React.FC = () => {
                       </button>
                     </div>
                     <p className="text-[11px] text-slate-300">
-                      Every stock in this radar is dynamically matched in real time by the backend Chartink screener engine: <strong className="text-cyan-300">Price &gt; 200 SMA</strong> and <strong className="text-emerald-400">Volume &gt; 100,000 shares</strong>. Zero static curated data.
+                      {isUpstoxLive
+                        ? <>Every stock in this radar is streamed live from the <strong className="text-emerald-400">Upstox Analytics v2 API (Primary)</strong> (<code className="text-cyan-300">api.upstox.com/v2/market-quote/quotes</code>), with Chartink armed as automatic failover backup.</>
+                        : <>Every stock in this radar is matched in real time by the <strong className="text-amber-300">Chartink NSE Backup Scanner</strong> (<strong className="text-cyan-300">Price &gt; 200 SMA</strong> and <strong className="text-emerald-400">Volume &gt; 100,000 shares</strong>). Pair Upstox Analytics to switch to Primary mode.</>}
                     </p>
                     <div className="mt-2 pt-2 border-t border-slate-800/80 text-[10px] text-emerald-400 font-mono">
                       ✓ Direct live exchange scanner · 0 Gemini API credits consumed
@@ -510,12 +534,20 @@ export const InstitutionalEquityRadar: React.FC = () => {
         {/* Live Screener Telemetry Badge */}
         <div className="flex items-center gap-2">
           <span className="text-xs text-slate-400 uppercase tracking-wider">LIVE FEED:</span>
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-950/70 border border-emerald-500/40 rounded-xl text-xs text-emerald-300 font-bold font-mono shadow-[0_0_12px_rgba(16,185,129,0.2)]">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-            <span>CHARTINK LIVE NSE ({livePicks.length} BREAKOUTS)</span>
+          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold font-mono ${
+            isUpstoxLive
+              ? 'bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.2)]'
+              : 'bg-amber-950/70 border border-amber-500/40 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.2)]'
+          }`}>
+            <span className={`w-2 h-2 rounded-full animate-ping ${isUpstoxLive ? 'bg-emerald-400' : 'bg-amber-400'}`}></span>
+            <span>
+              {isUpstoxLive
+                ? `UPSTOX LIVE NSE (${livePicks.length} PRIMARY)`
+                : `CHARTINK BACKUP NSE (${livePicks.length} FAILOVER)`}
+            </span>
             <button
               onClick={() => setShowGatewayInfo(true)}
-              className="ml-1 text-emerald-400 hover:text-white cursor-pointer"
+              className="ml-1 text-current hover:text-white cursor-pointer"
               title="Inspect Live Feed Evidence"
             >
               <Info className="w-3.5 h-3.5" />
@@ -585,6 +617,19 @@ export const InstitutionalEquityRadar: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-1.5">
+            <span className="text-xs text-slate-400">GATE (&ge;88):</span>
+            <select
+              value={qualFilter}
+              onChange={(e) => setQualFilter(e.target.value as 'ALL' | 'QUALIFIED_88' | 'WATCHLIST_80_87')}
+              className="p-1.5 rounded-xl bg-slate-950 border border-emerald-500/40 text-xs text-emerald-300 outline-none cursor-pointer font-mono"
+            >
+              <option value="ALL">All Candidates ({currentUniverse.length})</option>
+              <option value="QUALIFIED_88">✓ Exec Qualified &ge;88/100 ({qualified88Count})</option>
+              <option value="WATCHLIST_80_87">Watchlist 80–87/100 ({watchlist80Count})</option>
+            </select>
+          </div>
+
+          <div className="flex items-center gap-1.5">
             <span className="text-xs text-slate-400">CAP TIER:</span>
             <button
               onClick={() => setShowCapInfo(true)}
@@ -630,7 +675,7 @@ export const InstitutionalEquityRadar: React.FC = () => {
               CONNECTING TO REAL-TIME DYNAMIC BREAKOUT SCANNER...
             </h3>
             <p className="text-xs text-slate-400 max-w-lg font-sans">
-              Executing live technical screener rules: Close &gt; 200 SMA with volume expansion via Chartink API. Strictly zero static or curated mock data.
+              Synchronizing live NSE quotes and technical screener rules via Upstox Analytics v2 API (Primary) with Chartink NSE Scanner armed as automatic backup. Strictly zero static data.
             </p>
           </div>
         </div>
@@ -663,15 +708,21 @@ export const InstitutionalEquityRadar: React.FC = () => {
       {/* VIEW 1: STRATEGY MATRIX (FULL TABLE VIEW) */}
       {livePicks.length > 0 && viewMode === 'TABLE_MATRIX' && (
         <div className="bg-[#080d1a]/95 rounded-2xl border border-cyan-500/25 shadow-2xl overflow-hidden">
-          <div className="p-4 bg-slate-950/80 border-b border-slate-800 flex items-center justify-between text-xs">
-            <div className="flex items-center gap-2">
+          <div className="p-4 bg-slate-950/80 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-2 flex-wrap">
               <TableIcon className="w-4 h-4 text-cyan-400" />
               <span className="font-bold text-slate-200 uppercase tracking-wider">
                 STRATEGY QUANTIFICATION & CONVICTION COMPARATIVE MATRIX ({filteredStocks.length} STOCKS)
               </span>
+              <span className="px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 font-mono text-[10px] font-bold">
+                EXECUTION GATE: &ge;88/100 ({qualified88Count} QUALIFIED)
+              </span>
+              <span className="px-2 py-0.5 rounded bg-cyan-950/80 border border-cyan-500/30 text-cyan-300 font-mono text-[10px]">
+                WATCHLIST 80–87 ({watchlist80Count})
+              </span>
             </div>
             <span className="text-[11px] text-cyan-400 font-sans">
-              Click any stock row or "View Thesis" to inspect the full institutional deep-dive dossier.
+              5-Factor Weights: O (20%) + M (25%) + Q (25%) + R (15%) + S (15%) = Conviction Score
             </span>
           </div>
 
@@ -680,8 +731,18 @@ export const InstitutionalEquityRadar: React.FC = () => {
               <thead>
                 <tr className="border-b border-slate-800 bg-slate-950 text-[11px] text-slate-400 uppercase tracking-wider">
                   <th className="py-3.5 px-4 font-bold">Ticker / Asset</th>
-                  <th className="py-3.5 px-3 font-bold text-center">Conviction Score</th>
-                  <th className="py-3.5 px-3 font-bold">5-Factor Strategy Breakdown</th>
+                  <th className="py-3.5 px-3 font-bold text-center">
+                    <div className="flex flex-col items-center">
+                      <span>Conviction Score</span>
+                      <span className="text-[9px] text-emerald-400 font-mono normal-case">&ge;88 Exec Gate</span>
+                    </div>
+                  </th>
+                  <th className="py-3.5 px-3 font-bold">
+                    <div className="flex flex-col">
+                      <span>5-Factor Strategy Breakdown</span>
+                      <span className="text-[9px] text-slate-500 font-mono normal-case">O:20% · M:25% · Q:25% · R:15% · S:15%</span>
+                    </div>
+                  </th>
                   <th className="py-3.5 px-3 font-bold text-right">
                     <div className="inline-flex flex-col items-end">
                       <div className="flex items-center gap-1.5 text-cyan-300">
@@ -714,7 +775,9 @@ export const InstitutionalEquityRadar: React.FC = () => {
                     changePct: null,
                   };
                   const q = getSafeQuant(stock);
-                  const isHighTier = q.compositeScore >= 93;
+                  const isExecutionQualified = q.compositeScore >= 88;
+                  const isWatchlistTier = q.compositeScore >= 80 && q.compositeScore < 88;
+                  const ptsToGate = Math.max(0, 88 - q.compositeScore);
                   const ltp = stockQuote?.price ?? stock.ltp ?? 0;
                   const changePct = stockQuote?.changePct ?? stock.changePct ?? 0;
                   const changeVal = stockQuote?.change ?? (ltp && changePct ? Number(((ltp * changePct) / 100).toFixed(2)) : 0);
@@ -746,29 +809,35 @@ export const InstitutionalEquityRadar: React.FC = () => {
                       {/* Conviction Score & Tier Badge */}
                       <td className="py-3.5 px-3 text-center">
                         <div className="inline-flex flex-col items-center">
-                          <div className={`px-2.5 py-1 rounded-xl font-bold font-mono text-sm shadow-sm ${isHighTier
+                          <div className={`px-2.5 py-1 rounded-xl font-bold font-mono text-sm shadow-sm ${isExecutionQualified
                               ? 'bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.25)]'
-                              : 'bg-cyan-950/80 border border-cyan-500/50 text-cyan-300 shadow-[0_0_12px_rgba(0,240,255,0.2)]'
+                              : isWatchlistTier
+                                ? 'bg-cyan-950/80 border border-cyan-500/50 text-cyan-300 shadow-[0_0_12px_rgba(0,240,255,0.2)]'
+                                : 'bg-amber-950/80 border border-amber-500/50 text-amber-300'
                             }`}>
                             {q.compositeScore} / 100
                           </div>
-                          <span className={`text-[9px] font-bold uppercase mt-1 ${isHighTier ? 'text-emerald-400' : 'text-cyan-400'
+                          <span className={`text-[9px] font-bold uppercase mt-1 font-mono ${isExecutionQualified ? 'text-emerald-400' : isWatchlistTier ? 'text-cyan-400' : 'text-amber-400'
                             }`}>
-                            {q.convictionTier ? q.convictionTier.replace(/_/g, ' ') : 'HIGH CONVICTION'}
+                            {isExecutionQualified
+                              ? '✓ EXEC QUALIFIED (≥88)'
+                              : isWatchlistTier
+                                ? `WATCHLIST (-${ptsToGate} TO 88)`
+                                : 'MONITOR (<80)'}
                           </span>
                         </div>
                       </td>
 
                       {/* 5-Factor Strategy Quantification Mini-Bars */}
-                      <td className="py-3.5 px-3 min-w-[200px]">
+                      <td className="py-3.5 px-3 min-w-[205px]">
                         <div className="flex flex-col gap-1.5">
                           <div className="grid grid-cols-5 gap-1.5 font-mono text-[9px] text-center">
                             {q.factorBreakdown.map((f) => (
-                              <div key={f.id} className="flex flex-col items-center">
+                              <div key={f.id} className="flex flex-col items-center" title={`${f.name} (${(f.weight * 100).toFixed(0)}% weight): ${f.score}/100 — ${f.metricLabel}`}>
                                 <span className="text-slate-400 text-[8px]">{f.id === 'ORDER_FLOW' ? 'O' : f.id === 'MOMENTUM_CANSLIM' ? 'M' : f.id === 'FUNDAMENTAL_QARP' ? 'Q' : f.id === 'RISK_REWARD' ? 'R' : 'S'}</span>
                                 <div className="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden mt-0.5">
                                   <div
-                                    className={`h-full rounded-full ${f.score >= 95 ? 'bg-emerald-400' : f.score >= 90 ? 'bg-cyan-400' : 'bg-amber-400'
+                                    className={`h-full rounded-full ${f.score >= 90 ? 'bg-emerald-400' : f.score >= 82 ? 'bg-cyan-400' : 'bg-amber-400'
                                       }`}
                                     style={{ width: `${f.score}%` }}
                                   />
@@ -778,7 +847,7 @@ export const InstitutionalEquityRadar: React.FC = () => {
                             ))}
                           </div>
                           <div className="text-[10px] text-slate-400 truncate max-w-[220px]">
-                            {q.factorBreakdown[0]?.metricLabel || 'Technical Momentum Breakout'}
+                            {q.factorBreakdown[2]?.metricLabel || q.factorBreakdown[0]?.metricLabel || 'Technical Momentum Breakout'}
                           </div>
                         </div>
                       </td>
@@ -893,7 +962,7 @@ export const InstitutionalEquityRadar: React.FC = () => {
                   changePct: null,
                 };
                 const q = getSafeQuant(stock);
-                const isHighTier = q.compositeScore >= 93;
+                const isHighTier = q.compositeScore >= 88;
 
                 return (
                   <div
@@ -953,7 +1022,7 @@ export const InstitutionalEquityRadar: React.FC = () => {
                             ? 'bg-emerald-950/90 border border-emerald-500/40 text-emerald-300'
                             : 'bg-cyan-950/90 border border-cyan-500/40 text-cyan-300'
                           }`}>
-                          CONVICTION: {q.compositeScore}/100
+                          {isHighTier ? '✓ EXEC ≥88: ' : 'WATCHLIST: '}{q.compositeScore}/100
                         </span>
                       </div>
                       <div className="text-emerald-400 font-bold text-[10px]">T1: +{stock.tacticalLevels.target1.upsidePct}%</div>
@@ -1109,8 +1178,8 @@ export const InstitutionalEquityRadar: React.FC = () => {
                         {/* Factor Progress Bar */}
                         <div className="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden mb-2">
                           <div
-                            className={`h-full rounded-full transition-all duration-500 ${factor.score >= 95 ? 'bg-emerald-400 shadow-[0_0_8px_#10b981]' :
-                                factor.score >= 90 ? 'bg-cyan-400 shadow-[0_0_8px_#00f0ff]' :
+                            className={`h-full rounded-full transition-all duration-500 ${factor.score >= 90 ? 'bg-emerald-400 shadow-[0_0_8px_#10b981]' :
+                                factor.score >= 82 ? 'bg-cyan-400 shadow-[0_0_8px_#00f0ff]' :
                                   'bg-amber-400'
                               }`}
                             style={{ width: `${factor.score}%` }}
@@ -1347,7 +1416,7 @@ export const InstitutionalEquityRadar: React.FC = () => {
                   <span>LIVE VOLUME EVIDENCE & MOMENTUM CONTEXT:</span>
                 </div>
                 <p className="text-slate-300 font-sans text-xs leading-relaxed">
-                  Real-time session volume of <strong className="text-cyan-300">{(activeStock.volume ?? 0).toLocaleString('en-IN')} shares</strong> verified on the National Stock Exchange of India (NSE). The stock triggered the live Chartink scan rule (Close &gt; 200 SMA with volume expansion above 100,000 shares).
+                  Real-time session volume of <strong className="text-cyan-300">{(activeStock.volume ?? 0).toLocaleString('en-IN')} shares</strong> verified on the National Stock Exchange of India (NSE) via <strong className="text-emerald-300">{activeGatewayLabel}</strong>.
                 </p>
               </div>
             </div>
@@ -1367,7 +1436,7 @@ export const InstitutionalEquityRadar: React.FC = () => {
                   <span className="text-[10px] text-slate-400 block uppercase font-sans">RAW API SOURCE TELEMETRY</span>
                   <div className="text-[11px] text-slate-300 flex justify-between">
                     <span className="text-slate-500">Gateway:</span>
-                    <span className="text-cyan-300">chartink.com/screener/process</span>
+                    <span className="text-cyan-300">{activeApiEndpoint}</span>
                   </div>
                   <div className="text-[11px] text-slate-300 flex justify-between">
                     <span className="text-slate-500">Exchange:</span>
@@ -1401,7 +1470,7 @@ export const InstitutionalEquityRadar: React.FC = () => {
                   </div>
                   <div className="text-[11px] text-slate-300 flex items-center justify-between">
                     <span className="text-slate-400 font-sans">3. Hard Stop Loss Boundary:</span>
-                    <span className="text-rose-400 font-bold">₹{activeStock.tacticalLevels.stopLoss} (-6%)</span>
+                    <span className="text-rose-400 font-bold">₹{activeStock.tacticalLevels.stopLoss} ({activeStock.tacticalLevels.riskPct}%)</span>
                   </div>
                   <div className="text-[11px] text-slate-300 flex items-center justify-between">
                     <span className="text-slate-400 font-sans">4. Horizon Rationale:</span>
@@ -1413,7 +1482,7 @@ export const InstitutionalEquityRadar: React.FC = () => {
               <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 text-xs space-y-1">
                 <span className="text-[10px] text-slate-400 uppercase font-mono block">QUANTITATIVE AUDIT STATEMENT:</span>
                 <p className="text-slate-300 font-sans text-xs leading-relaxed">
-                  All price levels, volume numbers, and technical triggers are verified from the live National Stock Exchange of India (NSE) cash market via Chartink screener engine. All speculative or unverified historical claims have been permanently removed.
+                  All price levels, volume numbers, and technical triggers are verified from the live National Stock Exchange of India (NSE) cash market via <strong>{activeGatewayLabel}</strong>.
                 </p>
               </div>
             </div>
@@ -1530,10 +1599,18 @@ export const InstitutionalEquityRadar: React.FC = () => {
             </div>
 
             {/* Modal Footer */}
-            <div className="pt-4 border-t border-slate-800 flex items-center justify-between">
-              <span className="text-xs text-slate-400 font-sans">
-                Verified live from Chartink NSE Technical Breakout Screener. 100% authentic exchange data.
-              </span>
+            <div className="pt-4 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-col gap-0.5">
+                <div className="flex items-center gap-2 text-xs text-slate-300 font-sans">
+                  <span className={`w-2 h-2 rounded-full animate-pulse ${isUpstoxLive ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                  <span>
+                    Verified live from <strong className={isUpstoxLive ? 'text-emerald-300' : 'text-amber-300'}>{activeGatewayLabel}</strong>. 100% authentic exchange data.
+                  </span>
+                </div>
+                <div className="text-[10px] text-slate-500 font-mono pl-4">
+                  API Gateway: <span className="text-cyan-400">{activeApiEndpoint}</span>
+                </div>
+              </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => {
@@ -1768,13 +1845,17 @@ export const InstitutionalEquityRadar: React.FC = () => {
 
             <div className="space-y-3 text-xs text-slate-300 leading-relaxed font-sans">
               <p className="text-slate-300">
-                Every LTP displayed on this radar reflects authentic exchange prices directly polled from the National Stock Exchange of India (NSE) via the Chartink real-time screener engine.
+                Every LTP displayed on this radar reflects authentic exchange prices directly polled from the National Stock Exchange of India (NSE) via <strong>{screenerSource === 'UPSTOX_PRIMARY_LIVE' ? 'Upstox Analytics v2 API (Primary)' : 'Chartink NSE Technical Screener (Auto-Failover Backup)'}</strong>.
               </p>
 
               <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-2 font-mono text-[11px]">
                 <div className="flex justify-between">
                   <span className="text-slate-400">Exchange:</span>
                   <span className="text-cyan-300 font-bold">NSE (National Stock Exchange)</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Active Gateway:</span>
+                  <span className="text-emerald-300 font-bold">{screenerSource === 'UPSTOX_PRIMARY_LIVE' ? 'https://api.upstox.com/v2/market-quote/quotes' : 'https://chartink.com/screener/process'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-400">Engine Cadence:</span>
@@ -1864,13 +1945,22 @@ export const InstitutionalEquityRadar: React.FC = () => {
                 </div>
               </div>
 
-              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
+              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5">
                 <span className="text-[10px] text-slate-400 uppercase block font-sans">Screening Condition & Rationale</span>
                 <p className="text-[11px] text-slate-300 font-sans leading-relaxed">
-                  {sourceEvidenceStock.sourceEvidence?.horizonLogic || 'Verified dynamically via Chartink Live NSE technical screener.'}
+                  {sourceEvidenceStock.sourceEvidence?.horizonLogic || (isUpstoxLive ? 'Verified dynamically via Upstox Analytics v2 Live NSE Quotes (Primary).' : 'Verified dynamically via Chartink Live NSE technical screener (Auto-Failover Backup).')}
                 </p>
-                <div className="text-[10px] text-slate-500 pt-1">
-                  API Gateway: <span className="text-cyan-400">https://chartink.com/screener/process</span>
+                <div className="text-[10px] text-slate-400 pt-1 flex items-center justify-between">
+                  <span>Feed Tier:</span>
+                  <span className={isUpstoxLive ? 'text-emerald-400 font-bold' : 'text-amber-300 font-bold'}>
+                    {activeGatewayLabel}
+                  </span>
+                </div>
+                <div className="text-[10px] text-slate-400 flex items-center justify-between">
+                  <span>API Gateway:</span>
+                  <span className="text-cyan-400">
+                    {activeApiEndpoint}
+                  </span>
                 </div>
               </div>
             </div>

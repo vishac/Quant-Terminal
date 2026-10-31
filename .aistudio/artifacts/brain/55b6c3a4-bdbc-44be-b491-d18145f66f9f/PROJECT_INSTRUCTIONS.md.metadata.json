@@ -1,5 +1,5 @@
 {
-  "summary":  "Updated PROJECT_INSTRUCTIONS.md with the Upstox Analytics v2 Primary -> Chartink Auto-Failover Backup architecture (45 ISIN-mapped NSE equities), dynamic feed badges in ViewerDashboard and InstitutionalEquityRadar, and removal of unused broker audit log line items and allocation matrix entries in BrokerGatewayRouter.",
-  "updatedAt":  "2026-10-31T12:27:29.071858403Z",
+  "summary":  "Updated PROJECT_INSTRUCTIONS.md artifact with the Dynamic Gateway & API Endpoint Attribution rule so all modal footers, dossiers, and source evidence modals dynamically switch between Upstox Analytics v2 API (Primary) and Chartink (Auto-Failover Backup).",
+  "updatedAt":  "2026-10-31T13:35:30.877727772Z",
   "userFacing":  true
 }

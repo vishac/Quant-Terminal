@@ -66,7 +66,9 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
     loadScreener();
     const interval = setInterval(loadScreener, 60000);
     return () => clearInterval(interval);
-  }, [loadScreener]);
+  }, [loadScreener, provider]);
+
+  const isUpstoxPrimaryActive = screenerSource === 'UPSTOX_PRIMARY_LIVE' || provider === 'UPSTOX_ANALYTICS_REALTIME';
 
   const handleManualRefresh = () => {
     setIsRefreshing(true);
@@ -111,6 +113,7 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
         convictionScore,
         strategyQuantification: stock.strategyQuantification,
         tacticalLevels: stock.tacticalLevels,
+        sourceEvidence: stock.sourceEvidence,
         volume: stock.volume,
       };
     });
@@ -343,8 +346,12 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
             <h3 className="text-sm font-bold text-slate-100 uppercase tracking-wide">
               Dynamic Technical Breakout Equities ({stocksList.length} Active Candidates)
             </h3>
-            <span className="px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 font-mono text-[10px] font-bold">
-              100% LIVE NSE SCREENER FEED
+            <span className={`px-2 py-0.5 rounded font-mono text-[10px] font-bold border ${
+              isUpstoxPrimaryActive
+                ? 'bg-emerald-950/80 border-emerald-500/40 text-emerald-300'
+                : 'bg-amber-950/80 border-amber-500/40 text-amber-300'
+            }`}>
+              {isUpstoxPrimaryActive ? 'UPSTOX LIVE NSE FEED (PRIMARY)' : 'CHARTINK BACKUP NSE FEED (AUTO-FAILOVER)'}
             </span>
           </div>
           <span className="text-xs text-slate-400 font-mono">
@@ -479,15 +486,15 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
                       <button
                         onClick={() => setSelectedConvictionStock(stock)}
                         className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border font-mono font-bold text-xs transition hover:scale-105 cursor-pointer ${
-                          stock.convictionScore >= 90
+                          stock.convictionScore >= 88
                             ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300 shadow-[0_0_8px_rgba(16,185,129,0.2)]'
                             : stock.convictionScore >= 80
                             ? 'bg-cyan-950/80 border-cyan-500/50 text-cyan-300 shadow-[0_0_8px_rgba(0,240,255,0.2)]'
                             : 'bg-amber-950/80 border-amber-500/50 text-amber-300 shadow-[0_0_8px_rgba(245,158,11,0.2)]'
                         }`}
-                        title="Click to view 5-factor mathematical audit and live NSE inputs"
+                        title="Click to view 5-factor mathematical audit and ≥88/100 Execution Gate status"
                       >
-                        <span>{stock.convictionScore} / 100</span>
+                        <span>{stock.convictionScore >= 88 ? '✓ ' : ''}{stock.convictionScore} / 100</span>
                         <Info className="w-3 h-3 text-slate-400 hover:text-cyan-300" />
                       </button>
                     </td>
@@ -499,7 +506,7 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
                 <tr>
                   <td colSpan={6} className="py-8 text-center text-slate-500">
                     {isLoadingScreener 
-                      ? 'Synchronizing 45 dynamic breakout candidates from Chartink live NSE feed...' 
+                      ? 'Synchronizing 45 dynamic breakout candidates from live NSE feed...' 
                       : `No equities found matching "${searchQuery}"`}
                   </td>
                 </tr>
@@ -519,8 +526,8 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
                   <Gauge className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-slate-100 text-base">Quantitative Conviction Score Architecture</h3>
-                  <p className="text-xs text-slate-400">Mathematical Framework & Non-Static Verification</p>
+                  <h3 className="font-bold text-slate-100 text-base">5-Factor Quantitative Conviction Score &amp; ≥88/100 Execution Gate</h3>
+                  <p className="text-xs text-slate-400">Continuous Stock-Differentiated Mathematical Framework</p>
                 </div>
               </div>
               <button 
@@ -534,26 +541,26 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
             <div className="p-3.5 bg-cyan-950/40 border border-cyan-500/30 rounded-xl text-xs space-y-1.5 text-slate-300">
               <div className="font-bold text-cyan-300 flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-cyan-400" />
-                <span>Zero Dummy Data Principle</span>
+                <span>How Conviction Score Relates to the 88/100 Execution Gate</span>
               </div>
               <p>
-                Scores are calculated strictly from <strong>verified live NSE market metrics</strong> received via the Chartink real-time gateway. No static placeholders or artificial constant scores (such as a flat 92) are used.
+                The <strong>Conviction Score (0–100)</strong> is the weighted composite of the 5 quantitative pillars below. <strong>88/100 is the minimum Execution Qualification Gate</strong>: stocks scoring <strong>&ge;88/100</strong> qualify for autonomous/desk deployment (<em>Tier 1 Alpha</em>), while stocks scoring <strong>80–87/100</strong> sit on the <em>High Conviction Watchlist</em> awaiting intraday volume or momentum thrust to cross 88.
               </p>
             </div>
 
             <div className="space-y-3">
               <div className="text-xs font-bold text-slate-300 uppercase tracking-wider font-mono">
-                The 5 Quantitative Framework Factors & Weights
+                The 5 Orthogonal Quantitative Pillars &amp; Continuous Formulas
               </div>
               <div className="grid grid-cols-1 gap-2.5">
                 <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 flex items-start justify-between">
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="font-mono font-bold text-cyan-400 text-xs">20% Weight</span>
-                      <span className="font-bold text-slate-200 text-xs">Institutional Order Flow</span>
+                      <span className="font-mono font-bold text-cyan-400 text-xs">O · 20% Weight</span>
+                      <span className="font-bold text-slate-200 text-xs">Institutional Order Flow &amp; Delivery Velocity</span>
                     </div>
                     <p className="text-[11px] text-slate-400 mt-1">
-                      Evaluates NSE traded volume relative to the 100K baseline. 2M+ shares gets 95, 1M+ gets 90, 500K gets 84, 100K threshold gets 70.
+                      Continuous function of live session volume vs 20-day institutional average (RVOL), NSE delivery %, and live rupee turnover (Cr).
                     </p>
                   </div>
                 </div>
@@ -561,11 +568,11 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
                 <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 flex items-start justify-between">
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="font-mono font-bold text-emerald-400 text-xs">25% Weight</span>
-                      <span className="font-bold text-slate-200 text-xs">Momentum & CANSLIM Thrust</span>
+                      <span className="font-mono font-bold text-emerald-400 text-xs">M · 25% Weight</span>
+                      <span className="font-bold text-slate-200 text-xs">Momentum &amp; CANSLIM Relative Strength</span>
                     </div>
                     <p className="text-[11px] text-slate-400 mt-1">
-                      Measures session price expansion (% return). +5.0% thrust scores 96, +2.5% scores 90, steady drift scores 82, pullbacks score 56–65.
+                      Blends multi-week Relative Strength (RS percentile rank 1–99) with live intraday ATR-adjusted price expansion. Prevents flat-session penalties on structural leaders.
                     </p>
                   </div>
                 </div>
@@ -573,11 +580,11 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
                 <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 flex items-start justify-between">
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="font-mono font-bold text-indigo-400 text-xs">25% Weight</span>
-                      <span className="font-bold text-slate-200 text-xs">Market Cap & Balance Sheet Resilience</span>
+                      <span className="font-mono font-bold text-indigo-400 text-xs">Q · 25% Weight</span>
+                      <span className="font-bold text-slate-200 text-xs">Fundamental QARP &amp; Balance Sheet Quality</span>
                     </div>
                     <p className="text-[11px] text-slate-400 mt-1">
-                      SEBI market cap classification. Large Cap institutional resilience scores 92, Mid Cap scores 84, Small Cap scores 76.
+                      Stock-specific audited ROCE %, ROE %, YoY PAT growth %, and Debt-to-Equity leverage penalty across all 45 NSE equities (replaces flat market-cap buckets).
                     </p>
                   </div>
                 </div>
@@ -585,11 +592,11 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
                 <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 flex items-start justify-between">
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="font-mono font-bold text-purple-400 text-xs">15% Weight</span>
-                      <span className="font-bold text-slate-200 text-xs">Risk-to-Reward Execution Geometry</span>
+                      <span className="font-mono font-bold text-purple-400 text-xs">R · 15% Weight</span>
+                      <span className="font-bold text-slate-200 text-xs">Risk-to-Reward Asymmetry (ATR Geometry)</span>
                     </div>
                     <p className="text-[11px] text-slate-400 mt-1">
-                      Calculates Target 1 upside potential vs defined stop loss level (1:1.5+ R:R gives 90; standard gives 82).
+                      Evaluates stock-specific ATR volatility stop-loss distance vs Target 1 / Target 2 upside asymmetry and RS breakout follow-through probability.
                     </p>
                   </div>
                 </div>
@@ -597,20 +604,28 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
                 <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 flex items-start justify-between">
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="font-mono font-bold text-amber-400 text-xs">15% Weight</span>
-                      <span className="font-bold text-slate-200 text-xs">Macro Moat & 200 SMA Regime</span>
+                      <span className="font-mono font-bold text-amber-400 text-xs">S · 15% Weight</span>
+                      <span className="font-bold text-slate-200 text-xs">Sovereign Moat &amp; 200-DMA Structural Regime</span>
                     </div>
                     <p className="text-[11px] text-slate-400 mt-1">
-                      Aligns positive session drift with the sustained multi-month 200 SMA dynamic zone baseline (91 for volume-backed expansion, 83 for positive, 74 for consolidation).
+                      Combines industry pricing power / regulatory moat with live 200-DMA trend persistence and institutional delivery support.
                     </p>
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="p-3 bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono text-slate-300">
-              <span className="text-slate-400">Formula: </span>
-              <span className="text-cyan-300">Composite Score = Round(0.20×OF + 0.25×MOM + 0.25×CAP + 0.15×RR + 0.15×MACRO)</span>
+            <div className="p-3 bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono text-slate-300 space-y-1">
+              <div>
+                <span className="text-slate-400">Formula: </span>
+                <span className="text-cyan-300">Conviction Score = Round(0.20×O + 0.25×M + 0.25×Q + 0.15×R + 0.15×S)</span>
+              </div>
+              <div>
+                <span className="text-slate-400">Qualification Gate: </span>
+                <span className="text-emerald-400">&ge;88/100 Execution Qualified</span>
+                <span className="text-slate-500"> · </span>
+                <span className="text-cyan-300">80–87/100 High Conviction Watchlist</span>
+              </div>
             </div>
 
             <div className="flex justify-end pt-2">
@@ -697,6 +712,21 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
                     </p>
                   </div>
                 ))}
+              </div>
+            </div>
+
+            <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 text-[11px] font-mono space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">Verified Live Gateway:</span>
+                <span className={isUpstoxPrimaryActive ? 'text-emerald-400 font-bold' : 'text-amber-300 font-bold'}>
+                  {selectedConvictionStock.sourceEvidence?.gateway || (isUpstoxPrimaryActive ? 'Upstox Analytics v2 Live NSE Quotes (Primary)' : 'Chartink NSE Screener (Auto-Failover Backup)')}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">API Endpoint:</span>
+                <span className="text-cyan-400">
+                  {selectedConvictionStock.sourceEvidence?.apiEndpoint || (isUpstoxPrimaryActive ? 'https://api.upstox.com/v2/market-quote/quotes' : 'https://chartink.com/screener/process')}
+                </span>
               </div>
             </div>
 
