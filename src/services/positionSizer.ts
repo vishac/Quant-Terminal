@@ -13,7 +13,7 @@
  * always produces the same output.
  */
 
-import { Segment } from '../brokers/BrokerAdapter.ts';
+import type { Segment } from '../brokers/BrokerAdapter.ts';
 
 // ---------------------------------------------------------------------------
 // Input / output types

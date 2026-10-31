@@ -73,8 +73,11 @@ Under no circumstances should dummy, mock, or hardcoded static seed trades be in
    - Never unilaterally replace primary decision workspaces without user alignment.
 2. **No Purely Decorative 3D Gimmicks**:
    - Every visualization must function as an operational decision maker with explicit trade signals, entry bands, stop losses, profit targets, and risk parameters.
-3. **Node.js ESM Production Compatibility (`node server.ts` on Cloud Run)**:
-   - Because production runs `node server.ts` under `"type": "module"`, every relative import in `server.ts` and any transitively imported module (`src/server/*`, `src/data/*`, `src/utils/*`, `src/brokers/*`, `src/services/*`) **MUST** include the explicit `.ts` file extension (e.g., `from '../utils/indianHolidayCalendar.ts'`) and files must be saved in clean UTF-8 without BOM so Cloud Run containers never throw `ERR_MODULE_NOT_FOUND` on startup.
+3. **Node.js ESM & Native Type-Stripping Production Compatibility (`node server.ts` on Cloud Run)**:
+   - Because production runs `node server.ts` on Node.js v22 (`--experimental-strip-types`) under `"type": "module"`:
+     1. Every relative import in `server.ts` and any transitively imported module (`src/server/*`, `src/data/*`, `src/utils/*`, `src/brokers/*`, `src/services/*`) **MUST** include the explicit `.ts` file extension (e.g., `from '../utils/indianHolidayCalendar.ts'`).
+     2. Every imported TypeScript `type` or `interface` **MUST** use `import type { ... }` or inline `type` specifiers (`import { type Segment, ... }`) rather than a value import. Node.js v22 native type-stripping erases `export type` and `export interface` at runtime and throws `SyntaxError: The requested module '...' does not provide an export named '...'` if a type is imported without the `type` keyword.
+     3. Files must be saved in clean UTF-8 without BOM.
 4. **Environment Variable Hygiene (No Redundant `.env.example` Prompts)**:
    - Do **NOT** list non-secret or hardcoded constants (`MARKET_DATA_PROVIDER`, `MARKET_DATA_REFRESH_INTERVAL_MS`, `NSE_EQUITY_STT_SELL_PCT`, `NSE_OPTIONS_STT_SELL_PCT`, `MCX_COMMODITY_CTT_PCT`, `SEBI_TURNOVER_FEE_PER_CR`, `GST_RATE_PCT`, `BROKERAGE_FLAT_INR`) as environment variables, as AI Studio prompts the user to enter secret values for every key defined in `.env.example`.
    - Only `GEMINI_API_KEY` (auto-injected by AI Studio), `OWNER_ACCESS_TOKEN` (for Owner Desk unlock), and `UPSTOX_ACCESS_TOKEN` (optional if paired via the UI modal) are read by the backend.
@@ -118,10 +121,13 @@ Under no circumstances should dummy, mock, or hardcoded static seed trades be in
     - **Scheduler Telemetry**: Complete audit trail of background events from `.data/scheduler_events.jsonl`.
   - Added seamless navigation in `FirstPrinciplesMarketEngine.tsx` as dedicated View 5 ("5. Autonomous Scheduler & Permanent Ledger") and cross-link from View 4.
   - Server endpoints in `server.ts` enhanced to support manual `INTRADAY_SQUAREOFF` routine and resilient owner authentication for local paper simulations.
+- [x] **Cloud Run Production Startup Fix (`node server.ts` Native TypeScript Strip-Types Compatibility)**:
+  - Fixed `SyntaxError: The requested module '../brokers/BrokerAdapter.ts' does not provide an export named 'Segment'` when `server.ts` loads `src/server/agentScheduler.ts` -> `src/services/positionSizer.ts` under Node.js v22 native TypeScript execution (`node server.ts`).
+  - Converted all TypeScript interface/type imports across `src/services/positionSizer.ts`, `src/services/orderLifecycle.ts`, `src/brokers/PaperBrokerAdapter.ts`, `src/brokers/UpstoxAdapter.ts`, `src/data/institutionalEquityData.ts`, and `src/data/sebiRegulatoryFramework.ts` to explicit `import type` / `type` specifiers and verified `.ts` extensions on all server-reachable relative imports.
 
 ### 5.3 Current Progress & Live System Status
 - **Type Safety**: `npx tsc --noEmit` passes with 0 errors across the entire codebase.
-- **Production Build**: Vite + PWA production build compiles cleanly in ~2.7s (1724 modules transformed, 0 errors).
+- **Production Build & Cloud Run Boot**: Vite + PWA production build compiles cleanly and `NODE_ENV=production node server.ts` boots cleanly with `[JARVIS Terminal Server] Online` and `[AgentScheduler] Starting Indian Market Background Scheduler...`.
 - **Execution Modes**: Paper Broker active by default; Upstox Analytics v2 ready for live quotes and paper wire routing.
 - **Scheduler & Database**: Running automatically on server start (`agentScheduler.start()`) with persistent JSONL append in `.data/` and full UI controls in the Autonomous Scheduler Hub.
 

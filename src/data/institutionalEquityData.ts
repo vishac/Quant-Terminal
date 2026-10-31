@@ -1,7 +1,7 @@
 import {
-  StrategyFactorScore,
-  StrategyQuantification,
-  QualificationRule,
+  type StrategyFactorScore,
+  type StrategyQuantification,
+  type QualificationRule,
   QUANTITATIVE_STRATEGY_FRAMEWORK_WEIGHTS,
   getStrategyQuantification,
 } from './strategyQuantificationData.ts';

@@ -1,4 +1,4 @@
-import { SebiComplianceRule } from '../types/quant.ts';
+import type { SebiComplianceRule } from '../types/quant.ts';
 
 export const SEBI_COMPLIANCE_RULES: SebiComplianceRule[] = [
   {

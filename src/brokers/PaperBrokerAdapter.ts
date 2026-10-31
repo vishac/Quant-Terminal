@@ -14,17 +14,17 @@
  */
 
 import {
-  BrokerAdapter,
-  OrderRequest,
-  OrderResponse,
-  Position,
-  AccountInfo,
-  Quote,
-  Candle,
-  CandleInterval,
-  OptionChainRow,
-  MarginInfo,
-  Segment,
+  type BrokerAdapter,
+  type OrderRequest,
+  type OrderResponse,
+  type Position,
+  type AccountInfo,
+  type Quote,
+  type Candle,
+  type CandleInterval,
+  type OptionChainRow,
+  type MarginInfo,
+  type Segment,
   generateClientOrderId,
 } from './BrokerAdapter.ts';
 
