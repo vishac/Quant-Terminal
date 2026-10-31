@@ -706,6 +706,8 @@ export function deriveLiveAutonomousAgents(
   ];
 }
 
+let orderSeqCounter = 100;
+
 /**
  * Generates an authentic paper trade order pegged directly to the LIVE
  * exchange tick. Initial PnL is STRICTLY 0.00 at entry.
@@ -725,7 +727,9 @@ export function generateLiveMarketOrder(
   const orderDate = formatOrderDate(now);
   const orderTime = formatOrderTime(now);
   const timeStr = `${orderDate} ${orderTime}`;
-  const orderId = `SIM-ORD-${Date.now().toString().slice(-6)}`;
+  const agentTag = agentId.replace('agent_', '').slice(0, 3).toUpperCase();
+  orderSeqCounter += 1;
+  const orderId = `SIM-ORD-${agentTag}-${Date.now().toString().slice(-5)}-${orderSeqCounter}`;
 
   if (agentId === 'agent_bhishma') {
     // Generate authentic NIFTY option spread pegged to real current spot
@@ -966,7 +970,18 @@ export function updateOrdersLivePnl(
   orders: PaperTradeOrder[],
   quotes: Record<string, MarketQuote>
 ): PaperTradeOrder[] {
-  return orders.map(order => {
+  const seenIds = new Set<string>();
+  return orders.map((rawOrder, idx) => {
+    let order = rawOrder;
+    if (seenIds.has(order.id)) {
+      const tag = (order.agentId || 'AGT').replace('agent_', '').slice(0, 3).toUpperCase();
+      const uniqueId = `${order.id}-${tag}-${idx + 1}`;
+      seenIds.add(uniqueId);
+      order = { ...order, id: uniqueId };
+    } else {
+      seenIds.add(order.id);
+    }
+
     if (order.status !== 'OPEN') return order;
 
     if (order.segment === 'NSE_CASH' || order.segment === 'BSE_CASH') {
@@ -1014,7 +1029,9 @@ export function generateOrderFromDecisionScript(
   const orderDate = formatOrderDate(now);
   const orderTime = formatOrderTime(now);
   const timeStr = `${orderDate} ${orderTime}`;
-  const orderId = `SCRIPT-ORD-${Date.now().toString().slice(-6)}`;
+  const agentTag = script.agentId.replace('agent_', '').slice(0, 3).toUpperCase();
+  orderSeqCounter += 1;
+  const orderId = `SCRIPT-ORD-${agentTag}-${Date.now().toString().slice(-5)}-${orderSeqCounter}`;
 
   if (script.segment === 'NSE_FNO' || script.segment === 'MCX' || script.segment === 'MCX_FUTURES' || script.segment === 'MCX_OPTIONS') {
     return generateLiveMarketOrder(quotes, script.agentId);

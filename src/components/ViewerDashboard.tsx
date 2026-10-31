@@ -29,7 +29,7 @@ interface ViewerDashboardProps {
 }
 
 export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
-  const { quotes, latencyMs, countdownSeconds, marketSession, refetch, isLive } = useLiveMarketData(5000);
+  const { quotes, latencyMs, countdownSeconds, marketSession, refetch, isLive, provider } = useLiveMarketData(5000);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState<'ALL' | 'SHORT_TERM' | 'LONG_TERM' | 'LARGE_CAP' | 'MID_CAP' | 'SMALL_CAP'>('ALL');
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -38,8 +38,9 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
   const [selectedConvictionStock, setSelectedConvictionStock] = useState<any | null>(null);
   const [showModelFormulaModal, setShowModelFormulaModal] = useState<boolean>(false);
 
-  // Dynamic Live Technical Breakout Radar Universe (Same 45 stocks as Dynamic Technical Breakout Radar)
+  // Dynamic Live Technical Breakout Radar Universe (Primary: Upstox v2 Live -> Backup: Chartink Auto-Failover)
   const [screenerStocks, setScreenerStocks] = useState<InstitutionalStockPick[]>([]);
+  const [screenerSource, setScreenerSource] = useState<'UPSTOX_PRIMARY_LIVE' | 'CHARTINK_BACKUP_AUTO_FAILOVER'>('CHARTINK_BACKUP_AUTO_FAILOVER');
   const [isLoadingScreener, setIsLoadingScreener] = useState<boolean>(true);
 
   const loadScreener = useCallback(async () => {
@@ -48,6 +49,11 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
       const data = await res.json();
       if (data.success && Array.isArray(data.data) && data.data.length > 0) {
         setScreenerStocks(data.data);
+        if (data.source === 'UPSTOX_PRIMARY_LIVE') {
+          setScreenerSource('UPSTOX_PRIMARY_LIVE');
+        } else {
+          setScreenerSource('CHARTINK_BACKUP_AUTO_FAILOVER');
+        }
       }
     } catch {
       // Keep existing screener stocks on transient failure
@@ -139,21 +145,41 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto font-sans animate-in fade-in duration-300">
-      {/* Top Banner: Market Status & Real-time Indicator */}
+      {/* Top Banner: Market Status & Primary Upstox vs Backup Chartink Indicator */}
       <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></div>
+          <div className={`w-2.5 h-2.5 rounded-full animate-pulse ${
+            screenerSource === 'UPSTOX_PRIMARY_LIVE' || provider === 'UPSTOX_ANALYTICS_REALTIME'
+              ? 'bg-emerald-400'
+              : 'bg-amber-400'
+          }`}></div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-sm font-bold text-slate-100 uppercase tracking-wide">
                 Live Indian Markets (NSE &amp; BSE)
               </h2>
-              <span className="text-[11px] font-mono text-emerald-400 font-semibold bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-700/40">
-                CHARTINK LIVE NSE RADAR FEED
-              </span>
+              {screenerSource === 'UPSTOX_PRIMARY_LIVE' || provider === 'UPSTOX_ANALYTICS_REALTIME' ? (
+                <span
+                  className="text-[11px] font-mono text-emerald-300 font-semibold bg-emerald-950/70 px-2.5 py-0.5 rounded border border-emerald-500/40 inline-flex items-center gap-1.5"
+                  title="Primary Feed Active: Streaming real-time NSE quotes directly from Upstox Analytics v2 API (No Static IP required). Chartink NSE Scanner is armed as automatic backup failover."
+                >
+                  <span>UPSTOX LIVE NSE FEED (PRIMARY)</span>
+                  <Info className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                </span>
+              ) : (
+                <span
+                  className="text-[11px] font-mono text-amber-300 font-semibold bg-amber-950/70 px-2.5 py-0.5 rounded border border-amber-500/40 inline-flex items-center gap-1.5"
+                  title="Auto-Failover Backup Active: Upstox Analytics Token is unpaired or unreachable, so Chartink NSE Breakout Scanner is automatically serving data as backup. Pair Upstox in Sync Hub -> Broker Gateway to switch to Primary Upstox Realtime."
+                >
+                  <span>CHARTINK BACKUP FEED (AUTO-FAILOVER)</span>
+                  <Info className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              45 verified dynamic technical breakout candidates polled live from the National Stock Exchange (NSE). Synchronized with the Dynamic Technical Breakout Radar.
+              {screenerSource === 'UPSTOX_PRIMARY_LIVE' || provider === 'UPSTOX_ANALYTICS_REALTIME'
+                ? '45 NSE equities polled in real time via Upstox Analytics v2 API (Primary). Chartink NSE Scanner is on standby as automatic failover backup.'
+                : '45 dynamic technical breakout candidates served via Chartink Auto-Failover Backup while Upstox Analytics Gateway is on standby.'}
             </p>
           </div>
         </div>

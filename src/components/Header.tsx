@@ -309,10 +309,10 @@ export const Header: React.FC<HeaderProps> = ({
 
               <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
                 <span className="text-[11px] font-bold text-teal-300 block uppercase">
-                  4. Statutory SEBI Circuit Breakers & Colocation DMA
+                  4. Statutory SEBI Circuit Breakers &amp; Auto-Failover Routing
                 </span>
                 <p className="text-[11px] text-slate-400">
-                  Tier-1 (10%), Tier-2 (15%), and Tier-3 (20%) circuit breaker rules trigger automatic portfolio delta neutralization. DMA routing interfaces with Zerodha Kite Connect, Upstox, Angel One, and Aditya Birla Money.
+                  Tier-1 (10%), Tier-2 (15%), and Tier-3 (20%) circuit breaker rules trigger automatic portfolio delta neutralization. Primary market &amp; screener feeds route through Upstox Analytics v2 (No Static IP), with Chartink NSE Scanner armed as an automatic failover backup (unused brokers remain hidden on standby).
                 </p>
               </div>
             </div>

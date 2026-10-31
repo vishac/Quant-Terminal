@@ -92,8 +92,9 @@ export const InstitutionalEquityRadar: React.FC = () => {
   const [selectedStockId, setSelectedStockId] = useState<string | null>(null);
   const [modalStockId, setModalStockId] = useState<string | null>(null);
 
-  // Dynamic Live Screener Universe (100% Live · Zero Static Data)
+  // Dynamic Live Screener Universe (Primary: Upstox Analytics v2 Live -> Backup: Chartink Auto-Failover)
   const [livePicks, setLivePicks] = useState<InstitutionalStockPick[]>([]);
+  const [screenerSource, setScreenerSource] = useState<'UPSTOX_PRIMARY_LIVE' | 'CHARTINK_BACKUP_AUTO_FAILOVER'>('CHARTINK_BACKUP_AUTO_FAILOVER');
   const [isLoadingScreener, setIsLoadingScreener] = useState<boolean>(true);
   const [screenerError, setScreenerError] = useState<string | null>(null);
 
@@ -106,10 +107,12 @@ export const InstitutionalEquityRadar: React.FC = () => {
       const data = await res.json();
       if (data.success && Array.isArray(data.data) && data.data.length > 0) {
         setLivePicks(data.data);
+        const activeSrc = data.source === 'UPSTOX_PRIMARY_LIVE' ? 'UPSTOX_PRIMARY_LIVE' : 'CHARTINK_BACKUP_AUTO_FAILOVER';
+        setScreenerSource(activeSrc);
         const now = new Date();
-        setLastRefreshedAt(`${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })} IST (Live Technical Engine)`);
+        setLastRefreshedAt(`${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })} IST (${activeSrc === 'UPSTOX_PRIMARY_LIVE' ? 'Upstox Primary Live' : 'Chartink Auto-Backup'})`);
         if (isManual) {
-          setToastMessage(`⚡ Live Technical Screener: Synchronized ${data.data.length} real-time breakout candidates.`);
+          setToastMessage(`⚡ ${activeSrc === 'UPSTOX_PRIMARY_LIVE' ? 'Upstox Live Primary' : 'Chartink Backup Failover'}: Synchronized ${data.data.length} breakout candidates.`);
           setTimeout(() => setToastMessage(null), 4000);
         }
       } else {
@@ -364,13 +367,21 @@ export const InstitutionalEquityRadar: React.FC = () => {
         {/* Live LTP Streaming & Gateway Telemetry Bar */}
         <div className="mt-4 p-3 rounded-xl bg-slate-950/80 border border-cyan-500/25 flex flex-wrap items-center justify-between gap-3 text-xs">
           <div className="flex flex-wrap items-center gap-2.5">
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-900 border border-cyan-500/40 text-cyan-300 font-bold text-[11px]">
-              <Activity className="w-3.5 h-3.5 text-cyan-400" />
-              <span>LIVE FEED: CHARTINK NSE BREAKOUT SCANNER</span>
+            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded border font-bold text-[11px] ${
+              screenerSource === 'UPSTOX_PRIMARY_LIVE'
+                ? 'bg-emerald-950/70 border-emerald-500/40 text-emerald-300'
+                : 'bg-amber-950/60 border-amber-500/40 text-amber-300'
+            }`}>
+              <Activity className="w-3.5 h-3.5 shrink-0" />
+              <span>
+                {screenerSource === 'UPSTOX_PRIMARY_LIVE'
+                  ? 'PRIMARY FEED: UPSTOX ANALYTICS V2 (CHARTINK BACKUP ARMED)'
+                  : 'BACKUP FEED ACTIVE: CHARTINK NSE SCANNER (AUTO-FAILOVER)'}
+              </span>
               <button
                 onClick={() => setShowGatewayInfo(true)}
                 className="ml-1 p-0.5 rounded hover:bg-slate-800 text-cyan-400 hover:text-white transition-colors cursor-pointer"
-                title="Inspect verified feed source & API payload"
+                title="Inspect Primary Upstox & Auto-Failover Chartink Backup status"
               >
                 <Info className="w-3.5 h-3.5" />
               </button>
@@ -1568,32 +1579,31 @@ export const InstitutionalEquityRadar: React.FC = () => {
 
             <div className="space-y-3.5 text-xs text-slate-300 leading-relaxed font-mono">
               <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5">
-                <div className="text-cyan-300 font-bold uppercase text-[11px] font-sans">Gateway Connection</div>
+                <div className="text-cyan-300 font-bold uppercase text-[11px] font-sans">Primary &amp; Auto-Failover Architecture</div>
                 <div className="flex justify-between text-slate-400">
-                  <span>API Gateway:</span>
-                  <span className="text-cyan-200">Chartink Live Technical Engine</span>
+                  <span>Primary Gateway:</span>
+                  <span className="text-emerald-300 font-bold">Upstox Analytics v2 API (No Static IP Needed)</span>
                 </div>
                 <div className="flex justify-between text-slate-400">
-                  <span>Endpoint:</span>
-                  <span className="text-emerald-400">https://chartink.com/screener/process</span>
+                  <span>Auto-Failover Backup:</span>
+                  <span className="text-amber-300 font-bold">Chartink NSE Breakout Scanner</span>
+                </div>
+                <div className="flex justify-between text-slate-400">
+                  <span>Current Active Source:</span>
+                  <span className="text-cyan-200 font-bold">
+                    {screenerSource === 'UPSTOX_PRIMARY_LIVE' ? 'UPSTOX PRIMARY (LIVE)' : 'CHARTINK BACKUP (AUTO-TRIGGERED)'}
+                  </span>
                 </div>
                 <div className="flex justify-between text-slate-400">
                   <span>Exchange:</span>
                   <span className="text-emerald-300 font-bold">NSE (National Stock Exchange of India)</span>
                 </div>
-                <div className="flex justify-between text-slate-400">
-                  <span>Market Segment:</span>
-                  <span className="text-slate-200">NSE Cash Equities</span>
-                </div>
               </div>
 
               <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5">
-                <div className="text-cyan-300 font-bold uppercase text-[11px] font-sans">Verified Screener Clause</div>
-                <code className="text-xs text-amber-300 block bg-black/60 p-2 rounded-lg border border-slate-800">
-                  latest close &gt; latest sma(latest close, 200) AND latest volume &gt; 100000
-                </code>
-                <p className="text-[11px] text-slate-400 font-sans pt-1">
-                  Filters across the entire NSE cash equities universe to identify stocks with confirmed momentum breakouts above their 200-day simple moving average with heavy session volume.
+                <div className="text-cyan-300 font-bold uppercase text-[11px] font-sans">How Automatic Failover Works</div>
+                <p className="text-[11px] text-slate-300 font-sans pt-1">
+                  When your Upstox Analytics Token is paired and healthy, all 45 NSE equity candidates stream directly from <code className="text-cyan-300">api.upstox.com/v2/market-quote/quotes</code>. If Upstox is unconfigured or encounters any API issue, the engine automatically triggers <code className="text-amber-300">chartink.com/screener/process</code> (`latest close &gt; 200 SMA AND volume &gt; 100,000`) as backup with zero downtime.
                 </p>
               </div>
 

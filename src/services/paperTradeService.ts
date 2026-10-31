@@ -33,6 +33,34 @@ const LEGACY_STATIC_IDS = new Set([
 ]);
 
 /**
+ * Guarantees every PaperTradeOrder in an array has a strictly unique ID
+ * and strips any legacy static seed IDs.
+ */
+export function sanitizeAndDedupeOrders(trades: PaperTradeOrder[]): { cleaned: PaperTradeOrder[]; mutated: boolean } {
+  if (!Array.isArray(trades)) return { cleaned: [], mutated: false };
+  const filtered = trades.filter((o: PaperTradeOrder) => o && o.id && !LEGACY_STATIC_IDS.has(o.id));
+  const seenIds = new Set<string>();
+  let mutated = filtered.length !== trades.length;
+
+  const cleaned = filtered.map((o: PaperTradeOrder, idx: number) => {
+    if (seenIds.has(o.id)) {
+      mutated = true;
+      const tag = (o.agentId || 'AGT').replace('agent_', '').slice(0, 3).toUpperCase();
+      let uniqueId = `${o.id}-${tag}-${idx + 1}`;
+      while (seenIds.has(uniqueId)) {
+        uniqueId = `${uniqueId}-${Math.floor(Math.random() * 1000)}`;
+      }
+      seenIds.add(uniqueId);
+      return { ...o, id: uniqueId };
+    }
+    seenIds.add(o.id);
+    return o;
+  });
+
+  return { cleaned, mutated };
+}
+
+/**
  * Retrieve paper trade orders from localStorage.
  * Starts clean with 0 static seed rows — only stores trades actually executed by the 5 agents.
  */
@@ -42,9 +70,8 @@ export function getStoredPaperTrades(): PaperTradeOrder[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    // Filter out any legacy static seed trades from previous versions
-    const cleaned = parsed.filter((o: PaperTradeOrder) => o && o.id && !LEGACY_STATIC_IDS.has(o.id));
-    if (cleaned.length !== parsed.length) {
+    const { cleaned, mutated } = sanitizeAndDedupeOrders(parsed);
+    if (mutated) {
       localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(cleaned));
     }
     return cleaned;
@@ -58,8 +85,9 @@ export function getStoredPaperTrades(): PaperTradeOrder[] {
  */
 export function persistPaperTrades(trades: PaperTradeOrder[]): void {
   try {
-    localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(trades));
-    window.dispatchEvent(new CustomEvent('jarvis:orders-updated', { detail: trades }));
+    const { cleaned } = sanitizeAndDedupeOrders(trades);
+    localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(cleaned));
+    window.dispatchEvent(new CustomEvent('jarvis:orders-updated', { detail: cleaned }));
   } catch (err) {
     console.error('Failed to save paper trades:', err);
   }
@@ -113,8 +141,9 @@ export function flattenOrdersToTrades(
   quotes: Record<string, MarketQuote> = {}
 ): ExecutedTradeRecord[] {
   const records: ExecutedTradeRecord[] = [];
+  const usedRecordIds = new Set<string>();
 
-  for (const order of orders) {
+  orders.forEach((order, orderIdx) => {
     const dateStr = order.orderDate || formatOrderDate(order.timestamp);
     const timeStr = order.orderTime || formatOrderTime(order.timestamp);
     const isOpen = order.status === 'OPEN';
@@ -153,8 +182,14 @@ export function flattenOrdersToTrades(
             : Math.round(order.pnlINR / order.legs.length);
         }
 
+        let candidateId = `${order.id}-leg-${idx}`;
+        if (usedRecordIds.has(candidateId)) {
+          candidateId = `${order.id}-ord${orderIdx}-leg-${idx}`;
+        }
+        usedRecordIds.add(candidateId);
+
         records.push({
-          id: `${order.id}-leg-${idx}`,
+          id: candidateId,
           orderId: order.id,
           agentId: order.agentId,
           agentName: order.agentName,
@@ -185,8 +220,14 @@ export function flattenOrdersToTrades(
         exitPrice = (order.side || 'BUY') === 'BUY' ? entryPrice + pnlPerUnit : entryPrice - pnlPerUnit;
       }
 
+      let candidateId = order.id;
+      if (usedRecordIds.has(candidateId)) {
+        candidateId = `${order.id}-ord${orderIdx}`;
+      }
+      usedRecordIds.add(candidateId);
+
       records.push({
-        id: order.id,
+        id: candidateId,
         orderId: order.id,
         agentId: order.agentId,
         agentName: order.agentName,
@@ -204,7 +245,7 @@ export function flattenOrdersToTrades(
         strategyName: order.strategyName
       });
     }
-  }
+  });
 
   return records;
 }

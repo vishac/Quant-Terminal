@@ -563,7 +563,7 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({ onNavigateToAgents }
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 bg-[#060a14]/60">
-              {filteredRecords.map((trade) => {
+              {filteredRecords.map((trade, rowIdx) => {
                 const isProfit = trade.pnl > 0;
                 const isLoss = trade.pnl < 0;
 
@@ -582,7 +582,7 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({ onNavigateToAgents }
 
                 return (
                   <tr 
-                    key={trade.id} 
+                    key={`${trade.id}-row-${rowIdx}`} 
                     className="hover:bg-slate-900/60 transition-colors group"
                   >
                     {/* 1. Instrument */}

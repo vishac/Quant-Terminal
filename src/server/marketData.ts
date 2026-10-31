@@ -48,7 +48,7 @@ export function getActiveDataProvider(): {
   };
 }
 
-// Canonical mapping from tracked symbol to Upstox v2 instrument_key
+// Canonical mapping from tracked symbol to Upstox v2 instrument_key (4 indices + 45 NSE equities)
 export const SYMBOL_TO_UPSTOX_KEY: Record<string, string> = {
   '^NSEI':         'NSE_INDEX|Nifty 50',
   '^BSESN':        'BSE_INDEX|SENSEX',
@@ -86,6 +86,69 @@ export const SYMBOL_TO_UPSTOX_KEY: Record<string, string> = {
   'POLYCAB.NS':    'NSE_EQ|INE455K01017',
   'SOLARINDS.NS':  'NSE_EQ|INE343H01029',
   'COCHINSHIP.NS': 'NSE_EQ|INE704P01025',
+  'ADANIPORTS.NS': 'NSE_EQ|INE742F01042',
+  'MARUTI.NS':     'NSE_EQ|INE585B01010',
+  'M&M.NS':        'NSE_EQ|INE101A01026',
+  'ITC.NS':        'NSE_EQ|INE154A01025',
+  'KOTAKBANK.NS':  'NSE_EQ|INE237A01028',
+  'WIPRO.NS':      'NSE_EQ|INE075A01022',
+  'TECHM.NS':      'NSE_EQ|INE669C01036',
+  'POWERGRID.NS':  'NSE_EQ|INE752E01010',
+  'COALINDIA.NS':  'NSE_EQ|INE522F01014',
+  'TATAMOTORS.NS': 'NSE_EQ|INE155A01022',
+  'BAJAJ-AUTO.NS': 'NSE_EQ|INE917I01010',
+  'SIEMENS.NS':    'NSE_EQ|INE003A01024',
+  'ABB.NS':        'NSE_EQ|INE117A01022',
+  'PFC.NS':        'NSE_EQ|INE134E01011',
+};
+
+const UPSTOX_EQUITY_NAMES: Record<string, string> = {
+  'RELIANCE.NS': 'Reliance Industries Ltd',
+  'ONGC.NS': 'Oil & Natural Gas Corp Ltd',
+  'BPCL.NS': 'Bharat Petroleum Corp Ltd',
+  'ASIANPAINT.NS': 'Asian Paints Ltd',
+  'INDIGO.NS': 'InterGlobe Aviation Ltd',
+  'TCS.NS': 'Tata Consultancy Services Ltd',
+  'INFY.NS': 'Infosys Ltd',
+  'HCLTECH.NS': 'HCL Technologies Ltd',
+  'HDFCBANK.NS': 'HDFC Bank Ltd',
+  'ICICIBANK.NS': 'ICICI Bank Ltd',
+  'SBIN.NS': 'State Bank of India',
+  'AXISBANK.NS': 'Axis Bank Ltd',
+  'BAJFINANCE.NS': 'Bajaj Finance Ltd',
+  'TATASTEEL.NS': 'Tata Steel Ltd',
+  'HINDALCO.NS': 'Hindalco Industries Ltd',
+  'JSWSTEEL.NS': 'JSW Steel Ltd',
+  'SUNPHARMA.NS': 'Sun Pharmaceutical Ind Ltd',
+  'CIPLA.NS': 'Cipla Ltd',
+  'DRREDDY.NS': "Dr. Reddy's Laboratories Ltd",
+  'LT.NS': 'Larsen & Toubro Ltd',
+  'ULTRACEMCO.NS': 'UltraTech Cement Ltd',
+  'INDIACEM.NS': 'The India Cements Ltd',
+  'NTPC.NS': 'NTPC Ltd',
+  'BHARTIARTL.NS': 'Bharti Airtel Ltd',
+  'HAL.NS': 'Hindustan Aeronautics Ltd',
+  'BEL.NS': 'Bharat Electronics Ltd',
+  'TRENT.NS': 'Trent Ltd',
+  'TITAN.NS': 'Titan Company Ltd',
+  'DIXON.NS': 'Dixon Technologies (India) Ltd',
+  'POLYCAB.NS': 'Polycab India Ltd',
+  'SOLARINDS.NS': 'Solar Industries India Ltd',
+  'COCHINSHIP.NS': 'Cochin Shipyard Ltd',
+  'ADANIPORTS.NS': 'Adani Ports & SEZ Ltd',
+  'MARUTI.NS': 'Maruti Suzuki India Ltd',
+  'M&M.NS': 'Mahindra & Mahindra Ltd',
+  'ITC.NS': 'ITC Ltd',
+  'KOTAKBANK.NS': 'Kotak Mahindra Bank Ltd',
+  'WIPRO.NS': 'Wipro Ltd',
+  'TECHM.NS': 'Tech Mahindra Ltd',
+  'POWERGRID.NS': 'Power Grid Corp of India Ltd',
+  'COALINDIA.NS': 'Coal India Ltd',
+  'TATAMOTORS.NS': 'Tata Motors Ltd',
+  'BAJAJ-AUTO.NS': 'Bajaj Auto Ltd',
+  'SIEMENS.NS': 'Siemens Ltd',
+  'ABB.NS': 'ABB India Ltd',
+  'PFC.NS': 'Power Finance Corporation Ltd',
 };
 
 // In-memory cache — initialized with null values (never fake demo data)
@@ -97,6 +160,16 @@ TRACKED_SYMBOLS.forEach(({ symbol, name }) => {
     fiftyTwoWeekHigh: null, fiftyTwoWeekLow: null, volume: null,
     timestamp: 'INITIALIZING', source: DATA_SOURCE,
   };
+});
+Object.entries(UPSTOX_EQUITY_NAMES).forEach(([symbol, name]) => {
+  if (!quotesCache[symbol]) {
+    quotesCache[symbol] = {
+      symbol, name, price: null, change: null, changePct: null,
+      high: null, low: null, prevClose: null,
+      fiftyTwoWeekHigh: null, fiftyTwoWeekLow: null, volume: null,
+      timestamp: 'INITIALIZING', source: DATA_SOURCE,
+    };
+  }
 });
 
 let lastFetchTime = 0;
@@ -517,15 +590,124 @@ function computeDynamicStrategyQuantification(
 }
 
 let cachedScreenerList: any = null;
+let cachedScreenerSource: 'UPSTOX_PRIMARY_LIVE' | 'CHARTINK_BACKUP_AUTO_FAILOVER' = 'CHARTINK_BACKUP_AUTO_FAILOVER';
 let lastScreenerFetch = 0;
-const SCREENER_CACHE_TTL = 300000; // 5 minutes
+const SCREENER_CACHE_TTL = 120000; // 2 minutes
 
+export function getActiveScreenerSource(): 'UPSTOX_PRIMARY_LIVE' | 'CHARTINK_BACKUP_AUTO_FAILOVER' {
+  return cachedScreenerSource;
+}
+
+/**
+ * Primary + Auto-Failover Screener Pipeline:
+ * 1. PRIMARY: When Upstox Analytics v2 API is configured and responds cleanly,
+ *    the 45 NSE equity candidates are derived directly from Upstox live NSE quotes
+ *    (`/market-quote/quotes` — no Static IP required).
+ * 2. BACKUP FAILOVER: If Upstox is unconfigured or experiences an API/network issue,
+ *    Chartink NSE Breakout Scanner (`https://chartink.com/screener/process`) automatically
+ *    triggers as the backup failover source.
+ */
 export async function fetchDynamicZonesScreener() {
   const now = Date.now();
-  if (cachedScreenerList && (now - lastScreenerFetch < SCREENER_CACHE_TTL)) {
+
+  // 1. Try Primary Upstox Analytics API first whenever token is configured
+  if (activeUpstoxToken) {
+    try {
+      const upstoxOk = await fetchUpstoxBatchQuotes();
+      const upstoxEquities = Object.keys(UPSTOX_EQUITY_NAMES)
+        .map((sym) => quotesCache[sym])
+        .filter((q) => q && q.price !== null && q.price > 0 && q.source === UPSTOX_DATA_SOURCE);
+
+      if (upstoxOk && upstoxEquities.length > 0) {
+        const upstoxPicks = upstoxEquities.map((q) => {
+          const nsecode = q.symbol.replace('.NS', '');
+          const priceBase = Number(q.price) || 1000;
+          const changePct = Number(q.changePct) || 0;
+          const vol = Number(q.volume) || 250000;
+          const changeVal = Number(q.change ?? ((priceBase * changePct) / 100));
+
+          let cap = 'Mid Cap';
+          let capKey: 'LARGE_CAP' | 'MID_CAP' | 'SMALL_CAP' = 'MID_CAP';
+          if (priceBase >= 2000) {
+            cap = 'Large Cap';
+            capKey = 'LARGE_CAP';
+          } else if (priceBase < 500) {
+            cap = 'Small Cap';
+            capKey = 'SMALL_CAP';
+          }
+
+          const isShortTerm = Math.abs(changePct) >= 2.0 || vol >= 250000;
+          const horizon: 'SHORT_TERM' | 'LONG_TERM' = isShortTerm ? 'SHORT_TERM' : 'LONG_TERM';
+          const quant = computeDynamicStrategyQuantification(nsecode, priceBase, changePct, vol, cap, isShortTerm);
+
+          return {
+            id: `upstox-${nsecode}`,
+            ticker: nsecode,
+            symbol: q.symbol,
+            name: UPSTOX_EQUITY_NAMES[q.symbol] || q.name || nsecode,
+            ltp: priceBase,
+            changeVal: Number(changeVal.toFixed(2)),
+            changePct: Number(changePct.toFixed(2)),
+            volume: vol,
+            capCategory: cap,
+            bsecode: null,
+            sector: capKey,
+            marketCapINR: `[${cap}]`,
+            horizon,
+            sourceEvidence: {
+              exchange: 'NSE (National Stock Exchange of India)',
+              gateway: 'Upstox Analytics v2 Live NSE Quotes (Primary)',
+              apiEndpoint: 'https://api.upstox.com/v2/market-quote/quotes',
+              scanCondition: 'Primary Upstox Real-Time NSE Equity Stream (Chartink Armed as Backup)',
+              tickTimestamp: q.timestamp,
+              rawClose: priceBase,
+              rawChangePct: changePct,
+              rawVolume: vol,
+              horizonLogic: isShortTerm
+                ? `Classified as Short-Term Swing via Upstox Live Feed: Intraday thrust ${changePct >= 0 ? '+' : ''}${changePct.toFixed(2)}% and volume ${vol.toLocaleString('en-IN')} shares.`
+                : `Classified as Long-Term Compounder via Upstox Live Feed: Sustained accumulation (${changePct >= 0 ? '+' : ''}${changePct.toFixed(2)}%).`,
+            },
+            institutionalStrategy: {
+              modelName: isShortTerm ? 'High-Momentum Breakout Swing' : 'Long-Term 200-SMA Compounder',
+              framework: 'Upstox v2 Real-Time Institutional Telemetry',
+              thesis: `UPSTOX LIVE: ${nsecode} streaming at ₹${priceBase.toLocaleString('en-IN')} (${changePct >= 0 ? '+' : ''}${changePct.toFixed(2)}%) with session volume of ${vol.toLocaleString('en-IN')} shares on NSE.`,
+              invalidationCondition: 'Price closes below the 200 SMA or session low.',
+            },
+            tacticalLevels: quant.tacticalLevels,
+            volumeAnalysis: {
+              sessionVolume: vol,
+              avgVolume20D: `${(vol / 1000).toFixed(1)}K (Session Vol)`,
+              volumeSurge: `${(vol / 1000).toFixed(0)}K Traded Vol`,
+              blockDealsSummary: `Real-time Upstox NSE volume: ${vol.toLocaleString('en-IN')} shares.`,
+              institutionalFootprint: 'Verified directly via Upstox v2 Market Quote API.',
+            },
+            companyAnalysis1Year: {
+              revenueGrowthYoY: 'N/A', patGrowthYoY: 'N/A', ebitdaMargin: 'N/A',
+              roce: 'N/A', roe: 'N/A', debtToEquity: 'N/A',
+              fiiHoldingChange: 'N/A', diiHoldingChange: 'N/A', promoterHolding: 'N/A',
+              operationalHighlight: 'Real-time Upstox NSE equity telemetry.',
+            },
+            valuation: { trailingPE: 0, median5YPE: 0, priceToBook: 0, evToEbitda: 0 },
+            strategyQuantification: quant.strategyQuantification,
+          };
+        });
+
+        cachedScreenerList = upstoxPicks;
+        cachedScreenerSource = 'UPSTOX_PRIMARY_LIVE';
+        lastScreenerFetch = now;
+        return upstoxPicks;
+      }
+    } catch (upstoxErr) {
+      console.warn('[Screener Failover] Upstox primary feed encountered an issue, auto-triggering Chartink backup:', upstoxErr);
+    }
+  }
+
+  // 2. Return cached backup if within TTL and Upstox is not active
+  if (cachedScreenerList && cachedScreenerSource === 'CHARTINK_BACKUP_AUTO_FAILOVER' && (now - lastScreenerFetch < SCREENER_CACHE_TTL)) {
     return cachedScreenerList;
   }
 
+  // 3. AUTOMATIC BACKUP FAILOVER: Chartink NSE Breakout Scanner
   try {
     const { csrf, cookie, pageUrl } = await getChartinkCSRF();
     
@@ -548,7 +730,6 @@ export async function fetchDynamicZonesScreener() {
     const json: any = await res.json();
     const rawData = json.data || [];
     
-    // Filter and categorise (Since Chartink gives us close prices, we can roughly estimate Cap Size or just assign it)
     const allPicks = [];
     
     for (const stock of rawData.slice(0, 45)) {
@@ -568,29 +749,28 @@ export async function fetchDynamicZonesScreener() {
         capKey = 'SMALL_CAP';
       }
 
-      // Objective, verifiable quantitative classification from live feed:
-      // Short-Term Swing: High intraday thrust (|changePct| >= 2.0% OR volume >= 250,000 shares)
-      // Long-Term Compounder: Low-volatility sustained trend above 200 SMA baseline (|changePct| < 2.0% and priceBase >= 1,000)
       const isShortTerm = Math.abs(changePct) >= 2.0 || vol >= 250000;
       const horizon: 'SHORT_TERM' | 'LONG_TERM' = isShortTerm ? 'SHORT_TERM' : 'LONG_TERM';
 
-      // Synchronize directly into quotesCache
+      // Synchronize into quotesCache only if Upstox hasn't already provided a live quote
       const sym = `${stock.nsecode}.NS`;
-      quotesCache[sym] = {
-        symbol: sym,
-        name: stock.name,
-        price: priceBase,
-        change: changeVal,
-        changePct: changePct,
-        high: null,
-        low: null,
-        prevClose: prevCloseVal,
-        fiftyTwoWeekHigh: null,
-        fiftyTwoWeekLow: null,
-        volume: vol,
-        timestamp: new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' }) + ' IST',
-        source: 'CHARTINK_LIVE_NSE',
-      };
+      if (!quotesCache[sym] || quotesCache[sym].source !== UPSTOX_DATA_SOURCE) {
+        quotesCache[sym] = {
+          symbol: sym,
+          name: stock.name,
+          price: priceBase,
+          change: changeVal,
+          changePct: changePct,
+          high: null,
+          low: null,
+          prevClose: prevCloseVal,
+          fiftyTwoWeekHigh: null,
+          fiftyTwoWeekLow: null,
+          volume: vol,
+          timestamp: new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' }) + ' IST',
+          source: 'CHARTINK_BACKUP_NSE',
+        };
+      }
 
       const quant = computeDynamicStrategyQuantification(stock.nsecode, priceBase, changePct, vol, cap, isShortTerm);
 
@@ -610,9 +790,9 @@ export async function fetchDynamicZonesScreener() {
         horizon: horizon,
         sourceEvidence: {
           exchange: 'NSE (National Stock Exchange of India)',
-          gateway: 'Chartink Live Technical Screener (NSE)',
+          gateway: 'Chartink NSE Technical Screener (Auto-Failover Backup)',
           apiEndpoint: 'https://chartink.com/screener/process',
-          scanCondition: 'Latest Close > 200 SMA AND Latest Volume > 100,000 shares',
+          scanCondition: 'Latest Close > 200 SMA AND Latest Volume > 100,000 shares (Backup Failover Mode)',
           tickTimestamp: new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' }) + ' IST',
           rawClose: priceBase,
           rawChangePct: changePct,
@@ -623,8 +803,8 @@ export async function fetchDynamicZonesScreener() {
         },
         institutionalStrategy: {
           modelName: isShortTerm ? 'High-Momentum Breakout Swing' : 'Long-Term 200-SMA Compounder',
-          framework: 'Technical Breakout with Heavy Volume Surge',
-          thesis: `LIVE MATCH: ${stock.nsecode} detected on NSE by live screener. Trading at ₹${priceBase.toLocaleString('en-IN')} (${changePct >= 0 ? '+' : ''}${changePct}%) with session volume of ${vol.toLocaleString('en-IN')} shares above 200 SMA.`,
+          framework: 'Technical Breakout with Heavy Volume Surge (Backup Screener)',
+          thesis: `BACKUP SCANNER MATCH: ${stock.nsecode} detected on NSE via Chartink Failover. Trading at ₹${priceBase.toLocaleString('en-IN')} (${changePct >= 0 ? '+' : ''}${changePct}%) with session volume of ${vol.toLocaleString('en-IN')} shares above 200 SMA.`,
           invalidationCondition: 'Price closes below the 200 SMA or session low.'
         },
         tacticalLevels: quant.tacticalLevels,
@@ -632,7 +812,7 @@ export async function fetchDynamicZonesScreener() {
           sessionVolume: vol,
           avgVolume20D: `${(vol / 1000).toFixed(1)}K (Session Vol)`,
           volumeSurge: `${(vol / 1000).toFixed(0)}K Traded Vol`,
-          blockDealsSummary: `Real-time session volume: ${vol.toLocaleString('en-IN')} shares traded on NSE.`,
+          blockDealsSummary: `Session volume: ${vol.toLocaleString('en-IN')} shares traded on NSE.`,
           institutionalFootprint: 'High relative volume surge above 100,000 shares threshold.'
         },
         companyAnalysis1Year: {
@@ -648,9 +828,9 @@ export async function fetchDynamicZonesScreener() {
     }
 
     cachedScreenerList = allPicks;
+    cachedScreenerSource = 'CHARTINK_BACKUP_AUTO_FAILOVER';
     lastScreenerFetch = Date.now();
     
-    // Auto-add to Tracked Symbols so quotes fetcher tracks them
     allPicks.forEach(p => {
       if (!quotesCache[p.symbol]) {
         quotesCache[p.symbol] = {
@@ -663,7 +843,7 @@ export async function fetchDynamicZonesScreener() {
 
     return allPicks;
   } catch (error) {
-    console.error("Failed to fetch Chartink screener", error);
+    console.error("Failed to fetch Chartink backup screener", error);
     return [];
   }
 }

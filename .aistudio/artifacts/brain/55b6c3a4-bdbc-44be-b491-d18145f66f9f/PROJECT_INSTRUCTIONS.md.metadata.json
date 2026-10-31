@@ -1,5 +1,5 @@
 {
-  "summary":  "Updated J.A.R.V.I.S. Institutional Quant Terminal Core Constitution & Directives with the Continuous Instruction Synchronization Mandate, Upstox Analytics Token (No Static IP) architecture, Live vs Delayed Data Info Icon rule, Autonomous 5-Agent Paper Trading (zero static seed trades), and Hidden Unused Brokers rule.",
-  "updatedAt":  "2026-10-31T12:06:52.209662965Z",
+  "summary":  "Updated PROJECT_INSTRUCTIONS.md with the Upstox Analytics v2 Primary -> Chartink Auto-Failover Backup architecture (45 ISIN-mapped NSE equities), dynamic feed badges in ViewerDashboard and InstitutionalEquityRadar, and removal of unused broker audit log line items and allocation matrix entries in BrokerGatewayRouter.",
+  "updatedAt":  "2026-10-31T12:27:29.071858403Z",
   "userFacing":  true
 }

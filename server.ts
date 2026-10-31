@@ -21,6 +21,7 @@ import {
   quotesCache, syncMarketQuotes, fetchDelayedYahooQuote,
   checkIsMarketHours, DATA_SOURCE, DATA_DISCLAIMER, TRACKED_SYMBOLS,
   fetchDynamicZonesScreener, setMarketDataUpstoxCredentials, getActiveDataProvider,
+  getActiveScreenerSource,
 } from './src/server/marketData.ts';
 import { computeGlobalMarketImpact } from './src/server/globalMarketImpactEngine.ts';
 import {
@@ -208,13 +209,15 @@ app.get('/api/market-data/:symbol', async (req, res) => {
   res.status(404).json({ success: false, error: 'Quote unavailable from the data source.' });
 });
 
-// Chartink Live Dynamic Zones Breakout Screener API
+// Primary Upstox Live NSE Screener with Automatic Chartink Backup Failover
 app.get('/api/screener/chartink', async (_req, res) => {
   try {
     const picks = await fetchDynamicZonesScreener();
+    const activeSource = getActiveScreenerSource();
     res.json({
       success: true,
-      source: 'CHARTINK_DYNAMIC_ZONES_SCANNER',
+      source: activeSource,
+      isBackupFailover: activeSource !== 'UPSTOX_PRIMARY_LIVE',
       count: picks.length,
       data: picks,
       timestamp: new Date().toISOString(),

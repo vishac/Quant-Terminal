@@ -9,9 +9,10 @@
 ## 1. ABSOLUTE PROHIBITION OF DUMMY / DEMO / STATIC SEED DATA
 Under no circumstances should dummy, mock, or hardcoded static seed trades be injected into the terminal dashboards, including the 5-Agent Desk and Trade History:
 
-1. **Zero Static Paper Trade Seeds (`INITIAL_INSTITUTIONAL_PAPER_TRADES` Removed)**:
+1. **Zero Static Paper Trade Seeds (`INITIAL_INSTITUTIONAL_PAPER_TRADES` Removed) & Unique Monotonic Order IDs**:
    - Never hardcode static seed rows (the legacy 11 rows of `INITIAL_INSTITUTIONAL_PAPER_TRADES` are permanently removed and any cached legacy IDs such as `ORD-NSE-FNO-101` are automatically stripped).
    - **Autonomous 5-Agent Paper Execution**: When the 5 autonomous agents (**Chanakya**, **Bhishma**, **Arjuna**, **Kuber**, **Vidura**) are armed and market quotes arrive, `runAutonomousAgentCycleIfArmed()` evaluates the broader market and automatically executes defined-risk paper trades across **NSE F&O, NSE Cash, BSE Cash, and MCX Commodity**, while assisting with broader market intelligence.
+   - **Monotonic Unique Order & Leg IDs**: Because all 5 agents can execute simultaneously within the same millisecond (`Date.now()`), `generateLiveMarketOrder()` and `generateOrderFromDecisionScript()` must always append a monotonic sequence counter and agent prefix (`SIM-ORD-<AGENT>-<TIMESTAMP>-<SEQ>`), and `getStoredPaperTrades()` / `flattenOrdersToTrades()` must self-heal any colliding IDs in `localStorage` so React keys (`-leg-0`) are 100% unique.
 
 2. **Capital Allocation**:
    - Capital allocations default to the ₹5,00,000 working paper-trading pool split equally across the 5 autonomous agents (₹1,00,000 each) and are directly adjustable by the operator via allocation controls.
@@ -27,18 +28,23 @@ Under no circumstances should dummy, mock, or hardcoded static seed trades be in
 
 ---
 
-## 2. UPSTOX ANALYTICS TOKEN GATEWAY & LIVE VS. DELAYED DATA TRANSPARENCY
+## 2. UPSTOX ANALYTICS TOKEN (PRIMARY) & CHARTINK AUTO-FAILOVER BACKUP
 1. **No Static IP Required for Upstox Analytics Token**:
    - Per official Upstox documentation (`https://upstox.com/developer/api-documentation/analytics-token/#supported-apis`), a Static IP is **NOT** required for Market Quote (`/market-quote/quotes`), Option Chain (`/option/chain`), Historical Candles, Market Information, Fundamentals, and WebSocket streams.
    - Because this terminal strictly operates in **Analytics & Paper-Trading Mode** (no live money orders are dispatched to brokers), Upstox token verification and ping checks must always use `/market-quote/quotes?instrument_key=NSE_INDEX|Nifty 50,NSE_INDEX|India VIX` rather than `/user/profile` (which triggers Static IP blocks).
 
-2. **Live Upstox Feed vs. Delayed Fallback & Mandatory `Info` Icons**:
-   - When an Upstox Analytics Token is paired, `src/server/marketData.ts` streams **live real-time NSE/BSE quotes** (`provider: 'UPSTOX_ANALYTICS_REALTIME'`, `isDelayed: false`) across indices (`^NSEI`, `^BSESN`, `^NSEBANK`, `^INDIAVIX`) and 31 NSE equities mapped by ISIN.
-   - When Upstox is not paired, the backend falls back to Yahoo Finance (`provider: 'YAHOO_DELAYED_UNOFFICIAL'`, `isDelayed: true`).
-   - Wherever market feed status is displayed (Header, 5-Agent Desk, Trade History, Broker Stream Gateway, Settings), an interactive **`Info` icon** must inform the user whether data is currently **Delayed (~15m fallback)** or **Live (Upstox Analytics Realtime)** and clarify that trades are paper-only.
+2. **Upstox Primary vs. Chartink Auto-Failover Backup (`fetchDynamicZonesScreener`)**:
+   - **Chartink is NOT required when Upstox API is paired and active.** When `activeUpstoxToken` is configured, `src/server/marketData.ts` pulls live batch quotes directly from Upstox v2 across **45 liquid NSE equities mapped by ISIN** + 4 benchmark indices (`^NSEI`, `^BSESN`, `^NSEBANK`, `^INDIAVIX`) and generates the 45 dynamic breakout/radar candidates directly from Upstox (`source: 'UPSTOX_PRIMARY_LIVE'`).
+   - **Automatic Failover to Chartink**: Chartink is placed strictly as an **automatic backup** (`source: 'CHARTINK_BACKUP_AUTO_FAILOVER'`). It auto-triggers **only** if Upstox is unconfigured or experiences an API/network issue.
+   - Both `ViewerDashboard.tsx` and `InstitutionalEquityRadar.tsx` dynamically display whether the terminal is running on **Upstox Live NSE Feed (Primary)** or **Chartink Backup Feed (Auto-Failover)** with an `Info` icon.
 
-3. **Hide Unused Brokers (Do Not Delete Code)**:
-   - Unused brokers (**Zerodha Kite**, **Dhan HQ**, **Aditya Birla Money**, and **Angel One**) must be hidden by default in the UI behind a toggle (`showUnusedBrokers = false`) so **Upstox Analytics Gateway** is prominently displayed, while keeping the unused brokers' code intact in the repository for future use.
+3. **Live vs. Delayed Fallback & Mandatory `Info` Icons**:
+   - When Upstox is paired, the market quote stream runs in real time (`provider: 'UPSTOX_ANALYTICS_REALTIME'`, `isDelayed: false`). When Upstox is unpaired, quotes fall back to Yahoo Finance (`provider: 'YAHOO_DELAYED_UNOFFICIAL'`, `isDelayed: true`).
+   - Wherever market feed status is displayed (Header, Viewer Dashboard, 5-Agent Desk, Trade History, Institutional Equity Radar, Broker Stream Gateway, Settings), an interactive **`Info` icon** must inform the user of the active feed and clarify that trades are paper-only.
+
+4. **Hide Unused Brokers & Clean Audit Logs (Do Not Delete Standby Broker Card Code)**:
+   - Unused brokers (**Zerodha Kite**, **Dhan HQ**, **Aditya Birla Money**, and **Angel One**) are hidden by default behind a toggle (`showUnusedBrokers = false`) while keeping their standby card code intact in the repository.
+   - In `BrokerGatewayRouter.tsx`, the **Live Stream Allocation Matrix**, **Socket Saturation**, and **`JARVIS_AUDIT_LOG`** must only show **Upstox Analytics v2 (Primary)**, **Chartink Auto-Failover Backup**, and the **5-Agent Paper Execution Engine** (all unused broker audit log line items for Zerodha, DhanHQ, and Aditya Birla Money have been removed).
 
 ---
 
