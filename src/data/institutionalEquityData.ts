@@ -18,7 +18,6 @@ export {
 };
 
 export interface InstitutionalStockPick {
-  changeVal: number;
   id: string;
   ticker: string;
   symbol: string;
