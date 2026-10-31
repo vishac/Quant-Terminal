@@ -115,7 +115,7 @@ export function getAdjustedExpiryDate(scheduledDate: Date, benchmark: 'NIFTY' | 
   const adjustedDateStr = formatDate(candidate);
   const adjustedDayName = DAY_NAMES[candidate.getDay()];
 
-  const today = new Date('2026-09-29T09:30:00');
+  const today = new Date();
   const diffTime = candidate.getTime() - today.getTime();
   const daysRemaining = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
 

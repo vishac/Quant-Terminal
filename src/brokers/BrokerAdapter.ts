@@ -255,3 +255,4 @@ export function generateClientOrderId(): string {
   const rnd = Math.floor(Math.random() * 0xffff).toString(16).toUpperCase().padStart(4, '0');
   return `COI-${ts}-${rnd}`;
 }
+

@@ -328,3 +328,4 @@ export function getLotSize(symbol: string, segment: Segment): number {
   }
   return 1; // Cash equity
 }
+
