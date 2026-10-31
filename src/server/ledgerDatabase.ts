@@ -1,4 +1,4 @@
-﻿/**
+/**
  * ledgerDatabase.ts — Persistent Append-Only Historical Storage
  *
  * Solves the 20-record truncation problem of flat JSON files.
