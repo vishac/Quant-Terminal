@@ -1,4 +1,4 @@
-import dotenv from 'dotenv';
+﻿import dotenv from 'dotenv';
 import express from 'express';
 import { createServer as createHttpServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
@@ -24,6 +24,7 @@ import {
   getActiveScreenerSource,
 } from './src/server/marketData.ts';
 import { computeGlobalMarketImpact } from './src/server/globalMarketImpactEngine.ts';
+import { getOptionChainData } from './src/server/optionChain.ts';
 import {
   computeFirstPrinciplesMarketIntelligence,
   calibrateSelfLearningAgents,
@@ -437,26 +438,123 @@ app.get('/api/upstox/market-quote', async (req, res) => {
 
 app.get('/api/upstox/option-chain', async (req, res) => {
   const token = upstoxConfig.accessToken || process.env.UPSTOX_ACCESS_TOKEN;
-  if (!token) {
-    return res.status(400).json({ success: false, configured: false, error: 'Upstox API token is not configured.' });
+  const instrumentKey = String(req.query.instrument_key || 'NSE_INDEX|Nifty 50');
+  const expiryDate = req.query.expiry_date ? String(req.query.expiry_date) : undefined;
+
+  let underlying = String(req.query.underlying || '');
+  if (!underlying) {
+    if (instrumentKey.includes('Nifty 50') || instrumentKey.includes('^NSEI')) underlying = 'NIFTY';
+    else if (instrumentKey.includes('Nifty Bank') || instrumentKey.includes('^NSEBANK')) underlying = 'BANKNIFTY';
+    else if (instrumentKey.includes('SENSEX') || instrumentKey.includes('^BSESN')) underlying = 'SENSEX';
+    else {
+      const match = instrumentKey.match(/(?:NSE_EQ\||NSE_FO\||BSE_EQ\|)?([A-Z0-9_\-]+)/i);
+      underlying = match ? match[1] : 'NIFTY';
+    }
   }
 
-  const instrumentKey = req.query.instrument_key || 'NSE_INDEX|Nifty 50';
-  const expiryDate = req.query.expiry_date || '';
+  const spotPriceFallback = quotesCache['^NSEI']?.price || 25450;
   try {
-    let url = `${upstoxConfig.baseUrl}/option/chain?instrument_key=${encodeURIComponent(String(instrumentKey))}`;
-    if (expiryDate) url += `&expiry_date=${encodeURIComponent(String(expiryDate))}`;
+    const summary = await getOptionChainData(
+      underlying,
+      expiryDate,
+      token,
+      upstoxConfig.baseUrl,
+      spotPriceFallback
+    );
+    return res.json({
+      success: true,
+      ...summary,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
 
-    const upstreamRes = await fetch(url, {
-      headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
+app.get('/api/upstox/historical-candles', async (req, res) => {
+  const token = upstoxConfig.accessToken || process.env.UPSTOX_ACCESS_TOKEN;
+  const instrumentKey = String(req.query.instrument_key || 'NSE_INDEX|Nifty 50');
+  const interval = String(req.query.interval || 'day');
+  const toDate = String(req.query.to_date || new Date().toISOString().split('T')[0]);
+  const fromDate = String(req.query.from_date || '2026-01-01');
+
+  if (token) {
+    try {
+      const url = `${upstoxConfig.baseUrl}/historical-candle/${encodeURIComponent(instrumentKey)}/${encodeURIComponent(interval)}/${encodeURIComponent(toDate)}/${encodeURIComponent(fromDate)}`;
+      const upstoxRes = await fetch(url, {
+        headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
+      });
+      if (upstoxRes.ok) {
+        const json = await upstoxRes.json();
+        return res.json({ success: true, source: 'UPSTOX_REALTIME', ...json });
+      }
+    } catch {
+      // Fallback to Yahoo Finance below
+    }
+  }
+
+  try {
+    const yahooSym = instrumentKey.includes('Nifty 50') ? '^NSEI'
+      : instrumentKey.includes('Nifty Bank') ? '^NSEBANK'
+      : instrumentKey.includes('SENSEX') ? '^BSESN'
+      : instrumentKey.replace('NSE_EQ|', '') + '.NS';
+
+    const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSym)}?interval=1d&range=1mo`;
+    const yRes = await fetch(yahooUrl, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
+    });
+    if (yRes.ok) {
+      const yData = await yRes.json();
+      const result = yData?.chart?.result?.[0];
+      const timestamps = result?.timestamp || [];
+      const quote = result?.indicators?.quote?.[0] || {};
+      const candles = timestamps.map((ts: number, i: number) => [
+        new Date(ts * 1000).toISOString(),
+        quote.open?.[i] ?? 0,
+        quote.high?.[i] ?? 0,
+        quote.low?.[i] ?? 0,
+        quote.close?.[i] ?? 0,
+        quote.volume?.[i] ?? 0,
+        0,
+      ]).filter((c: any[]) => Number(c[4]) > 0);
+
+      return res.json({ success: true, source: 'YAHOO_FALLBACK', data: { candles } });
+    }
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+
+  res.status(404).json({ success: false, error: 'Historical candles not available' });
+});
+
+app.post('/api/upstox/order/place', rateLimit, requireOwner, async (req, res) => {
+  const token = upstoxConfig.accessToken || process.env.UPSTOX_ACCESS_TOKEN;
+  if (!token) {
+    return res.status(400).json({ success: false, error: 'Upstox live order routing requires an active access token.' });
+  }
+
+  const riskState = getRiskState();
+  if (riskState.killSwitchActive) {
+    return res.status(403).json({ success: false, error: `Order blocked by kill switch: ${riskState.killSwitchReason}` });
+  }
+
+  try {
+    const url = `${upstoxConfig.baseUrl}/order/place`;
+    const upstream = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(req.body || {}),
     });
 
-    if (upstreamRes.ok) {
-      const data = await upstreamRes.json();
-      return res.json({ success: true, source: 'UPSTOX_OPTION_CHAIN', data: data.data || [], timestamp: new Date().toISOString() });
+    const json = await upstream.json();
+    if (upstream.ok && json.status === 'success') {
+      return res.json({ success: true, ...json.data });
     } else {
-      const err = await upstreamRes.json().catch(() => ({}));
-      return res.status(upstreamRes.status).json({ success: false, error: err.errors?.[0]?.message || 'Upstox Option Chain query failed.' });
+      return res.status(upstream.status).json({ success: false, error: json.errors?.[0]?.message || 'Upstox rejected order' });
     }
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message });

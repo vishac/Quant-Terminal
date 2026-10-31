@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { 
   Network, 
   Activity, 
@@ -209,9 +209,9 @@ export const BrokerGatewayRouter: React.FC = () => {
       const res = await fetch('/api/upstox/option-chain?instrument_key=NSE_INDEX|Nifty 50');
       const data = await res.json();
       if (res.ok && data.success) {
-        setUpstoxOptionChainData(data.data);
+        setUpstoxOptionChainData(data);
       } else {
-        setUpstoxError(data.error || 'Option chain fetch failed. Please check Upstox token.');
+        setUpstoxError(data.error || 'Option chain fetch failed.');
       }
     } catch {
       setUpstoxError('Failed to fetch Upstox option chain.');
@@ -1637,38 +1637,97 @@ export const BrokerGatewayRouter: React.FC = () => {
                   </button>
                 </div>
 
-                {upstoxOptionChainData && Array.isArray(upstoxOptionChainData) && upstoxOptionChainData.length > 0 ? (
-                  <div className="max-h-64 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950/80">
-                    <table className="w-full text-[11px] text-left">
-                      <thead className="bg-slate-900/90 text-slate-400 sticky top-0 border-b border-slate-800">
-                        <tr>
-                          <th className="py-2 px-2 text-cyan-300">CALL OI</th>
-                          <th className="py-2 px-2 text-cyan-300">CALL LTP</th>
-                          <th className="py-2 px-2 text-center text-amber-300">STRIKE</th>
-                          <th className="py-2 px-2 text-right text-rose-300">PUT LTP</th>
-                          <th className="py-2 px-2 text-right text-rose-300">PUT OI</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-900">
-                        {upstoxOptionChainData.slice(0, 15).map((row: any, idx: number) => (
-                          <tr key={idx} className="hover:bg-slate-900/50">
-                            <td className="py-1.5 px-2 text-cyan-400 font-mono">{row.call_options?.market_data?.oi?.toLocaleString() || '—'}</td>
-                            <td className="py-1.5 px-2 text-slate-200 font-mono">{row.call_options?.market_data?.ltp || '—'}</td>
-                            <td className="py-1.5 px-2 text-center font-bold text-amber-300 font-mono bg-slate-900/40">{row.strike_price}</td>
-                            <td className="py-1.5 px-2 text-right text-slate-200 font-mono">{row.put_options?.market_data?.ltp || '—'}</td>
-                            <td className="py-1.5 px-2 text-right text-rose-400 font-mono">{row.put_options?.market_data?.oi?.toLocaleString() || '—'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <div className="py-8 text-center text-slate-500 text-xs">
-                    {upstoxData?.status === 'CONNECTED'
-                      ? 'Click "Query Chain" to pull live strike contracts and greeks.'
-                      : 'Please pair your Upstox Access Token in the Pairing tab to view option chains.'}
-                  </div>
-                )}
+                {(() => {
+                  const chainSummary = upstoxOptionChainData;
+                  const rows: any[] = Array.isArray(chainSummary?.rows)
+                    ? chainSummary.rows
+                    : Array.isArray(chainSummary?.data)
+                    ? chainSummary.data
+                    : Array.isArray(chainSummary)
+                    ? chainSummary
+                    : [];
+
+                  if (rows.length === 0) {
+                    return (
+                      <div className="py-8 text-center text-slate-500 text-xs">
+                        Click &quot;Query Chain&quot; to fetch live strike contracts, Black-Scholes Greeks, and Max Pain.
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-3">
+                      {/* Metric Badges */}
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+                        <div className="p-2 rounded-lg bg-slate-900/60 border border-slate-800">
+                          <span className="text-[10px] text-slate-500 block">SPOT PRICE</span>
+                          <span className="font-bold text-slate-200 font-mono">₹{chainSummary?.spotPrice?.toLocaleString('en-IN') || '—'}</span>
+                        </div>
+                        <div className="p-2 rounded-lg bg-slate-900/60 border border-slate-800">
+                          <span className="text-[10px] text-slate-500 block">EXPIRY</span>
+                          <span className="font-bold text-cyan-300 font-mono">{chainSummary?.expiry || 'Near Expiry'}</span>
+                        </div>
+                        <div className="p-2 rounded-lg bg-slate-900/60 border border-slate-800">
+                          <span className="text-[10px] text-slate-500 block">PUT-CALL RATIO</span>
+                          <span className={`font-bold font-mono ${chainSummary?.pcr > 1.2 ? 'text-emerald-400' : chainSummary?.pcr < 0.8 ? 'text-rose-400' : 'text-amber-300'}`}>
+                            {chainSummary?.pcr ?? '—'}
+                          </span>
+                        </div>
+                        <div className="p-2 rounded-lg bg-slate-900/60 border border-slate-800">
+                          <span className="text-[10px] text-slate-500 block">MAX PAIN</span>
+                          <span className="font-bold text-amber-400 font-mono">{chainSummary?.maxPainStrike ?? '—'}</span>
+                        </div>
+                        <div className="p-2 rounded-lg bg-slate-900/60 border border-slate-800">
+                          <span className="text-[10px] text-slate-500 block">SOURCE</span>
+                          <span className={`font-bold font-mono text-[10px] ${chainSummary?.source === 'UPSTOX_REALTIME' ? 'text-emerald-400' : 'text-cyan-400'}`}>
+                            {chainSummary?.source === 'UPSTOX_REALTIME' ? 'UPSTOX LIVE' : 'SYNTHETIC BS'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Strikes Table */}
+                      <div className="max-h-72 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950/80">
+                        <table className="w-full text-[11px] text-left">
+                          <thead className="bg-slate-900/90 text-slate-400 sticky top-0 border-b border-slate-800">
+                            <tr>
+                              <th className="py-2 px-2 text-cyan-400">CALL OI</th>
+                              <th className="py-2 px-2 text-cyan-400">DELTA</th>
+                              <th className="py-2 px-2 text-cyan-400">CALL LTP</th>
+                              <th className="py-2 px-2 text-center text-amber-300">STRIKE</th>
+                              <th className="py-2 px-2 text-right text-rose-400">PUT LTP</th>
+                              <th className="py-2 px-2 text-right text-rose-400">DELTA</th>
+                              <th className="py-2 px-2 text-right text-rose-400">PUT OI</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-900">
+                            {rows.slice(0, 25).map((row: any, idx: number) => {
+                              const strike = row.strike ?? row.strike_price;
+                              const isATM = chainSummary?.atmStrike === strike;
+                              const ce = row.ce || row.call_options?.market_data || {};
+                              const pe = row.pe || row.put_options?.market_data || {};
+                              const ceDelta = row.ce?.delta ?? row.call_options?.option_greeks?.delta ?? '—';
+                              const peDelta = row.pe?.delta ?? row.put_options?.option_greeks?.delta ?? '—';
+
+                              return (
+                                <tr key={idx} className={`hover:bg-slate-900/50 ${isATM ? 'bg-amber-500/10' : ''}`}>
+                                  <td className="py-1.5 px-2 text-cyan-400 font-mono">{(ce.oi != null ? Number(ce.oi).toLocaleString('en-IN') : '—')}</td>
+                                  <td className="py-1.5 px-2 text-slate-400 font-mono text-[10px]">{ceDelta}</td>
+                                  <td className="py-1.5 px-2 text-slate-200 font-mono">₹{ce.ltp != null ? Number(ce.ltp).toFixed(1) : '—'}</td>
+                                  <td className={`py-1.5 px-2 text-center font-bold font-mono ${isATM ? 'text-amber-400 bg-amber-500/20' : 'text-amber-300 bg-slate-900/40'}`}>
+                                    {strike} {isATM && <span className="text-[9px] text-amber-400 block">ATM</span>}
+                                  </td>
+                                  <td className="py-1.5 px-2 text-right text-slate-200 font-mono">₹{pe.ltp != null ? Number(pe.ltp).toFixed(1) : '—'}</td>
+                                  <td className="py-1.5 px-2 text-right text-slate-400 font-mono text-[10px]">{peDelta}</td>
+                                  <td className="py-1.5 px-2 text-right text-rose-400 font-mono">{(pe.oi != null ? Number(pe.oi).toLocaleString('en-IN') : '—')}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </div>
