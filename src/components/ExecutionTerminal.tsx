@@ -1,4 +1,4 @@
-/**
+﻿/**
  * ExecutionTerminal — Order entry panel with mandatory risk gate.
  *
  * Architecture rule: NO order may be submitted without:
@@ -35,7 +35,8 @@ import {
   type LiveOrder,
 } from '../services/orderLifecycle';
 import { getPaperBroker, generateClientOrderId } from '../brokers/PaperBrokerAdapter';
-import { getIndianMarketSession } from '../utils/marketHours';
+import { getIndianMarketSession, getMCXMarketSession } from '../utils/marketHours';
+import { UpstoxAdapter } from '../brokers/UpstoxAdapter';
 import type { Segment } from '../brokers/BrokerAdapter';
 
 // ---------------------------------------------------------------------------
@@ -100,14 +101,22 @@ export const ExecutionTerminal: React.FC = () => {
   const [isPlacing, setIsPlacing] = useState(false);
   const [placeError, setPlaceError] = useState<string | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [marketSession, setMarketSession] = useState(getIndianMarketSession());
-  const [isPaperMode] = useState(true); // Phase 1: always paper
+  const [selectedBroker, setSelectedBroker] = useState<'PAPER' | 'UPSTOX'>('PAPER');
+  const [isPaperMode, setIsPaperMode] = useState(true);
 
-  // Refresh market session every 30s
+  // Compute market session dynamically depending on selected segment (NSE/BSE vs MCX)
+  const isMCX = form.segment === 'MCX_FUTURES';
+  const getActiveSession = useCallback(() => {
+    return isMCX ? getMCXMarketSession() : getIndianMarketSession();
+  }, [isMCX]);
+
+  const [marketSession, setMarketSession] = useState(getActiveSession());
+
   useEffect(() => {
-    const id = setInterval(() => setMarketSession(getIndianMarketSession()), 30_000);
+    setMarketSession(getActiveSession());
+    const id = setInterval(() => setMarketSession(getActiveSession()), 15_000);
     return () => clearInterval(id);
-  }, []);
+  }, [getActiveSession]);
 
   // Sync account state from riskEngine + orderLifecycle
   const syncAccount = useCallback(() => {
@@ -229,7 +238,9 @@ export const ExecutionTerminal: React.FC = () => {
       const lotSize = getLotSize(form.symbol, form.segment as Segment);
       const clientOrderId = generateClientOrderId();
 
-      const broker = getPaperBroker();
+      const broker = selectedBroker === 'UPSTOX'
+        ? new UpstoxAdapter({ isLive: !isPaperMode })
+        : getPaperBroker();
       const brokerResponse = await broker.placeOrder({
         clientOrderId,
         symbol: form.symbol.toUpperCase(),
@@ -374,10 +385,37 @@ export const ExecutionTerminal: React.FC = () => {
 
         {/* ── Order entry form ── */}
         <div className="col-span-12 lg:col-span-7 border border-slate-800 rounded bg-[#070b14] p-4 space-y-3">
-          <h2 className="text-sm font-semibold text-slate-300 border-b border-slate-800 pb-2 flex items-center gap-2">
-            <Crosshair className="w-4 h-4 text-amber-400" />
-            ORDER ENTRY {isPaperMode && <span className="text-[10px] text-amber-500 font-normal">[PAPER SIMULATION]</span>}
-          </h2>
+          <div className="flex items-center justify-between border-b border-slate-800 pb-2 flex-wrap gap-2">
+            <h2 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
+              <Crosshair className="w-4 h-4 text-amber-400" />
+              ORDER ENTRY {isPaperMode && <span className="text-[10px] text-amber-500 font-normal">[PAPER SIMULATION]</span>}
+            </h2>
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-slate-500 text-[10px]">VENUE:</span>
+              <button
+                type="button"
+                onClick={() => setSelectedBroker('PAPER')}
+                className={`px-2 py-0.5 rounded text-[11px] font-bold transition-colors ${
+                  selectedBroker === 'PAPER'
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/50'
+                    : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-slate-200'
+                }`}
+              >
+                PAPER BROKER
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedBroker('UPSTOX')}
+                className={`px-2 py-0.5 rounded text-[11px] font-bold transition-colors ${
+                  selectedBroker === 'UPSTOX'
+                    ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50'
+                    : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-slate-200'
+                }`}
+              >
+                UPSTOX V2
+              </button>
+            </div>
+          </div>
 
           {/* Row 1: Symbol + Segment + Action */}
           <div className="grid grid-cols-3 gap-2">

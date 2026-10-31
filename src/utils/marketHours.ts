@@ -1,4 +1,4 @@
-import { ALL_INDIAN_HOLIDAYS, formatDate } from './indianHolidayCalendar';
+﻿import { ALL_INDIAN_HOLIDAYS, formatDate } from './indianHolidayCalendar';
 
 export type MarketPhase = 
   | 'LIVE_OPEN'         // 09:15 - 15:30 IST on trading day
@@ -197,6 +197,113 @@ export function getIndianMarketSession(referenceDate = new Date(), allowPreMarke
     openTimeIST: '09:15 IST',
     closeTimeIST: '15:30 IST',
     nextSessionText: ist.dayOfWeek === 5 ? 'Monday @ 09:15 IST' : 'Tomorrow @ 09:15 IST',
+    shouldSync: false,
+  };
+}
+
+/**
+ * Check if the Multi Commodity Exchange (MCX) is currently in an active trading session.
+ * MCX operates:
+ *   Morning session: 09:00 - 17:00 IST
+ *   Evening session: 17:00 - 23:30 IST (Bullion, Energy, Base Metals)
+ */
+export function getMCXMarketSession(referenceDate = new Date()): MarketSessionInfo {
+  const ist = getISTDateTime(referenceDate);
+  const isWeekend = ist.dayOfWeek === 0 || ist.dayOfWeek === 6;
+
+  // Check holiday
+  const holiday = ALL_INDIAN_HOLIDAYS.find(h => h.date === ist.dateStr);
+  const isFullHoliday = holiday && (holiday.exchange === 'ALL' || holiday.exchange === 'NSE_BSE');
+  const isMorningHolidayOnly = holiday && holiday.exchange === 'MCX_MORNING_ONLY';
+
+  const totalMinutes = ist.hours * 60 + ist.minutes;
+  const openMinutes = 9 * 60;          // 09:00 IST
+  const eveningOpenMinutes = 17 * 60;   // 17:00 IST
+  const closeMinutes = 23 * 60 + 30;    // 23:30 IST
+
+  const istTimeString = `${ist.timeStr} IST`;
+
+  if (isWeekend) {
+    const daysUntilMonday = ist.dayOfWeek === 6 ? 2 : 1;
+    return {
+      isOpen: false,
+      isTradingDay: false,
+      phase: 'WEEKEND',
+      phaseLabel: 'MCX CLOSED (WEEKEND)',
+      statusBadge: 'WEEKEND STANDBY',
+      istTimeString,
+      openTimeIST: '09:00 IST',
+      closeTimeIST: '23:30 IST',
+      nextSessionText: daysUntilMonday === 1 ? 'Tomorrow (Monday) @ 09:00 IST' : 'Monday @ 09:00 IST',
+      shouldSync: false,
+    };
+  }
+
+  if (isFullHoliday) {
+    return {
+      isOpen: false,
+      isTradingDay: false,
+      phase: 'EXCHANGE_HOLIDAY',
+      phaseLabel: `MCX HOLIDAY: ${holiday.name.toUpperCase()}`,
+      statusBadge: 'EXCHANGE CLOSED',
+      istTimeString,
+      openTimeIST: '09:00 IST',
+      closeTimeIST: '23:30 IST',
+      nextSessionText: 'Next Trading Day @ 09:00 IST',
+      holidayName: holiday.name,
+      shouldSync: false,
+    };
+  }
+
+  // Morning holiday only (opens at 17:00 IST)
+  if (isMorningHolidayOnly && totalMinutes < eveningOpenMinutes) {
+    return {
+      isOpen: false,
+      isTradingDay: true,
+      phase: 'CLOSED_OVERNIGHT',
+      phaseLabel: `MCX MORNING CLOSED (${holiday.name})`,
+      statusBadge: 'EVENING SESSION @ 17:00',
+      istTimeString,
+      openTimeIST: '17:00 IST',
+      closeTimeIST: '23:30 IST',
+      nextSessionText: 'Today Evening Session @ 17:00 IST',
+      holidayName: holiday.name,
+      shouldSync: false,
+    };
+  }
+
+  // Active trading: 09:00 - 23:30 IST (or 17:00 - 23:30 on morning holiday)
+  const isCurrentlyOpen = isMorningHolidayOnly
+    ? totalMinutes >= eveningOpenMinutes && totalMinutes < closeMinutes
+    : totalMinutes >= openMinutes && totalMinutes < closeMinutes;
+
+  if (isCurrentlyOpen) {
+    const isEvening = totalMinutes >= eveningOpenMinutes;
+    return {
+      isOpen: true,
+      isTradingDay: true,
+      phase: 'LIVE_OPEN',
+      phaseLabel: isEvening ? 'MCX EVENING SESSION (17:00 - 23:30)' : 'MCX MORNING SESSION (09:00 - 17:00)',
+      statusBadge: 'MCX LIVE · ACTIVE',
+      istTimeString,
+      openTimeIST: isMorningHolidayOnly ? '17:00 IST' : '09:00 IST',
+      closeTimeIST: '23:30 IST',
+      nextSessionText: 'Trading in progress (Closes 23:30 IST)',
+      shouldSync: true,
+    };
+  }
+
+  // Overnight closed: 23:30 - 09:00
+  return {
+    isOpen: false,
+    isTradingDay: true,
+    phase: 'CLOSED_OVERNIGHT',
+    phaseLabel: 'MCX OVERNIGHT STANDBY',
+    statusBadge: 'CLOSED TILL 09:00',
+    istTimeString,
+    openTimeIST: '09:00 IST',
+    closeTimeIST: '23:30 IST',
+    nextSessionText: totalMinutes < openMinutes ? 'Today @ 09:00 IST' : 'Tomorrow @ 09:00 IST',
     shouldSync: false,
   };
 }
