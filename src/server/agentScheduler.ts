@@ -63,7 +63,7 @@ class AgentBackgroundScheduler {
     }
   }
 
-  async runCycle(forcePreMarket = false, forcePostMarket = false): Promise<void> {
+  async runCycle(forcePreMarket = false, forcePostMarket = false, forceSquareOff = false): Promise<void> {
     const ist = getISTDateTime();
     const session = getIndianMarketSession();
     const today = ist.dateStr;
@@ -82,7 +82,7 @@ class AgentBackgroundScheduler {
     // 2. INTRADAY MIS SQUARE-OFF (15:20 IST)
     // -------------------------------------------------------------------------
     const isSquareOffWindow = totalMinutes >= (15 * 60 + 20) && totalMinutes < (15 * 60 + 30);
-    if (isSquareOffWindow && this._lastSquareOffDate !== today && session.isTradingDay) {
+    if ((isSquareOffWindow && this._lastSquareOffDate !== today && session.isTradingDay) || forceSquareOff) {
       this._lastSquareOffDate = today;
       await this._executeIntradaySquareOff(today, ist.timeStr);
     }

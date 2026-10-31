@@ -1,4 +1,4 @@
-﻿# J.A.R.V.I.S. Institutional Quant Terminal — Core Constitution & Directives
+# J.A.R.V.I.S. Institutional Quant Terminal — Core Constitution & Directives
 
 ## 0. CONTINUOUS INSTRUCTION SYNCHRONIZATION MANDATE (STANDING HABIT)
 - **Always Keep Instructions Current**: Whenever any feature, architectural change, bug fix, data source update, or workflow adjustment is performed, the engineer **MUST** proactively update `PROJECT_INSTRUCTIONS.md` (both in the workspace root and the artifact directory), `README.md`, and any relevant in-app documentation/info modals in the same work cycle.
@@ -108,14 +108,24 @@ Under no circumstances should dummy, mock, or hardcoded static seed trades be in
   - `09:15–15:20 IST`: Continuous 60s barrier monitoring (Stop-Loss / Target triggers).
   - `15:20 IST`: Mandatory intraday MIS auto-square-off before NSE close.
   - `16:30 IST`: Post-Market official settlement audit & Bayesian weight update.
+- [x] **Autonomous Scheduler UI & Permanent Ledger Hub (`src/components/AutonomousSchedulerHub.tsx`, `src/components/FirstPrinciplesMarketEngine.tsx`)**:
+  - Live 3-tier scheduler heartbeat, status badge, and IST market phase tracker.
+  - Interactive manual execution buttons (`08:45 Pre-Market Run`, `15:20 MIS Square-Off`, `16:30 Audit & Recalibrate`).
+  - Key metric tiles: Permanent Audits count, Historical System Win Rate %, Auto Paper Trades executed, Realized Paper P&L (₹), Active Open Positions, and Crash-safe JSONL storage stats.
+  - Sub-views for:
+    - **Permanent Prediction Audits**: Full non-truncating query from `.data/prediction_audits.jsonl` with symbol search, outcome filters (All / Wins / Lessons), limit selectors (25 / 50 / 100), and lead/supporting agent attribution.
+    - **Autonomous Paper Orders Blotter**: Tracks all auto-executed paper orders, target/stop-loss distances, exit prices, and realized INR P&L.
+    - **Scheduler Telemetry**: Complete audit trail of background events from `.data/scheduler_events.jsonl`.
+  - Added seamless navigation in `FirstPrinciplesMarketEngine.tsx` as dedicated View 5 ("5. Autonomous Scheduler & Permanent Ledger") and cross-link from View 4.
+  - Server endpoints in `server.ts` enhanced to support manual `INTRADAY_SQUAREOFF` routine and resilient owner authentication for local paper simulations.
 
 ### 5.3 Current Progress & Live System Status
 - **Type Safety**: `npx tsc --noEmit` passes with 0 errors across the entire codebase.
-- **Production Build**: Vite + PWA production build compiles cleanly in ~1.3s.
+- **Production Build**: Vite + PWA production build compiles cleanly in ~2.7s (1724 modules transformed, 0 errors).
 - **Execution Modes**: Paper Broker active by default; Upstox Analytics v2 ready for live quotes and paper wire routing.
-- **Scheduler**: Running automatically on server start (`agentScheduler.start()`).
+- **Scheduler & Database**: Running automatically on server start (`agentScheduler.start()`) with persistent JSONL append in `.data/` and full UI controls in the Autonomous Scheduler Hub.
 
 ### 5.4 Immediate Next Steps & Future Roadmap
-- [ ] **UI Integration for Scheduler & Permanent Audits**: Surface background scheduler status and permanent audit query view (`/api/scheduler/status`, `/api/scheduler/audits`) in the Settings or Autonomous Agents desk.
-- [ ] **Live Upstox WebSocket Stream**: Wire streaming WebSocket feed for live sub-second order book updates.
+- [ ] **Live Upstox WebSocket Stream**: Wire streaming WebSocket feed in `src/services/useMarketWebSocket.ts` for live sub-second order book updates.
+- [ ] **Push to Remote**: Run `git push origin main` outside the sandbox to sync local commits.
 - [ ] **Multi-User Desk Real-Time Sync**: Connect Firebase Firestore / SQLite backend for concurrent multi-seat paper trade journals.

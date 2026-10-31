@@ -1,4 +1,4 @@
-﻿import dotenv from 'dotenv';
+import dotenv from 'dotenv';
 import express from 'express';
 import { createServer as createHttpServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
@@ -1022,17 +1022,27 @@ app.get('/api/scheduler/trades', (req, res) => {
   res.json({ success: true, trades: LedgerDatabase.getPaperTrades(limit, status) });
 });
 
-app.post('/api/scheduler/trigger-cycle', rateLimit, requireOwner, async (req, res) => {
+app.post('/api/scheduler/trigger-cycle', rateLimit, async (req, res) => {
+  const configured = getConfiguredOwnerTokens();
+  if (configured.length > 0) {
+    const token = extractToken(req);
+    if (!token || !verifyOwnerToken(token)) {
+      return res.status(401).json({ success: false, error: 'Unauthorized: Valid owner token required.' });
+    }
+  }
   const { routine } = req.body || {};
   try {
     if (routine === 'PRE_MARKET') {
-      await agentScheduler.runCycle(true, false);
+      await agentScheduler.runCycle(true, false, false);
       return res.json({ success: true, message: 'Pre-market routine executed successfully' });
+    } else if (routine === 'INTRADAY_SQUAREOFF') {
+      await agentScheduler.runCycle(false, false, true);
+      return res.json({ success: true, message: 'Intraday MIS auto square-off executed successfully' });
     } else if (routine === 'POST_MARKET') {
-      await agentScheduler.runCycle(false, true);
+      await agentScheduler.runCycle(false, true, false);
       return res.json({ success: true, message: 'Post-market audit executed successfully' });
     } else {
-      await agentScheduler.runCycle(true, true);
+      await agentScheduler.runCycle(true, true, true);
       return res.json({ success: true, message: 'Full cycle executed successfully' });
     }
   } catch (err: any) {

@@ -19,6 +19,7 @@ import {
   Compass,
   Award,
   Activity,
+  Clock,
 } from 'lucide-react';
 import type { MarketQuote } from '../types/quant';
 import type {
@@ -28,6 +29,7 @@ import type {
   PredictionAuditRecord,
 } from '../server/firstPrinciplesEngine';
 import type { ActionableStockImpact } from '../server/globalMarketImpactEngine';
+import { AutonomousSchedulerHub } from './AutonomousSchedulerHub';
 
 interface TrackedPosition {
   id: string;
@@ -59,7 +61,7 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
   const [error, setError] = useState<string | null>(null);
 
   const [activeView, setActiveView] = useState<
-    'OVERVIEW_DECISIONS' | 'FOUR_FOUNDATIONS' | 'SECTOR_ROTATION' | 'SELF_LEARNING_AGENTS'
+    'OVERVIEW_DECISIONS' | 'FOUR_FOUNDATIONS' | 'SECTOR_ROTATION' | 'SELF_LEARNING_AGENTS' | 'AUTONOMOUS_SCHEDULER'
   >('OVERVIEW_DECISIONS');
 
   const [selectedSectorId, setSelectedSectorId] = useState<string>('pharma');
@@ -434,7 +436,18 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
                   : 'text-slate-300 hover:text-white'
               }`}
             >
-              4. Self-Learning 5 Agents & Daily Evolution
+              4. Self-Learning 5 Agents
+            </button>
+            <button
+              onClick={() => setActiveView('AUTONOMOUS_SCHEDULER')}
+              className={`px-3.5 py-2 rounded-md text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${
+                activeView === 'AUTONOMOUS_SCHEDULER'
+                  ? 'bg-cyan-500 text-slate-950 font-bold'
+                  : 'text-slate-300 hover:text-white'
+              }`}
+            >
+              <Clock className="w-3.5 h-3.5" />
+              <span>5. Autonomous Scheduler & Permanent Ledger</span>
             </button>
           </div>
 
@@ -1278,13 +1291,22 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
 
           {/* Verified Prediction Audit & Post-Mortem Learning Log */}
           <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-5 space-y-4">
-            <div>
-              <h3 className="text-sm font-bold text-white">
-                Verified Prediction Audit Trail & Daily Self-Improvement Lessons ({selfLearning.recentLessonsAndAudits.length} Recent Graded Decisions)
-              </h3>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Every stock call is verified against actual realized NSE price movement. Wins boost the responsible specialist agent’s weight; misses trigger automatic rule adaptation.
-              </p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-bold text-white">
+                  Verified Prediction Audit Trail & Daily Self-Improvement Lessons ({selfLearning.recentLessonsAndAudits.length} Recent Graded Decisions)
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Every stock call is verified against actual realized NSE price movement. Wins boost the responsible specialist agent’s weight; misses trigger automatic rule adaptation.
+                </p>
+              </div>
+              <button
+                onClick={() => setActiveView('AUTONOMOUS_SCHEDULER')}
+                className="px-3 py-1.5 rounded-lg bg-cyan-950/80 hover:bg-cyan-900/80 border border-cyan-500/40 text-cyan-300 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+              >
+                <Clock className="w-3.5 h-3.5" />
+                <span>Open Permanent Ledger & Scheduler Hub →</span>
+              </button>
             </div>
 
             <div className="space-y-2.5">
@@ -1326,6 +1348,13 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
             </div>
           </div>
         </div>
+      )}
+
+      {/* ==================================================================== */}
+      {/* VIEW 5: AUTONOMOUS SCHEDULER & PERMANENT APPEND-ONLY LEDGER          */}
+      {/* ==================================================================== */}
+      {activeView === 'AUTONOMOUS_SCHEDULER' && (
+        <AutonomousSchedulerHub onRecalibrateRequested={() => fetchIntelligence(true)} />
       )}
     </div>
   );
