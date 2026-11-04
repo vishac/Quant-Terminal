@@ -18,38 +18,43 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const { theme, setTheme } = useTheme();
   const navItems: { id: ActiveTab; label: string; icon: React.ReactNode }[] = [
     { 
-      id: 'quant_bot', 
-      label: '01. Market & Quant Bot', 
-      icon: <span className="material-symbols-outlined text-[18px]">smart_toy</span> 
+      id: 'equity_radar', 
+      label: 'Core 1 · Macro & Screener', 
+      icon: <span className="material-symbols-outlined text-[18px]">public</span> 
     },
     { 
-      id: 'equity_radar', 
-      label: '02. Screener & Thesis', 
-      icon: <span className="material-symbols-outlined text-[18px]">candlestick_chart</span> 
+      id: 'stress_test_lab', 
+      label: 'Core 2 · Brutal Stress Lab', 
+      icon: <span className="material-symbols-outlined text-[18px]">science</span> 
     },
     { 
       id: 'autonomous_agents', 
-      label: '03. 5-Agent Desk', 
+      label: 'Core 3 · 5-Agent Council', 
       icon: <span className="material-symbols-outlined text-[18px]">group_work</span> 
     },
     { 
       id: 'trade_history', 
-      label: '04. OMS & "Why?" Audit', 
+      label: 'Core 4 · OMS & Revert Audit', 
       icon: <span className="material-symbols-outlined text-[18px]">receipt_long</span> 
     },
     { 
+      id: 'quant_bot', 
+      label: 'NSE Option Chain & 3D', 
+      icon: <span className="material-symbols-outlined text-[18px]">smart_toy</span> 
+    },
+    { 
       id: 'risk_engine', 
-      label: '05. Risk Engine', 
+      label: 'Risk & <1.5% DD Guard', 
       icon: <span className="material-symbols-outlined text-[18px]">security</span> 
     },
     { 
       id: 'backtest_lab', 
-      label: '06. Backtest Lab', 
+      label: 'Backtest Lab', 
       icon: <span className="material-symbols-outlined text-[18px]">query_stats</span> 
     },
     { 
       id: 'settings', 
-      label: '07. Control Tower', 
+      label: 'Control Tower', 
       icon: <span className="material-symbols-outlined text-[18px]">settings</span> 
     },
   ];

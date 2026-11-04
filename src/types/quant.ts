@@ -1,4 +1,4 @@
-export type ActiveTab = 'voice_hud' | 'quant_bot' | 'multi_user_desk' | 'autonomous_agents' | 'trade_history' | 'equity_radar' | 'deep_thesis' | 'sync_hub' | 'risk_engine' | 'risk_guard' | 'backtest_lab' | 'settings';
+export type ActiveTab = 'voice_hud' | 'quant_bot' | 'multi_user_desk' | 'autonomous_agents' | 'stress_test_lab' | 'trade_history' | 'equity_radar' | 'deep_thesis' | 'sync_hub' | 'risk_engine' | 'risk_guard' | 'backtest_lab' | 'settings';
 
 export type UserDeskRole = 'admin' | 'risk_officer' | 'quant_trader' | 'analyst';
 
@@ -203,6 +203,7 @@ export interface PaperTradeOrder {
   timestamp: string;
   orderDate?: string; // dd-mmm-yyyy (e.g. 29-Oct-2026)
   orderTime?: string; // [hh]:mm:ss (no AM/PM, e.g. [14]:32:15)
+  expiryDate?: string; // Contract expiry dd-mmm-yyyy for NSE F&O / MCX
   status: 'OPEN' | 'SQUARED_OFF' | 'TARGET_HIT' | 'STOP_HIT' | 'TRAILING_STOP_HIT';
   pnlINR: number;
   peakPnlINR?: number; // High-Water-Mark unrealized P&L in ₹

@@ -1,6 +1,6 @@
 {
-  "summary":  "Implementation plan to upgrade all Track Buy Setup and Track Short Setup buttons across Overview and Sector Rotation Matrix to launch an interactive Institutional Trade Setup & 2026 Tax/Risk Blueprint modal with deterministic CPPI/Quarter-Kelly sizing, instrument selector, TSL toggle, ROI Ledger tracking, and 1-click live Session Order Book execution.",
-  "updatedAt":  "2026-11-02T10:13:10.329617825Z",
-  "requestFeedback":  true,
-  "userFacing":  true
+  "summary": "Revised implementation plan integrating the <2% (1.50% hard daily cap) Drawdown-Locked Consensus Quarter-Kelly Sizing, 5-Stage Inter-Agent Consensus Council with Red-Team Veto, 3-Layer FII/DII/Pro vs Retail OI & Sector Rotation Engine, 11-Vector Macro-Causal Self-Learner, and Brutal Stress-Test Lab.",
+  "updatedAt": "2026-11-04T11:08:37.648845830Z",
+  "requestFeedback": true,
+  "userFacing": true
 }

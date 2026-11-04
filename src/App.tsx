@@ -13,6 +13,7 @@ import { BacktestLab } from './components/BacktestLab';
 import { SettingsTerminal } from './components/SettingsTerminal';
 import { InstitutionalEquityRadar } from './components/InstitutionalEquityRadar';
 import { AutonomousAgentsDesk } from './components/AutonomousAgentsDesk';
+import { BrutalStressTestLab } from './components/BrutalStressTestLab';
 import { TradeHistory } from './components/TradeHistory';
 import { CircuitBreakerModal } from './components/CircuitBreakerModal';
 import { OfflineIndicator } from './components/OfflineIndicator';
@@ -29,13 +30,13 @@ import { Radio } from 'lucide-react';
 // ---------------------------------------------------------------------------
 
 const MOBILE_NAV_TABS: { id: ActiveTab; icon: string; label: string }[] = [
-  { id: 'quant_bot',         icon: 'monitoring',        label: 'Quant'    },
-  { id: 'equity_radar',      icon: 'candlestick_chart', label: 'Screener' },
-  { id: 'autonomous_agents', icon: 'group_work',        label: '5-Agents' },
-  { id: 'trade_history',     icon: 'receipt_long',      label: 'OMS/Why'  },
-  { id: 'risk_engine',       icon: 'security',          label: 'Risk'     },
-  { id: 'backtest_lab',      icon: 'query_stats',       label: 'Backtest' },
-  { id: 'settings',          icon: 'settings',          label: 'Control'  },
+  { id: 'equity_radar',      icon: 'public',            label: 'Core 1: Macro' },
+  { id: 'stress_test_lab',   icon: 'science',           label: 'Core 2: Lab'   },
+  { id: 'autonomous_agents', icon: 'group_work',        label: 'Core 3: Council' },
+  { id: 'trade_history',     icon: 'receipt_long',      label: 'Core 4: OMS'   },
+  { id: 'quant_bot',         icon: 'monitoring',        label: 'F&O Chain'     },
+  { id: 'risk_engine',       icon: 'security',          label: 'Risk'          },
+  { id: 'settings',          icon: 'settings',          label: 'Control'       },
 ];
 
 // ---------------------------------------------------------------------------
@@ -304,6 +305,91 @@ function AppInner() {
             <ViewerDashboard />
           ) : (
             <>
+              {/* Unified 4-Core Causal Pipeline Switcher */}
+              <div className="mb-4 p-2.5 rounded-xl bg-[#090e19]/95 border border-cyan-500/25 shadow-md font-mono">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                  {[
+                    {
+                      id: 'equity_radar' as ActiveTab,
+                      coreBadge: 'CORE 1 · 11-VECTOR MACRO & FII/DII',
+                      title: 'Macro, Policy, War & Sector Screener',
+                      matchTabs: ['equity_radar', 'deep_thesis'],
+                    },
+                    {
+                      id: 'stress_test_lab' as ActiveTab,
+                      coreBadge: 'CORE 2 · BRUTAL STRESS-TEST LAB',
+                      title: '10-Point Audit & Bayesian Self-Learner',
+                      matchTabs: ['stress_test_lab', 'backtest_lab'],
+                    },
+                    {
+                      id: 'autonomous_agents' as ActiveTab,
+                      coreBadge: 'CORE 3 · 5-AGENT CONSENSUS & F&O',
+                      title: 'Inter-Agent Council & Option Chain',
+                      matchTabs: ['autonomous_agents', 'quant_bot'],
+                    },
+                    {
+                      id: 'trade_history' as ActiveTab,
+                      coreBadge: 'CORE 4 · ORDER BOOK & <1.5% DD GUARD',
+                      title: 'Canonical OMS, Anti-Whipsaw & Revert Ledger',
+                      matchTabs: ['trade_history', 'risk_engine', 'settings'],
+                    },
+                  ].map((core) => {
+                    const isCoreActive = core.matchTabs.includes(activeTab);
+                    return (
+                      <button
+                        key={core.id}
+                        onClick={() => setActiveTab(core.id)}
+                        className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
+                          isCoreActive
+                            ? 'bg-cyan-950/70 border-cyan-400 shadow-[0_0_15px_rgba(0,240,255,0.2)]'
+                            : 'bg-slate-900/70 border-slate-800 hover:border-slate-700'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between text-[10px] font-bold">
+                          <span className={isCoreActive ? 'text-cyan-300' : 'text-slate-400'}>
+                            {core.coreBadge}
+                          </span>
+                          {isCoreActive && (
+                            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                          )}
+                        </div>
+                        <div className="text-xs font-bold text-white mt-0.5 truncate">
+                          {core.title}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Secondary Quick Tool Switcher */}
+                <div className="mt-2 pt-2 border-t border-slate-800/80 flex items-center justify-between flex-wrap gap-2 text-[11px]">
+                  <span className="text-slate-400">
+                    Active Pipeline Rules: <span className="text-emerald-300 font-bold">&le;1.50% Max Daily Drawdown (&lt;2% Locked)</span> · <span className="text-cyan-300 font-bold">&gt;2.00% Net Profit Gate</span> · <span className="text-amber-300 font-bold">82% Profit-Lock / 100% Cash Anti-Whipsaw</span>
+                  </span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {[
+                      { id: 'quant_bot' as ActiveTab, label: 'NSE Option Chain & 3D Surface' },
+                      { id: 'stress_test_lab' as ActiveTab, label: 'Brutal Stress Lab' },
+                      { id: 'risk_engine' as ActiveTab, label: 'Risk Engine' },
+                      { id: 'backtest_lab' as ActiveTab, label: 'Backtest' },
+                      { id: 'settings' as ActiveTab, label: 'Broker & Control' },
+                    ].map((sub) => (
+                      <button
+                        key={sub.id}
+                        onClick={() => setActiveTab(sub.id)}
+                        className={`px-2.5 py-1 rounded-lg border text-[10px] font-bold transition cursor-pointer ${
+                          activeTab === sub.id
+                            ? 'bg-cyan-500 text-slate-950 border-cyan-400'
+                            : 'bg-slate-900 text-slate-300 border-slate-800 hover:border-slate-700'
+                        }`}
+                      >
+                        {sub.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
               {activeTab === 'multi_user_desk' && <MultiUserDesk />}
               {activeTab === 'voice_hud' && (
                 <JarvisVoiceHUD
@@ -319,6 +405,12 @@ function AppInner() {
                 <AutonomousAgentsDesk 
                   onOpenCircuitBreaker={() => setIsCircuitBreakerOpen(true)}
                   onNavigateToTradeHistory={() => setActiveTab('trade_history')}
+                />
+              )}
+              {activeTab === 'stress_test_lab' && (
+                <BrutalStressTestLab
+                  onNavigateToAgents={() => setActiveTab('autonomous_agents')}
+                  onNavigateToOrders={() => setActiveTab('trade_history')}
                 />
               )}
               {activeTab === 'trade_history' && (

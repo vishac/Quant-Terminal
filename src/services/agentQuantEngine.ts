@@ -1,6 +1,20 @@
 import { AutonomousAgent, PaperTradeOrder, AgentMarketInsight, AgentDecisionScript, AgentStrategyHealingReport, TslStage } from '../types/quant';
 import { MarketQuote } from './liveMarketService';
-import { formatOrderDate, formatOrderTime } from '../utils/orderFormatters';
+import {
+  formatOrderDate,
+  formatOrderTime,
+  resolveDerivativeExpiryInfo,
+  computeCanonicalNiftyOptionLeg,
+} from '../utils/orderFormatters';
+import {
+  selectBestLearnedEquityCandidate,
+  quarantineLosingScript,
+  recordWinningScriptOutcome,
+  extractBaseSymbolFromOrder,
+  isAutoPruneLosersEnabled,
+  pruneLosingOrdersAndQuarantine,
+  loadPersistedScriptMemory
+} from './scriptLearningEngine';
 
 export interface AgentPortfolioLedger {
   totalAllocatedCapitalINR: number;
@@ -233,16 +247,31 @@ export function deriveLiveAutonomousAgents(
     .map(sym => ({ sym, q: quotes[sym] }))
     .filter(item => item.q && item.q.price != null);
 
+  const learnedMemory = loadPersistedScriptMemory();
+  const openLosingSymbols = new Set(
+    sessionOrders
+      .filter(o => o.status === 'OPEN' && (o.pnlINR || 0) < 0)
+      .map(o => extractBaseSymbolFromOrder(o))
+  );
+
   const actualGainers = validQuotes
-    .filter(item => (item.q.changePct || 0) > 0)
+    .filter(item => {
+      const clean = item.sym.replace('.NS', '');
+      const isQuarantined = Boolean(learnedMemory[clean]?.quarantined) || openLosingSymbols.has(clean);
+      return (item.q.changePct || 0) > 0 && !isQuarantined;
+    })
     .sort((a, b) => (b.q.changePct || 0) - (a.q.changePct || 0));
 
   const actualDecliners = validQuotes
-    .filter(item => (item.q.changePct || 0) < 0)
+    .filter(item => {
+      const clean = item.sym.replace('.NS', '');
+      const isQuarantined = Boolean(learnedMemory[clean]?.quarantined) || openLosingSymbols.has(clean);
+      return (item.q.changePct || 0) < 0 || isQuarantined;
+    })
     .sort((a, b) => (a.q.changePct || 0) - (b.q.changePct || 0));
 
   // Build clean non-contradictory actionable scripts:
-  // Top actual gainers get BUY scripts, top actual decliners get SELL/AVOID scripts
+  // Top learned positive gainers get BUY scripts; losing/quarantined or declining scripts get SELL/AVOID scripts
   const stocksToScript = [
     ...actualGainers.slice(0, 3).map(i => ({ ...i, forcedAction: 'BUY' as const })),
     ...actualDecliners.slice(0, 3).map(i => ({ ...i, forcedAction: 'SELL' as const }))
@@ -419,25 +448,29 @@ export function deriveLiveAutonomousAgents(
     }
   ];
 
+  const viduraLeader = selectBestLearnedEquityCandidate(quotes, sessionOrders, 0);
+  const viduraStopDist = Math.max(0.5, Number((viduraLeader.price * 0.009).toFixed(2)));
+  const viduraQty = Math.max(1, Math.floor(380 / viduraStopDist));
+
   const viduraDecisionScripts: AgentDecisionScript[] = [
     {
-      id: `script-vidura-audit`,
+      id: `script-vidura-audit-${viduraLeader.symbol}`,
       agentId: 'agent_vidura',
-      symbol: `ULTRACEMCO (₹1L Capital → 4 Shares, Max Risk ₹1,000)`,
-      name: `1% Max-Risk Position Sizer & Defensive Capital Allocation`,
+      symbol: `${viduraLeader.symbol} (₹1L Capital → ${viduraQty} Shares, Max Risk ≤₹380)`,
+      name: `Adaptive Learned Leader & Anti-Erosion TSL Allocation`,
       segment: 'NSE_CASH',
       action: 'BUY',
-      entryTrigger: `Buy ULTRACEMCO @ ₹${(quotes['ULTRACEMCO.NS']?.price ?? 10958).toLocaleString('en-IN')} (+${(quotes['ULTRACEMCO.NS']?.changePct ?? 1.0).toFixed(2)}%)`,
-      targetPrice: `Target ₹${Math.round((quotes['ULTRACEMCO.NS']?.price ?? 10958) * 1.026).toLocaleString('en-IN')} (+2.6% ROI)`,
+      entryTrigger: `Buy Learned Leader ${viduraLeader.symbol} @ ₹${viduraLeader.price.toLocaleString('en-IN')} (${viduraLeader.changePct >= 0 ? '+' : ''}${viduraLeader.changePct.toFixed(2)}%)`,
+      targetPrice: `Target ₹${Math.round(viduraLeader.price * 1.026).toLocaleString('en-IN')} (+2.6% ROI · 82% Anti-Erosion Lock)`,
       targetUpsidePct: 2.6,
-      stopLoss: `Strict Stop ₹${Math.round((quotes['ULTRACEMCO.NS']?.price ?? 10958) * 0.988).toLocaleString('en-IN')} (-1.2%)`,
-      riskPct: 1.2,
-      convictionScore: 94,
-      convictionTier: 'VERY_HIGH',
-      catalyst: `India VIX at ${vixDisplay} requires selective domestic capex exposure (UltraTech Cement, Cipla, ICICI Bank) with strict 1:2.2 Risk-Reward`,
+      stopLoss: `Strict Stop ₹${Math.round(viduraLeader.price * 0.991).toLocaleString('en-IN')} (-0.9% · ≤₹380 1R)`,
+      riskPct: 0.9,
+      convictionScore: viduraLeader.learnedScore,
+      convictionTier: viduraLeader.learnedScore >= 85 ? 'VERY_HIGH' : 'HIGH',
+      catalyst: `${viduraLeader.phaseLabel}: ${viduraLeader.rationale}`,
       derivedMetrics: {
-        ltp: quotes['ULTRACEMCO.NS']?.price ?? niftyPrice,
-        changePct: quotes['ULTRACEMCO.NS']?.changePct ?? niftyPct,
+        ltp: viduraLeader.price,
+        changePct: viduraLeader.changePct,
       }
     }
   ];
@@ -733,26 +766,35 @@ export function generateLiveMarketOrder(
   const orderId = `SIM-ORD-${agentTag}-${Date.now().toString().slice(-5)}-${orderSeqCounter}`;
 
   if (agentId === 'agent_bhishma') {
-    // Generate authentic NIFTY option credit spread pegged to real current spot as a unified net-premium contract
-    // TIGHTER PER-TRADE INITIAL STOP: Max loss bounded to <= ₹400 (1R)
-    const atm = Math.round((niftyPrice || 24200) / 50) * 50;
-    const isBullish = niftyPct >= 0;
-    const shortStrike = isBullish ? atm - 100 : atm + 100;
-    const longStrike = isBullish ? atm - 150 : atm + 150; // 50-pt tighter width
-    const optType = isBullish ? 'PE' : 'CE';
-    const strategyName = isBullish ? 'Bull Put Credit Spread (Step-Ratchet TSL)' : 'Bear Call Credit Spread (Step-Ratchet TSL)';
+    // Generate authentic NIFTY option credit spread pegged 1:1 to the Canonical Option Chain & live ^NSEI spot (23,793.45 -> ATM 23800)
+    const validNiftySpot = niftyPrice > 1000 ? niftyPrice : 23793.45;
+    const validVix = vix > 5 ? vix : 14.46;
+    const atm = Math.round(validNiftySpot / 50) * 50;
+    const isBullish = niftyPct >= -0.25;
 
-    const shortPremium = Math.max(18.5, Number(((vix || 14.2) * 2.8 + Math.max(0, 100 - Math.abs((niftyPrice || 24200) - shortStrike)) * 0.15).toFixed(2)));
-    const longPremium = Math.max(5.0, Number((shortPremium * 0.38).toFixed(2)));
-    const entryNetPremium = Number(Math.max(12.0, shortPremium - longPremium).toFixed(2));
-    // Sized so 1R max loss is strictly <= ₹380 (<= ₹400 per-trade limit)
+    // At ATM 23800 (Spot 23,793.45):
+    // Bull Put Credit Spread -> SELL 23750 PE (OTM) + BUY 23700 PE (OTM) expiring 09-Nov-2026
+    // Bear Call Credit Spread -> SELL 23850 CE (OTM) + BUY 23900 CE (OTM) expiring 09-Nov-2026
+    const shortStrike = isBullish ? atm - 50 : atm + 50;
+    const longStrike = isBullish ? atm - 100 : atm + 100; // 50-pt defined-risk wing width
+    const optType: 'PE' | 'CE' = isBullish ? 'PE' : 'CE';
+    const strategyName = isBullish
+      ? 'Bull Put Credit Spread (OTM Hedged · Anti-Erosion TSL)'
+      : 'Bear Call Credit Spread (OTM Hedged · Anti-Erosion TSL)';
+
+    const shortLegChain = computeCanonicalNiftyOptionLeg(shortStrike, optType, validNiftySpot, validVix);
+    const longLegChain = computeCanonicalNiftyOptionLeg(longStrike, optType, validNiftySpot, validVix);
+    const entryNetPremium = Number(Math.max(8.0, shortLegChain.ltp - longLegChain.ltp).toFixed(2));
+
+    // 1 Lot = 25 Qty; 1R max loss strictly bounded to ₹375 (<= ₹400 per-trade limit)
     const qty = 25;
     const stopDistPerUnit = Number((375 / qty).toFixed(2)); // ₹15.00 adverse spread expansion stop
     const initialStopPrice = Number((entryNetPremium + stopDistPerUnit).toFixed(2));
     const maxLoss = Number(((initialStopPrice - entryNetPremium) * qty).toFixed(2)); // Exactly ₹375.00
-    const targetPrice = Number(Math.max(1.25, entryNetPremium - (stopDistPerUnit * 2.4)).toFixed(2));
+    const targetPrice = Number(Math.max(2.5, entryNetPremium * 0.35).toFixed(2));
     const maxProfit = Number(((entryNetPremium - targetPrice) * qty).toFixed(2));
     const unifiedInstrument = `NIFTY ${shortStrike}/${longStrike} ${optType} Spread`;
+    const { expiryDateStr } = resolveDerivativeExpiryInfo('NSE_FNO', unifiedInstrument, orderDate);
 
     return {
       id: orderId,
@@ -779,6 +821,7 @@ export function generateLiveMarketOrder(
       timestamp: timeStr,
       orderDate,
       orderTime,
+      expiryDate: expiryDateStr || undefined,
       status: 'OPEN',
       pnlINR: 0,
       peakPnlINR: 0,
@@ -795,30 +838,12 @@ export function generateLiveMarketOrder(
       isSimulation: true
     };
   } else if (agentId === 'agent_arjuna') {
-    // Top equity momentum order with tighter 1R <= ₹400 sizing across NSE Cash
-    const candidateSymbols = ['CIPLA.NS', 'ULTRACEMCO.NS', 'TCS.NS', 'ICICIBANK.NS', 'INFY.NS', 'RELIANCE.NS'];
-    let selectedQuote = quotes['CIPLA.NS'];
-    let selectedSym = 'CIPLA';
-    for (const sym of candidateSymbols) {
-      if (quotes[sym]?.price != null && (quotes[sym]?.changePct || 0) > 0) {
-        selectedQuote = quotes[sym];
-        selectedSym = sym.replace('.NS', '');
-        break;
-      }
-    }
-    if (!selectedQuote?.price) {
-      for (const sym of candidateSymbols) {
-        if (quotes[sym]?.price != null) {
-          selectedQuote = quotes[sym];
-          selectedSym = sym.replace('.NS', '');
-          break;
-        }
-      }
-    }
-
-    const price = Number((selectedQuote?.price ?? 1378.90).toFixed(2));
-    const stopLoss = Number((price * 0.991).toFixed(2)); // 0.9% tight initial stop
-    const target = Number((price * 1.025).toFixed(2));   // 2.5% target (~2.8R)
+    // Adaptive Learned Equity Leader (strictly excludes quarantined/losing scripts such as ULTRACEMCO when weak)
+    const learnedPick = selectBestLearnedEquityCandidate(quotes, [], 0);
+    const selectedSym = learnedPick.symbol;
+    const price = Number((learnedPick.price || 1378.90).toFixed(2));
+    const stopLoss = Number((price * 0.9926).toFixed(2)); // 0.74% tight initial stop
+    const target = Number((price * 1.0288).toFixed(2));   // +2.88% gross target (> +2.38% net after 2026 taxes & ₹40 brokerage)
     const stopDistance = Math.max(0.5, Number((price - stopLoss).toFixed(2)));
     // Sized so 1R max loss is strictly <= ₹380 (<= ₹400 limit)
     const qty = Math.max(1, Math.floor(380 / stopDistance));
@@ -832,7 +857,7 @@ export function generateLiveMarketOrder(
       agentName: 'Arjuna (Cash Alpha)',
       symbol: `${selectedSym} Intraday Cash MIS`,
       segment: 'NSE_CASH',
-      strategyName: 'VWAP Breakout + Step-Ratchet TSL',
+      strategyName: `Learned Leader (${learnedPick.phaseLabel.split('·')[0].trim()}) + Anti-Erosion TSL`,
       legs: [
         { instrument: `${selectedSym} (NSE EQ)`, action: 'BUY', qty, price, exitPrice: price }
       ],
@@ -880,6 +905,7 @@ export function generateLiveMarketOrder(
       const maxLoss = Number((stopDist * qty).toFixed(2));
       const targetProfit = Number((targetDist * qty).toFixed(2));
       const side = isBullish ? 'BUY' : 'SELL';
+      const crudeExpiry = resolveDerivativeExpiryInfo('MCX_FUTURES', 'MCX CRUDEOILM FUT', orderDate);
 
       return {
         id: orderId,
@@ -898,6 +924,7 @@ export function generateLiveMarketOrder(
         timestamp: timeStr,
         orderDate,
         orderTime,
+        expiryDate: crudeExpiry.expiryDateStr || undefined,
         status: 'OPEN',
         pnlINR: 0,
         peakPnlINR: 0,
@@ -923,6 +950,7 @@ export function generateLiveMarketOrder(
       const stopPrice = Number((isBullish ? mcxGoldPrice - maxLoss : mcxGoldPrice + maxLoss).toFixed(2));
       const targetPrice = Number((isBullish ? mcxGoldPrice + targetProfit : mcxGoldPrice - targetProfit).toFixed(2));
       const side = isBullish ? 'BUY' : 'SELL';
+      const goldExpiry = resolveDerivativeExpiryInfo('MCX_FUTURES', 'MCX GOLDM FUT', orderDate);
 
       return {
         id: orderId,
@@ -941,6 +969,7 @@ export function generateLiveMarketOrder(
         timestamp: timeStr,
         orderDate,
         orderTime,
+        expiryDate: goldExpiry.expiryDateStr || undefined,
         status: 'OPEN',
         pnlINR: 0,
         peakPnlINR: 0,
@@ -958,26 +987,27 @@ export function generateLiveMarketOrder(
       };
     }
   } else if (agentId === 'agent_vidura') {
-    // Vidura Capital Protection allocator across defensive NSE Cash (1R <= ₹400)
-    const sunPrice = Number((quotes['SUNPHARMA.NS']?.price ?? quotes['CIPLA.NS']?.price ?? 1860).toFixed(2));
-    const stopLoss = Number((sunPrice * 0.991).toFixed(2));
-    const target = Number((sunPrice * 1.024).toFixed(2));
-    const stopDist = Math.max(0.5, Number((sunPrice - stopLoss).toFixed(2)));
+    // Vidura Capital Protection allocator: selects #2 learned positive leader (never quarantined losers)
+    const viduraPick = selectBestLearnedEquityCandidate(quotes, [], 1);
+    const vPrice = Number((viduraPick.price || 1860).toFixed(2));
+    const stopLoss = Number((vPrice * 0.9928).toFixed(2));
+    const target = Number((vPrice * 1.0285).toFixed(2));
+    const stopDist = Math.max(0.5, Number((vPrice - stopLoss).toFixed(2)));
     const qty = Math.max(1, Math.floor(360 / stopDist));
-    const maxLoss = Number(((sunPrice - stopLoss) * qty).toFixed(2));
-    const targetProfit = Number(((target - sunPrice) * qty).toFixed(2));
+    const maxLoss = Number(((vPrice - stopLoss) * qty).toFixed(2));
+    const targetProfit = Number(((target - vPrice) * qty).toFixed(2));
 
     return {
       id: orderId,
       agentId: 'agent_vidura',
       agentName: 'Vidura (Risk Arbiter)',
-      symbol: 'SUNPHARMA Defensive MIS',
+      symbol: `${viduraPick.symbol} Defensive MIS`,
       segment: 'NSE_CASH',
-      strategyName: '0.38% Rupee Risk Bracket + Step-Ratchet TSL',
+      strategyName: '0.38% Rupee Risk Bracket + Anti-Erosion TSL',
       legs: [
-        { instrument: 'SUNPHARMA (NSE EQ)', action: 'BUY', qty, price: sunPrice, exitPrice: sunPrice }
+        { instrument: `${viduraPick.symbol} (NSE EQ)`, action: 'BUY', qty, price: vPrice, exitPrice: vPrice }
       ],
-      totalInvestmentINR: Math.round((sunPrice * qty) / 5),
+      totalInvestmentINR: Math.round((vPrice * qty) / 5),
       maxDefinedLossINR: Math.round(maxLoss),
       targetProfitINR: Math.round(targetProfit),
       riskRewardRatio: `1:${(targetProfit / Math.max(1, maxLoss)).toFixed(2)}`,
@@ -988,8 +1018,8 @@ export function generateLiveMarketOrder(
       pnlINR: 0,
       peakPnlINR: 0,
       trailingStopPnlINR: -maxLoss,
-      entryPrice: sunPrice,
-      exitPrice: sunPrice,
+      entryPrice: vPrice,
+      exitPrice: vPrice,
       initialStopLossPrice: stopLoss,
       trailingStopPrice: stopLoss,
       targetPriceLevel: target,
@@ -1000,26 +1030,27 @@ export function generateLiveMarketOrder(
       isSimulation: true
     };
   } else {
-    // Macro Sentinel index hedge or BSE Cash delivery (1R <= ₹400)
-    const tcsPrice = Number((quotes['TCS.NS']?.price ?? 2502.60).toFixed(2));
-    const stopLoss = Number((tcsPrice * 0.991).toFixed(2));
-    const target = Number((tcsPrice * 1.025).toFixed(2));
-    const stopDist = Math.max(0.5, Number((tcsPrice - stopLoss).toFixed(2)));
+    // Chanakya BSE Cash delivery: dynamically selects #3 learned positive leader (discards weak/losing scripts)
+    const chanakyaPick = selectBestLearnedEquityCandidate(quotes, [], 2);
+    const cPrice = Number((chanakyaPick.price || 2502.60).toFixed(2));
+    const stopLoss = Number((cPrice * 0.9926).toFixed(2));
+    const target = Number((cPrice * 1.0290).toFixed(2));
+    const stopDist = Math.max(0.5, Number((cPrice - stopLoss).toFixed(2)));
     const qty = Math.max(1, Math.floor(380 / stopDist));
-    const maxLoss = Number(((tcsPrice - stopLoss) * qty).toFixed(2));
-    const targetProfit = Number(((target - tcsPrice) * qty).toFixed(2));
+    const maxLoss = Number(((cPrice - stopLoss) * qty).toFixed(2));
+    const targetProfit = Number(((target - cPrice) * qty).toFixed(2));
 
     return {
       id: orderId,
       agentId: 'agent_chanakya',
       agentName: 'Chanakya (Macro Desk)',
-      symbol: 'TCS Cash Hedge (BSE EQ)',
+      symbol: `${chanakyaPick.symbol} Cash Hedge (BSE EQ)`,
       segment: 'BSE_CASH',
-      strategyName: 'Global Macro Hedge + Step-Ratchet TSL',
+      strategyName: 'Learned Macro Rotation + Anti-Erosion TSL',
       legs: [
-        { instrument: 'TCS (BSE EQ)', action: 'BUY', qty, price: tcsPrice, exitPrice: tcsPrice }
+        { instrument: `${chanakyaPick.symbol} (BSE EQ)`, action: 'BUY', qty, price: cPrice, exitPrice: cPrice }
       ],
-      totalInvestmentINR: Math.round(tcsPrice * qty),
+      totalInvestmentINR: Math.round(cPrice * qty),
       maxDefinedLossINR: Math.round(maxLoss),
       targetProfitINR: Math.round(targetProfit),
       riskRewardRatio: `1:${(targetProfit / Math.max(1, maxLoss)).toFixed(2)}`,
@@ -1030,8 +1061,8 @@ export function generateLiveMarketOrder(
       pnlINR: 0,
       peakPnlINR: 0,
       trailingStopPnlINR: -maxLoss,
-      entryPrice: tcsPrice,
-      exitPrice: tcsPrice,
+      entryPrice: cPrice,
+      exitPrice: cPrice,
       initialStopLossPrice: stopLoss,
       trailingStopPrice: stopLoss,
       targetPriceLevel: target,
@@ -1084,19 +1115,23 @@ export function evaluateStepRatchetTSL(
   const peakPnlINR = Number(Math.max(prevPeak, livePnl).toFixed(2));
   const peakR = peakPnlINR / oneR;
 
-  // Determine highest ratchet stage reached based on High-Water-Mark Peak P&L
+  // Determine highest Anti-Profit-Erosion Ratchet stage reached based on High-Water-Mark Peak P&L
+  // Prevents green trades from turning red and caps maximum profit erosion from peak!
   let stage: TslStage = 'INITIAL_RISK_STOP';
   let candidateFloor = -oneR;
 
-  if (peakR >= 2.2 || peakPnlINR >= targetProfit * 0.75) {
+  if (peakR >= 1.35 || peakPnlINR >= targetProfit * 0.55) {
+    // Strict Anti-Erosion Tier 3: Locks 82% of Peak P&L (max 18% profit erosion allowed)
     stage = 'PROFIT_LOCK_75PCT';
-    candidateFloor = peakPnlINR * 0.75;
-  } else if (peakR >= 1.5 || peakPnlINR >= targetProfit * 0.50) {
+    candidateFloor = peakPnlINR * 0.82;
+  } else if (peakR >= 0.75 || peakPnlINR >= 260) {
+    // Anti-Erosion Tier 2: Locks 65% of Peak P&L (max 35% profit erosion allowed)
     stage = 'PROFIT_LOCK_50PCT';
-    candidateFloor = peakPnlINR * 0.50;
-  } else if (peakR >= 0.8) {
+    candidateFloor = peakPnlINR * 0.65;
+  } else if (peakR >= 0.30 || peakPnlINR >= 110) {
+    // Early Positive Profit Floor Tier 1: Never allow a +₹110 trade to turn into a loss!
     stage = 'BREAKEVEN_ARMED';
-    candidateFloor = 15; // +₹15 net of statutory costs
+    candidateFloor = Math.max(28, peakPnlINR * 0.45);
   }
 
   // Monotonic ratchet invariant: stop floor can never decrease
@@ -1136,6 +1171,7 @@ export function evaluateStepRatchetTSL(
   const now = new Date();
   const orderDate = order.orderDate || formatOrderDate(now);
   const orderTime = formatOrderTime(now);
+  const baseSym = extractBaseSymbolFromOrder(order);
 
   // 1. Check Full Target Hit
   if (livePnl >= targetProfit) {
@@ -1145,6 +1181,7 @@ export function evaluateStepRatchetTSL(
     const exactRealizedPnl = Number(
       ((side === 'BUY' ? exitP - entryPrice : entryPrice - exitP) * qty).toFixed(2)
     );
+    recordWinningScriptOutcome(baseSym, exactRealizedPnl);
     return {
       ...order,
       legs: syncSingleLeg(exitP),
@@ -1169,18 +1206,19 @@ export function evaluateStepRatchetTSL(
     };
   }
 
-  // 2. Check Step-Ratchet Trailing Stop Profit Lock Hit (when Breakeven / 50% / 75% is armed and price pulls back)
+  // 2. Check Anti-Profit-Erosion Trailing Stop Hit (when Tier 1/2/3 is armed and profit starts eroding)
   if (stage !== 'INITIAL_RISK_STOP' && livePnl <= trailingStopPnlINR) {
     const exitP = trailingStopPrice;
     const lockedProfit = Number(
       ((side === 'BUY' ? exitP - entryPrice : entryPrice - exitP) * qty).toFixed(2)
     );
+    recordWinningScriptOutcome(baseSym, lockedProfit);
     const lockLabel =
       stage === 'PROFIT_LOCK_75PCT'
-        ? `TSL 75% Profit Lock (+₹${lockedProfit} locked from +₹${peakPnlINR} Peak)`
+        ? `Anti-Erosion 82% Profit Lock (+₹${lockedProfit} locked from +₹${peakPnlINR} Peak)`
         : stage === 'PROFIT_LOCK_50PCT'
-          ? `TSL 50% Profit Lock (+₹${lockedProfit} locked from +₹${peakPnlINR} Peak)`
-          : `TSL Breakeven Guard (+₹${lockedProfit} locked after +0.8R)`;
+          ? `Anti-Erosion 65% Profit Lock (+₹${lockedProfit} locked from +₹${peakPnlINR} Peak)`
+          : `Early Profit Guard (+₹${lockedProfit} locked · Zero Loss Erosion)`;
     return {
       ...order,
       legs: syncSingleLeg(exitP),
@@ -1205,11 +1243,16 @@ export function evaluateStepRatchetTSL(
     };
   }
 
-  // 3. Check Tighter Per-Trade Initial Stop (-1R <= -₹400) — never waits for -₹2,000!
+  // 3. Check Tighter Per-Trade Initial Stop (-1R <= -₹400) — immediately quarantines losing script!
   if (livePnl <= -oneR) {
     const exitP = Number(initialStopLossPrice.toFixed(2));
     const exactStopLossPnl = Number(
       ((side === 'BUY' ? exitP - entryPrice : entryPrice - exitP) * qty).toFixed(2)
+    );
+    quarantineLosingScript(
+      baseSym,
+      exactStopLossPnl,
+      `${baseSym} hit 1R Stop-Loss (₹${exactStopLossPnl}) — Quarantined from re-entry to protect capital`
     );
     return {
       ...order,
@@ -1228,7 +1271,7 @@ export function evaluateStepRatchetTSL(
       entryPrice,
       exitPrice: exitP,
       tslStage: 'STOP_HIT',
-      exitReason: `Per-Trade 1R Stop (₹${exactStopLossPnl} — ₹2,000 daily budget protected)`,
+      exitReason: `Per-Trade 1R Stop (₹${exactStopLossPnl} — Script Quarantined & Capital Protected)`,
       orderDate,
       orderTime,
       timestamp: `${orderDate} ${orderTime} (1R Stop ₹${exactStopLossPnl})`
@@ -1309,7 +1352,7 @@ export function updateOrdersLivePnl(
   quotes: Record<string, MarketQuote>
 ): PaperTradeOrder[] {
   const seenIds = new Set<string>();
-  return orders.map((rawOrder, idx) => {
+  const evaluated = orders.map((rawOrder, idx) => {
     let order = rawOrder;
     if (seenIds.has(order.id)) {
       const tag = (order.agentId || 'AGT').replace('agent_', '').slice(0, 3).toUpperCase();
@@ -1345,13 +1388,38 @@ export function updateOrdersLivePnl(
       }
     } else if (order.segment === 'NSE_FNO') {
       const niftyQuote = quotes['^NSEI'];
-      if (niftyQuote?.price != null) {
-        // Option spread premium decays favorably when NIFTY moves in strategy direction
-        const deltaStep = Number((((niftyQuote.changePct ?? 0.2) >= 0 ? -0.45 : -0.35)).toFixed(2));
-        const baseTarget = Math.max(1.0, entryPrice + deltaStep);
-        currentPrice = Number(
-          Math.max(0.5, (prevLtp === entryPrice ? baseTarget : prevLtp - 0.35)).toFixed(2)
-        );
+      const vixQuote = quotes['^INDIAVIX'];
+      const validSpot = niftyQuote?.price && niftyQuote.price > 1000 ? niftyQuote.price : 23793.45;
+      const validVix = vixQuote?.price && vixQuote.price > 5 ? vixQuote.price : 14.46;
+
+      // Ensure authoritative NSE Tuesday/Holiday-Adjusted expiry (09-Nov-2026) replaces any stale Thursday 05-Nov-2026
+      const { expiryDateStr: authExp } = resolveDerivativeExpiryInfo('NSE_FNO', order.symbol, order.orderDate);
+      if (authExp && order.expiryDate !== authExp) {
+        order = { ...order, expiryDate: authExp };
+      }
+
+      const spreadMatch = (leg?.instrument || order.symbol).match(/([A-Z]+)\s+(\d{4,6})\/(\d{4,6})\s+(PE|CE)/i);
+      if (spreadMatch) {
+        const s1 = Number(spreadMatch[2]);
+        const s2 = Number(spreadMatch[3]);
+        const oType = spreadMatch[4].toUpperCase() as 'PE' | 'CE';
+
+        const leg1Chain = computeCanonicalNiftyOptionLeg(s1, oType, validSpot, validVix);
+        const leg2Chain = computeCanonicalNiftyOptionLeg(s2, oType, validSpot, validVix);
+        const liveChainNetSpread = Number(Math.max(2.0, leg1Chain.ltp - leg2Chain.ltp).toFixed(2));
+
+        if (prevLtp <= 1.5) {
+          currentPrice = Number(Math.max(4.5, entryPrice * 0.68).toFixed(2));
+        } else if (Math.abs(liveChainNetSpread - entryPrice) >= 0.15 && Math.abs(liveChainNetSpread - entryPrice) <= 14) {
+          currentPrice = liveChainNetSpread;
+        } else {
+          // Bounded intraday theta harvest on OTM credit spread (never decays below 48% of entry credit)
+          const minRealisticSpread = Number(Math.max(4.5, entryPrice * 0.48).toFixed(2));
+          currentPrice = Number(Math.max(minRealisticSpread, prevLtp - 0.20).toFixed(2));
+        }
+      } else if (niftyQuote?.price != null) {
+        const minRealisticPrice = Number(Math.max(4.5, entryPrice * 0.5).toFixed(2));
+        currentPrice = Number(Math.max(minRealisticPrice, prevLtp - 0.20).toFixed(2));
       }
     } else if (order.segment === 'MCX_FUTURES' || order.segment === 'MCX_OPTIONS') {
       const isCrude =
@@ -1378,6 +1446,14 @@ export function updateOrdersLivePnl(
     );
     return evaluateStepRatchetTSL(order, livePnl, currentPrice);
   });
+
+  // If Adaptive Auto-Prune is active, automatically cut & quarantine losing scripts (such as ULTRACEMCO in loss)
+  if (isAutoPruneLosersEnabled()) {
+    const { updatedOrders } = pruneLosingOrdersAndQuarantine(evaluated, quotes, false);
+    return updatedOrders;
+  }
+
+  return evaluated;
 }
 
 /**
@@ -1403,17 +1479,17 @@ export function generateOrderFromDecisionScript(
   const rawSym = `${script.symbol}.NS`;
   const quote = quotes[rawSym];
   const price = Number((quote?.price ?? script.derivedMetrics.ltp).toFixed(2));
-  const riskPct = Math.min(1.0, script.riskPct || 0.9);
+  const riskPct = Math.min(0.85, script.riskPct || 0.74);
   const side: 'BUY' | 'SELL' = script.action === 'SELL' ? 'SELL' : 'BUY';
   const stopLossPrice = Number((side === 'BUY'
     ? price * (1 - riskPct / 100)
     : price * (1 + riskPct / 100)).toFixed(2));
-  const targetPct = script.targetUpsidePct || 2.5;
+  const targetPct = Math.max(2.85, script.targetUpsidePct || 2.88);
   const targetPrice = Number((side === 'BUY'
     ? price * (1 + targetPct / 100)
     : price * (1 - targetPct / 100)).toFixed(2));
 
-  // Pre-trade leak-proof sizing: strictly capped at <= ₹390 (<= ₹400 1R risk)
+  // Pre-trade leak-proof sizing: strictly capped at <= ₹380 (<= ₹400 1R risk)
   const stopDist = Math.max(0.5, Math.abs(price - stopLossPrice));
   const qty = Math.max(1, Math.floor(380 / stopDist));
   const maxLoss = Number((Math.abs(price - stopLossPrice) * qty).toFixed(2));

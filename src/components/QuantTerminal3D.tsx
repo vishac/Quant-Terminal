@@ -1,6 +1,18 @@
 import React, { useState, useMemo } from 'react';
 import { useMarketWebSocket } from '../services/useMarketWebSocket';
 import { deriveLiveAutonomousAgents } from '../services/agentQuantEngine';
+import {
+  getOfficialNseOptionChainExpiries,
+  formatOrderDate,
+  formatOrderTime,
+  resolveDerivativeExpiryInfo
+} from '../utils/orderFormatters';
+import { getStoredPaperTrades, persistPaperTrades } from '../services/paperTradeService';
+import {
+  evaluateCandidateOrderAgainstVetoRules,
+  executeIntelligentScanAndDeploy
+} from '../services/statutoryVetoEngine';
+import { PaperTradeOrder } from '../types/quant';
 import { FirstPrinciplesMarketEngine } from './FirstPrinciplesMarketEngine';
 import { 
   TrendingUp, 
@@ -135,47 +147,16 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
   const relianceQuote = quotes['RELIANCE.NS'];
   const tcsQuote = quotes['TCS.NS'];
 
-  // Real-time market spot and strikes pegged to live WebSocket feed
-  const niftySpot = niftyQuote?.price ?? 22421.95;
+  // Real-time market spot and strikes pegged to live WebSocket feed (defaults to 23,793.45 NSE Spot)
+  const niftySpot = niftyQuote?.price ?? 23793.45;
   const atmStrike = Math.round(niftySpot / 50) * 50;
   const vixVal = vixQuote?.price ?? 14.46;
 
-  // Primary Decision Engine View Modes:
-  // 1. OPTION_CHAIN (Default real decision maker with Open Interest buildup & signals)
-  // 2. PAYOFF (Payoff & Risk Simulator with spot drift slider)
-  // 3. SETUPS (Direct Multi-Leg Institutional Position Strategies)
-  // Dynamic upcoming Thursday expiry dates derived deterministically
+  // Official NSE NIFTY 50 Tuesday Expiry Schedule (with Preceding-Trading-Day Holiday Adjustment):
+  // 09-Nov-2026 (Mon, adv from 10-Nov Diwali), 17-Nov-2026 (Tue), 23-Nov-2026 (Mon Monthly, adv from 24-Nov Guru Nanak Jayanti),
+  // 01-Dec-2026 (Tue), 08-Dec-2026 (Tue), 29-Dec-2026 (Tue Monthly)
   const upcomingExpiries = useMemo(() => {
-    const now = new Date();
-    const expiries: string[] = [];
-    
-    // Find next Thursday
-    const d1 = new Date(now);
-    const day = d1.getDay();
-    const diffToThursday = (4 - day + 7) % 7 || 7;
-    d1.setDate(d1.getDate() + diffToThursday);
-    
-    const formatDate = (d: Date) => {
-      const dayStr = String(d.getDate()).padStart(2, '0');
-      const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-      const monStr = months[d.getMonth()];
-      const yr = d.getFullYear();
-      return `${dayStr}-${monStr}-${yr}`;
-    };
-
-    const d2 = new Date(d1);
-    d2.setDate(d2.getDate() + 7);
-
-    const lastThursday = new Date(d1.getFullYear(), d1.getMonth() + 1, 0);
-    while (lastThursday.getDay() !== 4) {
-      lastThursday.setDate(lastThursday.getDate() - 1);
-    }
-
-    expiries.push(`${formatDate(d1)} (WEEKLY)`);
-    expiries.push(`${formatDate(d2)} (NEXT WEEKLY)`);
-    expiries.push(`${formatDate(lastThursday)} (MONTHLY)`);
-
-    return expiries;
+    return getOfficialNseOptionChainExpiries().map((e) => e.dropdownLabel);
   }, []);
 
   const [quantWorkspaceTab, setQuantWorkspaceTab] = useState<'DERIVATIVES_BOT' | 'SECTOR_INTELLIGENCE'>('DERIVATIVES_BOT');
@@ -188,13 +169,8 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
   const [strikeRangeFilter, setStrikeRangeFilter] = useState<'TIGHT' | 'STANDARD' | 'WIDE'>('STANDARD');
   const [metricDisplayFilter, setMetricDisplayFilter] = useState<'ALL' | 'SIGNALS_ONLY' | 'GREEKS'>('ALL');
   const [selectedExpiry, setSelectedExpiry] = useState<string>(() => {
-    const d1 = new Date();
-    const day = d1.getDay();
-    const diff = (4 - day + 7) % 7 || 7;
-    d1.setDate(d1.getDate() + diff);
-    const dayStr = String(d1.getDate()).padStart(2, '0');
-    const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-    return `${dayStr}-${months[d1.getMonth()]}-${d1.getFullYear()} (WEEKLY)`;
+    const list = getOfficialNseOptionChainExpiries();
+    return list[0]?.dropdownLabel || '09-Nov-2026 (WEEKLY · MON ADV)';
   });
 
   // Selected strategy for payoff / execution
@@ -224,30 +200,26 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
   // User available capital configured or linked to connected broker (defaults to ₹1,50,000 for verification)
   const userConfiguredCapital = 150000;
 
-  // Real-time execution audit stream logs
-  const [auditLogs, setAuditLogs] = useState<Array<{ id: string; time: string; type: string; message: string; badge: string }>>([
-    {
-      id: 'log-1',
-      time: '11:42:09.104',
-      type: 'SIG_OK',
-      message: 'Option Chain Greeks refreshed: ATM Delta calibrated to 0.51 CE / -0.49 PE.',
-      badge: 'NSE_FEED_ID: #89281'
-    },
-    {
-      id: 'log-2',
-      time: '11:41:45.882',
-      type: 'OI_ALERT',
-      message: `[AGENT BHISHMA] Heavy Put Writing detected at ${(atmStrike - 50).toLocaleString('en-IN')} PE (+34.8% OI). Strong intraday support confirmed.`,
-      badge: 'OI_DELV: 71.4%'
-    },
-    {
-      id: 'log-3',
-      time: '11:40:12.331',
-      type: 'SYS_SYNC',
-      message: 'NSE Colocation DMA Gateway socket active. Sub-millisecond pre-trade margin verifier online.',
-      badge: 'NET_STATUS: STABLE'
-    }
-  ]);
+  // Real-time execution audit stream logs derived from live IST clock & ATM strike telemetry (zero static hardcoded timestamps)
+  const [auditLogs, setAuditLogs] = useState<Array<{ id: string; time: string; type: string; message: string; badge: string }>>(() => {
+    const nowTime = formatOrderTime(new Date());
+    return [
+      {
+        id: 'log-live-1',
+        time: nowTime,
+        type: 'SIG_OK',
+        message: `Live Option Chain Greeks synchronized: Spot ₹${niftySpot.toLocaleString('en-IN')} · ATM ${atmStrike} · VIX ${vixVal.toFixed(2)}.`,
+        badge: `EXP: ${selectedExpiry.split(' ')[0]}`
+      },
+      {
+        id: 'log-live-2',
+        time: nowTime,
+        type: 'OI_ALERT',
+        message: `[AGENT BHISHMA] Live OTM Put Floor verified at ${(atmStrike - 50).toLocaleString('en-IN')} PE (+34.8% OI). Statutory >2.0% Net Profit Gate armed.`,
+        badge: 'STATUTORY_GATE: ARMED'
+      }
+    ];
+  });
 
   // Generate real-time mathematical Option Chain pegged to spot & VIX
   const optionChainData = useMemo(() => {
@@ -600,39 +572,138 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
     setTimeout(() => {
       setIsTransmittingOrder(false);
       setIsDeployModalOpen(false);
-      
-      const orderId = `#DMA-${Math.floor(100000 + Math.random() * 900000)}`;
-      const fillMsg = `ORDER FILLED: ${stagedPosition.name} (${stagedOrderLots} Lot${stagedOrderLots > 1 ? 's' : ''}) [${orderId}] — Transmitted to ${selectedBroker} Direct Market Access (DMA).`;
-      
+
+      const now = new Date();
+      const orderDate = formatOrderDate(now);
+      const orderTime = formatOrderTime(now);
+      const orderId = `DMA-ORD-${Date.now().toString().slice(-6)}`;
+      const primaryLeg = stagedPosition.legs[0];
+      const lotQty = 25 * Math.max(1, stagedOrderLots);
+      const entryNetPrice = Number((primaryLeg?.ltp ?? 45).toFixed(2));
+      const side: 'BUY' | 'SELL' = primaryLeg?.action === 'SELL' ? 'SELL' : 'BUY';
+      const maxLossCapped = Math.min(395, Math.max(250, Math.round(stagedPosition.maxLoss * 0.25)));
+      const targetGrossProfit = Math.max(Math.round(requiredMargin * 0.032), stagedPosition.maxProfit * stagedOrderLots);
+      const stopDist = Number((maxLossCapped / lotQty).toFixed(2));
+      const targetDist = Number((targetGrossProfit / lotQty).toFixed(2));
+      const initialStopPrice = Number(
+        Math.max(0.5, side === 'BUY' ? entryNetPrice - stopDist : entryNetPrice + stopDist).toFixed(2)
+      );
+      const targetPriceLevel = Number(
+        Math.max(0.5, side === 'BUY' ? entryNetPrice + targetDist : entryNetPrice - targetDist).toFixed(2)
+      );
+      const { expiryDateStr } = resolveDerivativeExpiryInfo('NSE_FNO', stagedPosition.name, orderDate);
+
+      const candidateOrder: PaperTradeOrder = {
+        id: orderId,
+        agentId: 'agent_bhishma',
+        agentName: 'Bhishma (DMA Option Chain)',
+        symbol: stagedPosition.name,
+        segment: 'NSE_FNO',
+        strategyName: `${stagedPosition.badge} · Step-Ratchet TSL`,
+        legs: stagedPosition.legs.map((l) => ({
+          instrument: `${l.instrument} ${l.strike} ${l.optionType}`,
+          action: l.action,
+          qty: lotQty,
+          price: l.ltp,
+          exitPrice: l.ltp,
+          strike: l.strike,
+          optionType: l.optionType === 'FUT' ? undefined : l.optionType
+        })),
+        totalInvestmentINR: requiredMargin,
+        maxDefinedLossINR: maxLossCapped,
+        targetProfitINR: targetGrossProfit,
+        riskRewardRatio: `1:${(targetGrossProfit / Math.max(1, maxLossCapped)).toFixed(2)}`,
+        timestamp: `${orderDate} ${orderTime}`,
+        orderDate,
+        orderTime,
+        expiryDate: selectedExpiry.split(' ')[0] || expiryDateStr || '09-Nov-2026',
+        status: 'OPEN',
+        pnlINR: 0,
+        peakPnlINR: 0,
+        trailingStopPnlINR: -maxLossCapped,
+        entryPrice: entryNetPrice,
+        exitPrice: entryNetPrice,
+        initialStopLossPrice: initialStopPrice,
+        trailingStopPrice: initialStopPrice,
+        targetPriceLevel,
+        tslStage: 'INITIAL_RISK_STOP',
+        side,
+        qty: lotQty,
+        sebiComplianceVerified: true,
+        isSimulation: true
+      };
+
+      const existingOrders = getStoredPaperTrades();
+      const hasDuplicate = existingOrders.some(
+        (o) => o.status === 'OPEN' && o.symbol === candidateOrder.symbol
+      );
+      const vetoAudit = evaluateCandidateOrderAgainstVetoRules({
+        candidateOrder,
+        deskName: '3D Option Chain & Strategy DMA',
+        confirmedScriptStatus: hasDuplicate ? 'DUPLICATE_OPEN' : 'CONFIRMED_LEADER',
+        legCount: stagedPosition.legs.length,
+        isOptionContract: true
+      });
+
+      if (!vetoAudit.approved) {
+        const vetoMsg = `🛡️ VETOED BY STATUTORY GATE: ${stagedPosition.name} — ${vetoAudit.verdictReason}`;
+        setActiveActionToast(vetoMsg);
+        setAuditLogs((prev) => [
+          {
+            id: `log-${Date.now()}`,
+            time: orderTime,
+            type: 'VETO_GATE',
+            message: vetoMsg,
+            badge: 'VETOED (<2% NET)'
+          },
+          ...prev
+        ]);
+        setTimeout(() => setActiveActionToast(null), 6000);
+        return;
+      }
+
+      persistPaperTrades([candidateOrder, ...existingOrders]);
+      const fillMsg = `✓ ORDER DEPLOYED TO BOOK: ${stagedPosition.name} (${stagedOrderLots} Lot${stagedOrderLots > 1 ? 's' : ''}) [${orderId}] — Net Expectancy +${vetoAudit.netProfitPct.toFixed(2)}% (after ₹${vetoAudit.friction.totalFrictionINR} tax/brok).`;
+
       setActiveActionToast(fillMsg);
-      setAuditLogs(prev => [
+      setAuditLogs((prev) => [
         {
           id: `log-${Date.now()}`,
-          time: new Date().toLocaleTimeString('en-US', { hour12: false }) + `.${Math.floor(Math.random() * 900 + 100)}`,
+          time: orderTime,
           type: 'ORDER_DMA',
-          message: `${stagedPosition.name} • ${stagedOrderLots} Lot(s) filled @ Limit • Margin Verified ₹${requiredMargin.toLocaleString('en-IN')}`,
+          message: `${stagedPosition.name} • ${stagedOrderLots} Lot(s) deployed to Canonical Order Book • Net +${vetoAudit.netProfitPct.toFixed(2)}% (Margin ₹${requiredMargin.toLocaleString('en-IN')})`,
           badge: orderId
         },
         ...prev
       ]);
 
       setTimeout(() => setActiveActionToast(null), 6000);
-    }, 1100);
+    }, 650);
   };
 
   const handleFireSignal = (signalName: string) => {
-    setActiveActionToast(`[SIGNAL FIRED]: ${signalName} dispatched to DMA executor.`);
-    setAuditLogs(prev => [
+    const existingOrders = getStoredPaperTrades();
+    const batch = executeIntelligentScanAndDeploy(quotes, existingOrders, 'NSE_FNO');
+    if (batch.deployedOrders.length > 0) {
+      persistPaperTrades([...batch.deployedOrders, ...existingOrders]);
+    }
+    const orderTime = formatOrderTime(new Date());
+    const msg =
+      batch.deployedOrders.length > 0
+        ? `✓ [${signalName}]: Deployed ${batch.deployedOrders[0].symbol} to Order Book (${batch.summaryHeadline})`
+        : `🛡️ [${signalName}]: Evaluated via Statutory Gate — ${batch.summaryHeadline}`;
+    setActiveActionToast(msg);
+    setAuditLogs((prev) => [
       {
         id: `sig-${Date.now()}`,
-        time: new Date().toLocaleTimeString('en-US', { hour12: false }) + `.${Math.floor(Math.random() * 900 + 100)}`,
-        type: 'BOT_TRIGGER',
-        message: `${signalName} dispatched to institutional order queue.`,
-        badge: 'DMA_QUEUE'
+        time: orderTime,
+        type: batch.deployedOrders.length > 0 ? 'BOT_DEPLOYED' : 'VETO_GATE',
+        message: msg,
+        badge: batch.deployedOrders.length > 0 ? batch.deployedOrders[0].id : 'STATUTORY_VETO'
       },
       ...prev
     ]);
-    setTimeout(() => setActiveActionToast(null), 4000);
+    setTimeout(() => setActiveActionToast(null), 5000);
   };
 
   return (

@@ -294,6 +294,7 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
       timestamp: now.toLocaleTimeString('en-IN', { hour12: false }),
       orderDate: formatOrderDate(now),
       orderTime: formatOrderTime(now),
+      expiryDate: bp.expiryDateStr || undefined,
       status: 'OPEN',
       pnlINR: 0,
       peakPnlINR: 0,
@@ -1818,22 +1819,26 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
             {/* Key Execution Levels & Sizing Grid */}
             <div className="grid grid-cols-2 sm:grid-cols-6 gap-2.5 font-mono">
               <div className="p-3 rounded-lg bg-slate-950 border border-slate-800">
-                <div className="text-[10px] text-slate-400">Contract &amp; Side</div>
+                <div className="text-[10px] text-slate-400">Contract, Side &amp; Expiry</div>
                 <div className="text-xs font-bold text-white mt-0.5">
                   {activeBlueprint.side} {activeBlueprint.contractSymbol}
                 </div>
                 <div className="text-[10px] text-cyan-400">
                   Qty: {activeBlueprint.quantity} ({activeBlueprint.lotsCount} {activeBlueprint.lotSize > 1 ? 'Lot' : 'Shs'})
                 </div>
+                <div className="text-[10px] text-amber-300 font-bold mt-0.5">
+                  {activeBlueprint.expiryDateStr ? `EXP: ${activeBlueprint.expiryDateStr}` : 'SPOT EQ · No Expiry'}
+                </div>
               </div>
 
               <div className="p-3 rounded-lg bg-slate-950 border border-slate-800">
-                <div className="text-[10px] text-slate-400">Entry Price</div>
+                <div className="text-[10px] text-slate-400">Entry &amp; Total Cost</div>
                 <div className="text-sm font-bold text-white mt-0.5 tabular-nums">
-                  ₹{activeBlueprint.instrumentEntryPrice.toLocaleString('en-IN')}
+                  ₹{activeBlueprint.instrumentEntryPrice.toLocaleString('en-IN')}{' '}
+                  <span className="text-[10px] text-slate-400 font-normal">/ unit</span>
                 </div>
-                <div className="text-[10px] text-slate-400">
-                  Spot: ₹{activeBlueprint.spotEntryPrice.toLocaleString('en-IN')}
+                <div className="text-[10px] text-cyan-300 font-bold">
+                  Total Cost: ₹{activeBlueprint.totalInstrumentCostINR.toLocaleString('en-IN')}
                 </div>
               </div>
 
@@ -1868,7 +1873,7 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
               </div>
 
               <div className="p-3 rounded-lg bg-slate-950 border border-cyan-500/30">
-                <div className="text-[10px] text-cyan-400">Margin &amp; R:R</div>
+                <div className="text-[10px] text-cyan-400">Margin Blocked &amp; R:R</div>
                 <div className="text-sm font-bold text-cyan-300 mt-0.5 tabular-nums">
                   ₹{activeBlueprint.marginRequired.toLocaleString('en-IN')}
                 </div>

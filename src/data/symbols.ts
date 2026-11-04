@@ -10,15 +10,19 @@ export const TRACKED_SYMBOLS: { symbol: string; name: string }[] = [
   { symbol: '^NSEBANK',      name: 'BANK NIFTY' },
   { symbol: '^INDIAVIX',     name: 'INDIA VIX' },
 
-  // Global Indices, Commodities, Rates & FX (Live Transmission Drivers)
+  // Global Indices, Commodities, Rates & FX (Live 11-Vector Transmission Drivers)
   { symbol: '^GSPC',         name: 'S&P 500 (US)' },
   { symbol: '^IXIC',         name: 'NASDAQ Composite (US Tech)' },
   { symbol: '^N225',         name: 'Nikkei 225 (Japan)' },
   { symbol: '^HSI',          name: 'Hang Seng (China/HK)' },
   { symbol: 'BZ=F',          name: 'Brent Crude Oil ($/bbl)' },
+  { symbol: 'CL=F',          name: 'WTI Crude Oil ($/bbl)' },
+  { symbol: 'NG=F',          name: 'Natural Gas Futures ($/MMBtu)' },
   { symbol: 'GC=F',          name: 'Gold Futures ($/oz)' },
+  { symbol: 'SI=F',          name: 'Silver Futures ($/oz)' },
   { symbol: 'HG=F',          name: 'Copper Futures ($/lb)' },
   { symbol: '^TNX',          name: 'US 10Y Treasury Yield (%)' },
+  { symbol: '^IRX',          name: 'US 13W T-Bill / Fed Rate Proxy (%)' },
   { symbol: 'DX-Y.NYB',      name: 'US Dollar Index (DXY)' },
   { symbol: 'INR=X',         name: 'USD / INR Exchange Rate' },
 

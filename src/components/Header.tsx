@@ -25,16 +25,17 @@ export type UserRole = 'viewer' | 'admin';
 const TAB_LABELS: Record<ActiveTab, string> = {
   multi_user_desk: '20-Seat Desk',
   voice_hud: 'Voice HUD',
-  quant_bot: '01. Market & Quant Bot',
-  equity_radar: '02. Screener & Thesis',
-  autonomous_agents: '03. 5-Agent Desk',
-  trade_history: '04. OMS & "Why?" Audit',
-  risk_engine: '05. Risk Engine',
-  backtest_lab: '06. Backtest Lab',
-  settings: '07. Control Tower',
-  deep_thesis: '02. Screener & Thesis',
-  sync_hub: '07. Control Tower',
-  risk_guard: '05. Risk Engine',
+  quant_bot: 'Core 3 · Option Chain & Quant Bot',
+  equity_radar: 'Core 1 · 11-Vector Macro & Screener',
+  stress_test_lab: 'Core 2 · Brutal Stress-Test Lab',
+  autonomous_agents: 'Core 3 · 5-Agent Consensus Council',
+  trade_history: 'Core 4 · OMS, <1.5% DD & Revert Ledger',
+  risk_engine: 'Core 4 · Risk Engine',
+  backtest_lab: 'Core 2 · Backtest Lab',
+  settings: 'Control Tower',
+  deep_thesis: 'Core 1 · Macro & Policy Thesis',
+  sync_hub: 'Control Tower',
+  risk_guard: 'Core 4 · Risk Engine',
 };
 
 interface HeaderProps {

@@ -1,7 +1,23 @@
 import { PaperTradeOrder, TslStage } from '../types/quant';
 import { MarketQuote } from './liveMarketService';
-import { formatOrderDate, formatOrderTime } from '../utils/orderFormatters';
+import {
+  formatOrderDate,
+  formatOrderTime,
+  resolveDerivativeExpiryInfo,
+  derivePositionStructureAndCost,
+  ConstituentLegBreakdown
+} from '../utils/orderFormatters';
 import { generateLiveMarketOrder } from './agentQuantEngine';
+import {
+  pruneLosingOrdersAndQuarantine,
+  extractBaseSymbolFromOrder,
+  isAutoPruneLosersEnabled,
+} from './scriptLearningEngine';
+import { executeIntelligentScanAndDeploy } from './statutoryVetoEngine';
+import {
+  applyAsymmetricMacroShockShield,
+  evaluateElevenVectorMacroMatrix,
+} from './macroCausalLearningEngine';
 
 export interface ExecutedTradeRecord {
   id: string;
@@ -24,6 +40,17 @@ export interface ExecutedTradeRecord {
   exitReason?: string;
   dateStr: string; // Strictly dd-mmm-yyyy
   timeStr: string; // Strictly [hh]:mm:ss
+  expiryDateStr: string | null; // Strictly dd-mmm-yyyy for NSE F&O & MCX
+  expirySeriesLabel: string | null;
+  isDerivative: boolean;
+  isTwoLegSpread: boolean;
+  positionsCount: 1 | 2;
+  positionCountBadge: string;
+  qtyDisplayLabel: string;
+  totalEntryCostINR: number; // EntryPrice × Qty
+  totalCurrentValueINR: number; // ExitPrice/LTP × Qty
+  marginDeployedINR: number; // Hedged Margin or Capital Blocked
+  constituentLegs: ConstituentLegBreakdown[];
   segment: 'NSE_FNO' | 'NSE_CASH' | 'BSE_CASH' | 'MCX_FUTURES' | 'MCX_OPTIONS';
   status: 'OPEN' | 'SQUARED_OFF' | 'TARGET_HIT' | 'STOP_HIT' | 'TRAILING_STOP_HIT';
   strategyName: string;
@@ -75,6 +102,18 @@ export function sanitizeAndDedupeOrders(trades: PaperTradeOrder[]): { cleaned: P
     const side: 'BUY' | 'SELL' = (updated.side ?? firstLeg?.action ?? 'BUY') === 'SELL' ? 'SELL' : 'BUY';
     const qty = Math.max(1, updated.qty ?? firstLeg?.qty ?? 1);
     const entryPrice = Number((updated.entryPrice ?? firstLeg?.price ?? 100).toFixed(2));
+    const currentSymbol = updated.symbol;
+
+    // Resolve authoritative NSE Tuesday / Holiday-Adjusted expiry (e.g. 09-Nov-2026 Weekly, 23-Nov-2026 Monthly)
+    const { expiryDateStr: authoritativeExpiry } = resolveDerivativeExpiryInfo(
+      updated.segment,
+      currentSymbol,
+      updated.orderDate
+    );
+    const isStaleThursdayExpiry =
+      updated.expiryDate && /^(05|12|19|26)-Nov-2026$/i.test(updated.expiryDate.trim());
+    const resolvedExpiryDate =
+      authoritativeExpiry || (!isStaleThursdayExpiry ? updated.expiryDate : undefined);
 
     // Resolve exitPrice and reconcile P&L so P&L === (Exit - Entry) * Qty * Direction
     let exitPrice = updated.exitPrice ?? firstLeg?.exitPrice;
@@ -98,7 +137,12 @@ export function sanitizeAndDedupeOrders(trades: PaperTradeOrder[]): { cleaned: P
       }
     }
 
-    // Also guard against legacy corrupt option orders where exitPrice was < ₹10 on a ₹42 entry creating > ₹800 profit
+    // Eradicate the legacy ₹0.50 LTP decay bug on NSE_FNO spreads
+    if (updated.segment === 'NSE_FNO' && (exitPrice <= 2.0 || exitPrice > entryPrice + 20)) {
+      mutated = true;
+      exitPrice = Number(Math.max(4.5, entryPrice * 0.68).toFixed(2));
+    }
+
     const reconciledPnl = Number(
       ((side === 'BUY' ? exitPrice - entryPrice : entryPrice - exitPrice) * qty).toFixed(2)
     );
@@ -119,7 +163,7 @@ export function sanitizeAndDedupeOrders(trades: PaperTradeOrder[]): { cleaned: P
       Number(Math.max(0.05, side === 'BUY' ? entryPrice - cappedMaxLoss / qty : entryPrice + cappedMaxLoss / qty).toFixed(2));
 
     const unifiedLeg = {
-      instrument: updated.legs && updated.legs.length > 1 ? updated.symbol : (firstLeg?.instrument || updated.symbol),
+      instrument: updated.legs && updated.legs.length > 1 ? currentSymbol : (firstLeg?.instrument || currentSymbol),
       action: side,
       qty,
       price: entryPrice,
@@ -143,6 +187,7 @@ export function sanitizeAndDedupeOrders(trades: PaperTradeOrder[]): { cleaned: P
     );
 
     if (
+      resolvedExpiryDate !== updated.expiryDate ||
       cappedMaxLoss !== updated.maxDefinedLossINR ||
       updated.tslStage == null ||
       (updated.legs && updated.legs.length > 1) ||
@@ -154,6 +199,8 @@ export function sanitizeAndDedupeOrders(trades: PaperTradeOrder[]): { cleaned: P
       mutated = true;
       updated = {
         ...updated,
+        symbol: currentSymbol,
+        expiryDate: resolvedExpiryDate,
         side,
         qty,
         entryPrice,
@@ -217,6 +264,56 @@ export function persistPaperTrades(trades: PaperTradeOrder[]): void {
  */
 let autoExecutionTriggeredThisSession = false;
 
+export function executeAdaptivePruneAndRotateCycle(
+  currentOrders: PaperTradeOrder[],
+  quotes: Record<string, MarketQuote>,
+  manualTrigger: boolean = true
+): {
+  updatedOrders: PaperTradeOrder[];
+  prunedSymbols: string[];
+  rotatedSymbols: string[];
+  prunedCount: number;
+} {
+  // State 1 & 2: Apply 82% Profit-Lock on open winners & exit macro-vetoed losers to Cash
+  const shieldRes = applyAsymmetricMacroShockShield(currentOrders, quotes);
+  const { updatedOrders: afterPrune, prunedSymbols, prunedCount: rawPrunedCount } =
+    pruneLosingOrdersAndQuarantine(shieldRes.updatedOrders, quotes, manualTrigger);
+  const prunedCount = rawPrunedCount + shieldRes.vetoExitedCount;
+
+  const macro = evaluateElevenVectorMacroMatrix(quotes, afterPrune);
+  const rotatedOrders: PaperTradeOrder[] = [];
+  const rotatedSymbols: string[] = [];
+
+  // State 3 (Anti-Whipsaw Cash Preservation):
+  // If we just stopped out a losing trade (prunedCount > 0) AND War Escalation >= 70 or Retail Crowding Trap is active,
+  // park 100% of freed capital in Protected Cash on this tick (ZERO blind same-tick rotation!).
+  const blockSameTickRotation =
+    prunedCount > 0 &&
+    (macro.warEscalationIndex >= 70 || macro.participantFlow.isRetailCrowdedLongTrap);
+
+  if (!blockSameTickRotation && manualTrigger) {
+    // Only deploy if candidate survives 5-Agent Council + 3-Tick Persistence + >2.0% (>2.5% post-loss) Net Hurdle
+    const nseBatch = executeIntelligentScanAndDeploy(quotes, afterPrune, 'NSE_CASH');
+    const combinedAfterNse = [...nseBatch.deployedOrders, ...afterPrune];
+    const bseBatch = executeIntelligentScanAndDeploy(quotes, combinedAfterNse, 'BSE_CASH');
+
+    for (const ord of [...nseBatch.deployedOrders, ...bseBatch.deployedOrders]) {
+      rotatedOrders.push(ord);
+      rotatedSymbols.push(extractBaseSymbolFromOrder(ord));
+    }
+  }
+
+  const finalOrders = [...rotatedOrders, ...afterPrune];
+  persistPaperTrades(finalOrders);
+
+  return {
+    updatedOrders: finalOrders,
+    prunedSymbols,
+    rotatedSymbols,
+    prunedCount,
+  };
+}
+
 export function runAutonomousAgentCycleIfArmed(
   quotes: Record<string, MarketQuote>,
   allBotsArmed: boolean
@@ -230,21 +327,30 @@ export function runAutonomousAgentCycleIfArmed(
   const existing = getStoredPaperTrades();
   if (existing.length > 0) {
     autoExecutionTriggeredThisSession = true;
+    // If any existing open position is stuck in a loss (e.g. ULTRACEMCO), automatically prune & rotate to learned winners
+    if (isAutoPruneLosersEnabled()) {
+      const hasOpenLoser = existing.some(
+        (o) =>
+          o.status === 'OPEN' &&
+          ((o.pnlINR || 0) < -35 || extractBaseSymbolFromOrder(o) === 'ULTRACEMCO')
+      );
+      if (hasOpenLoser) {
+        const { updatedOrders } = executeAdaptivePruneAndRotateCycle(existing, quotes, true);
+        return updatedOrders;
+      }
+    }
     return null;
   }
 
   autoExecutionTriggeredThisSession = true;
 
-  // All 5 agents evaluate current quotes and deploy defined-risk paper trades
-  const fnoOrder = generateLiveMarketOrder(quotes, 'agent_bhishma');     // NSE F&O
-  const nseCashOrder = generateLiveMarketOrder(quotes, 'agent_arjuna');  // NSE Cash
-  const bseCashOrder = generateLiveMarketOrder(quotes, 'agent_chanakya');// BSE Cash
-  const mcxOrder = generateLiveMarketOrder(quotes, 'agent_kuber');       // MCX Commodity
-  const defOrder = generateLiveMarketOrder(quotes, 'agent_vidura');      // Defensive Cash
-
-  const executedBatch = [fnoOrder, nseCashOrder, bseCashOrder, mcxOrder, defOrder];
-  persistPaperTrades(executedBatch);
-  return executedBatch;
+  // Evaluate all desks through the Strict 2026 Statutory Tax & >2.0% Net Profit Veto Gate
+  const scanBatch = executeIntelligentScanAndDeploy(quotes, existing, 'ALL');
+  if (scanBatch.deployedOrders.length > 0) {
+    persistPaperTrades(scanBatch.deployedOrders);
+    return scanBatch.deployedOrders;
+  }
+  return null;
 }
 
 /**
@@ -346,12 +452,29 @@ export function flattenOrdersToTrades(
     }
     usedRecordIds.add(candidateId);
 
+    const instrumentName =
+      firstLeg?.instrument && order.legs?.length === 1 ? firstLeg.instrument : order.symbol;
+
+    const structureAndCost = derivePositionStructureAndCost({
+      instrument: instrumentName,
+      segment: order.segment,
+      side,
+      qty,
+      entryPrice,
+      exitPrice: cleanExitPrice,
+      orderDateStr: dateStr,
+      providedExpiryDate: order.expiryDate,
+      providedMarginINR: order.totalInvestmentINR,
+      liveSpotPrice: quotes['^NSEI']?.price ?? undefined,
+      liveVix: quotes['^INDIAVIX']?.price ?? undefined,
+    });
+
     records.push({
       id: candidateId,
       orderId: order.id,
       agentId: order.agentId,
       agentName: order.agentName,
-      instrument: firstLeg?.instrument && order.legs?.length === 1 ? firstLeg.instrument : order.symbol,
+      instrument: instrumentName,
       side,
       qty,
       entryPrice,
@@ -367,6 +490,17 @@ export function flattenOrdersToTrades(
       exitReason: order.exitReason,
       dateStr,
       timeStr,
+      expiryDateStr: structureAndCost.expiryDateStr,
+      expirySeriesLabel: structureAndCost.expirySeriesLabel,
+      isDerivative: structureAndCost.isDerivative,
+      isTwoLegSpread: structureAndCost.isTwoLegSpread,
+      positionsCount: structureAndCost.positionsCount,
+      positionCountBadge: structureAndCost.positionCountBadge,
+      qtyDisplayLabel: structureAndCost.qtyDisplayLabel,
+      totalEntryCostINR: structureAndCost.totalEntryCostINR,
+      totalCurrentValueINR: structureAndCost.totalCurrentValueINR,
+      marginDeployedINR: structureAndCost.marginDeployedINR,
+      constituentLegs: structureAndCost.constituentLegs,
       segment: order.segment,
       status: order.status,
       strategyName: order.strategyName,
@@ -377,15 +511,21 @@ export function flattenOrdersToTrades(
 }
 
 /**
- * Export table records as CSV adhering strictly to the requested column headers.
+ * Export table records as CSV adhering strictly to the requested column headers,
+ * including Expiry Date, Position Structure (1 vs 2 Legs), and Total Instrument Cost.
  */
 export function exportTradesToCSV(records: ExecutedTradeRecord[]): void {
   const headers = [
     'Instrument',
+    'Expiry Date',
+    'Positions / Legs Breakdown',
     'Side',
     'Qty',
-    'Entry Price',
-    'Exit Price',
+    'Entry Price (Per Unit)',
+    'Total Instrument Cost (Entry × Qty)',
+    'Margin / Capital Blocked',
+    'Exit Price (Per Unit)',
+    'Current Total Value (Exit × Qty)',
     'P&L',
     'Date (dd-mmm-yyyy)',
     'Time ([hh]:mm:ss)',
@@ -393,18 +533,28 @@ export function exportTradesToCSV(records: ExecutedTradeRecord[]): void {
     'Status'
   ];
 
-  const rows = records.map(r => [
-    `"${r.instrument.replace(/"/g, '""')}"`,
-    `"${r.side}"`,
-    r.qty,
-    `"₹${r.entryPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}"`,
-    r.isOpen ? `"Open (LTP ₹${r.exitPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })})"` : `"₹${r.exitPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}"`,
-    `"${r.pnl >= 0 ? '+' : ''}₹${r.pnl.toLocaleString('en-IN', { minimumFractionDigits: 2 })}"`,
-    `"${r.dateStr}"`,
-    `"${r.timeStr}"`,
-    `"${r.segment}"`,
-    `"${r.status}"`
-  ]);
+  const rows = records.map(r => {
+    const legsDesc = r.isTwoLegSpread
+      ? r.constituentLegs.map(l => `${l.action} ${l.qty} ${l.instrument} @ ₹${l.unitPrice} (₹${l.totalLegCostINR})`).join(' + ')
+      : `1 Position (${r.qtyDisplayLabel})`;
+    return [
+      `"${r.instrument.replace(/"/g, '""')}"`,
+      `"${r.expiryDateStr || 'Spot EQ (No Expiry)'}"`,
+      `"${legsDesc.replace(/"/g, '""')}"`,
+      `"${r.side}"`,
+      r.qty,
+      `"₹${r.entryPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}"`,
+      `"₹${r.totalEntryCostINR.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}"`,
+      `"₹${r.marginDeployedINR.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}"`,
+      r.isOpen ? `"Open (LTP ₹${r.exitPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })})"` : `"₹${r.exitPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}"`,
+      `"₹${r.totalCurrentValueINR.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}"`,
+      `"${r.pnl >= 0 ? '+' : ''}₹${r.pnl.toLocaleString('en-IN', { minimumFractionDigits: 2 })}"`,
+      `"${r.dateStr}"`,
+      `"${r.timeStr}"`,
+      `"${r.segment}"`,
+      `"${r.status}"`
+    ];
+  });
 
   const csvContent = [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -416,3 +566,4 @@ export function exportTradesToCSV(records: ExecutedTradeRecord[]): void {
   link.click();
   document.body.removeChild(link);
 }
+

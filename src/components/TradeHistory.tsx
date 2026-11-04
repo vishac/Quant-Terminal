@@ -9,9 +9,25 @@ import {
   persistPaperTrades, 
   flattenOrdersToTrades, 
   exportTradesToCSV,
-  runAutonomousAgentCycleIfArmed
+  runAutonomousAgentCycleIfArmed,
+  executeAdaptivePruneAndRotateCycle
 } from '../services/paperTradeService';
-import { generateLiveMarketOrder, updateOrdersLivePnl, simulateTrailingProfitLockCycle } from '../services/agentQuantEngine';
+import { updateOrdersLivePnl } from '../services/agentQuantEngine';
+import {
+  evaluateAdaptiveScriptLearningMatrix,
+  isAutoPruneLosersEnabled,
+  setAutoPruneLosersEnabled,
+  quarantineLosingScript,
+  recordWinningScriptOutcome,
+  extractBaseSymbolFromOrder,
+  resetScriptQuarantineMemory
+} from '../services/scriptLearningEngine';
+import {
+  executeIntelligentScanAndDeploy,
+  getLastScanVetoAuditBatch,
+  ScanAndDeployAuditBatch,
+} from '../services/statutoryVetoEngine';
+import { ARCHITECTURE_REVERT_LEDGER } from '../data/architectureRevertLedger';
 import {
   computeFactorAndWhyExplainability,
   computePortfolioAttribution,
@@ -38,7 +54,8 @@ import {
   Calendar,
   Layers,
   ChevronRight,
-  Info
+  Info,
+  FileText
 } from 'lucide-react';
 
 interface TradeHistoryProps {
@@ -46,21 +63,28 @@ interface TradeHistoryProps {
 }
 
 export const TradeHistory: React.FC<TradeHistoryProps> = ({ onNavigateToAgents }) => {
-  const { quotes, latencyMs, provider } = useLiveMarketData(5000);
-  const isUpstoxLive = provider === 'UPSTOX_ANALYTICS_REALTIME';
+  const { quotes } = useLiveMarketData(5000);
 
   // Load orders from shared localStorage and subscribe to updates
   const [orders, setOrders] = useState<PaperTradeOrder[]>(() => getStoredPaperTrades());
+  const [lastScanAudit, setLastScanAudit] = useState<ScanAndDeployAuditBatch | null>(() =>
+    getLastScanVetoAuditBatch()
+  );
 
   // Listen for background updates across components
   useEffect(() => {
     const handleUpdate = () => {
       setOrders(getStoredPaperTrades());
     };
+    const handleAuditUpdate = () => {
+      setLastScanAudit(getLastScanVetoAuditBatch());
+    };
     window.addEventListener('jarvis:orders-updated', handleUpdate);
+    window.addEventListener('jarvis:scan-veto-audit', handleAuditUpdate);
     window.addEventListener('storage', handleUpdate);
     return () => {
       window.removeEventListener('jarvis:orders-updated', handleUpdate);
+      window.removeEventListener('jarvis:scan-veto-audit', handleAuditUpdate);
       window.removeEventListener('storage', handleUpdate);
     };
   }, []);
@@ -76,7 +100,8 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({ onNavigateToAgents }
     const autoOrders = runAutonomousAgentCycleIfArmed(quotes, botsArmed);
     if (autoOrders && autoOrders.length > 0) {
       setOrders(autoOrders);
-      setToastMessage(`🤖 5 Autonomous Agents analyzed broader market regime & auto-executed ${autoOrders.length} defined-risk paper positions across NSE, BSE & MCX.`);
+      setLastScanAudit(getLastScanVetoAuditBatch());
+      setToastMessage(`🤖 Strict Veto Engine evaluated all desks & auto-deployed ${autoOrders.length} confirmed >2.0% net-of-tax setup(s).`);
       setTimeout(() => setToastMessage(null), 5000);
     } else if (orders.some(o => o.status === 'OPEN')) {
       const updated = updateOrdersLivePnl(orders, quotes);
@@ -92,8 +117,10 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({ onNavigateToAgents }
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isScanning, setIsScanning] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [autoPruneEnabled, setAutoPruneEnabled] = useState<boolean>(() => isAutoPruneLosersEnabled());
+  const [learningRefreshTick, setLearningRefreshTick] = useState<number>(0);
   const [activeOmsSubTab, setActiveOmsSubTab] = useState<
-    'ORDER_BOOK' | 'WHY_EXPLAINABILITY' | 'PNL_ATTRIBUTION'
+    'ORDER_BOOK' | 'ADAPTIVE_LEARNER' | 'WHY_EXPLAINABILITY' | 'PNL_ATTRIBUTION' | 'REVERT_LEDGER'
   >('ORDER_BOOK');
 
   const quantParameters = useMemo(() => getStoredQuantParameters(), [orders]);
@@ -104,6 +131,22 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({ onNavigateToAgents }
   const attribution = useMemo(
     () => computePortfolioAttribution(orders, quotes['NIFTY']?.changePct ?? 0),
     [orders, quotes]
+  );
+  const scriptLearningMatrix = useMemo(
+    () => evaluateAdaptiveScriptLearningMatrix(quotes, orders),
+    [quotes, orders, learningRefreshTick]
+  );
+  const quarantinedScripts = useMemo(
+    () => scriptLearningMatrix.filter(s => s.isQuarantined),
+    [scriptLearningMatrix]
+  );
+  const observingScripts = useMemo(
+    () => scriptLearningMatrix.filter(s => !s.isQuarantined && (s.intradayPhase === 'FLAT_OBSERVING' || s.intradayPhase === 'LOW_WEAK_AVOID')),
+    [scriptLearningMatrix]
+  );
+  const learnedPositiveLeaders = useMemo(
+    () => scriptLearningMatrix.filter(s => s.isEligibleForDeploy),
+    [scriptLearningMatrix]
   );
 
   // Flatten orders into uniform executed trade records
@@ -181,44 +224,32 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({ onNavigateToAgents }
     };
   }, [tradeRecords]);
 
-  // Deploy live market paper trade
+  // Deploy live market paper trade strictly gated by 2026 Statutory Tax & >2.0% Net Profit Veto Engine
   const handleDeployOrder = (segment: 'NSE_FNO' | 'NSE_CASH' | 'BSE_CASH' | 'MCX' | 'ALL') => {
     setIsScanning(true);
     setTimeout(() => {
       setIsScanning(false);
-      let newOrders: PaperTradeOrder[] = [];
+      const batch = executeIntelligentScanAndDeploy(quotes, orders, segment);
+      setLastScanAudit(batch);
 
-      if (segment === 'NSE_FNO') {
-        newOrders = [generateLiveMarketOrder(quotes, 'agent_bhishma')];
-      } else if (segment === 'NSE_CASH') {
-        newOrders = [generateLiveMarketOrder(quotes, 'agent_arjuna')];
-      } else if (segment === 'BSE_CASH') {
-        newOrders = [generateLiveMarketOrder(quotes, 'agent_chanakya')];
-      } else if (segment === 'MCX') {
-        newOrders = [generateLiveMarketOrder(quotes, 'agent_kuber')];
-      } else {
-        // Deploy across all 3 key desks: NSE F&O, NSE/BSE Cash, MCX
-        const fno = generateLiveMarketOrder(quotes, 'agent_bhishma');
-        const nseCash = generateLiveMarketOrder(quotes, 'agent_arjuna');
-        const bseCash = generateLiveMarketOrder(quotes, 'agent_chanakya');
-        const mcx = generateLiveMarketOrder(quotes, 'agent_kuber');
-        newOrders = [fno, nseCash, bseCash, mcx];
+      if (batch.deployedOrders.length > 0) {
+        const updated = [...batch.deployedOrders, ...orders];
+        setOrders(updated);
+        persistPaperTrades(updated);
       }
 
-      const updated = [...newOrders, ...orders];
-      setOrders(updated);
-      persistPaperTrades(updated);
-
-      setToastMessage(`✓ ${newOrders.length} New Paper Trade(s) deployed with real live exchange tick pricing!`);
-      setTimeout(() => setToastMessage(null), 4000);
-    }, 450);
+      setToastMessage(batch.summaryHeadline);
+      setTimeout(() => setToastMessage(null), 5500);
+    }, 350);
   };
 
-  // Square off specific open order with exact current exitPrice and P&L reconciliation
+  // Square off specific open order with exact current exitPrice, P&L reconciliation, and Script Learning feedback
   const handleSquareOffOrder = (orderId: string) => {
     const now = new Date();
     const orderDate = formatOrderDate(now);
     const orderTime = formatOrderTime(now);
+    let closedSym = '';
+    let closedPnl = 0;
 
     const updated = orders.map(o => {
       if (o.id === orderId) {
@@ -228,6 +259,20 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({ onNavigateToAgents }
         const side: 'BUY' | 'SELL' = (o.side ?? leg?.action ?? 'BUY') === 'SELL' ? 'SELL' : 'BUY';
         const exitP = Number((o.exitPrice ?? leg?.exitPrice ?? entryP).toFixed(2));
         const exactPnl = Number(((side === 'BUY' ? exitP - entryP : entryP - exitP) * qty).toFixed(2));
+        const baseSym = extractBaseSymbolFromOrder(o);
+        closedSym = baseSym;
+        closedPnl = exactPnl;
+
+        if (exactPnl < 0) {
+          quarantineLosingScript(
+            baseSym,
+            exactPnl,
+            `Manual Square-Off on Losing Script (${baseSym} ₹${exactPnl.toFixed(2)}) — Quarantined from re-entry`
+          );
+        } else if (exactPnl > 0) {
+          recordWinningScriptOutcome(baseSym, exactPnl);
+        }
+
         return {
           ...o,
           status: 'SQUARED_OFF' as const,
@@ -245,7 +290,9 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({ onNavigateToAgents }
               optionType: leg?.optionType
             }
           ],
-          exitReason: `Manual Square-Off @ ₹${exitP.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+          exitReason: exactPnl < 0
+            ? `Discarded Losing Script @ ₹${exitP.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (${baseSym} Quarantined)`
+            : `Manual Profit Book @ ₹${exitP.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
           orderDate: o.orderDate || orderDate,
           orderTime: o.orderTime || orderTime,
           timestamp: `${o.orderDate || orderDate} ${orderTime} (Squared Off)`
@@ -256,8 +303,51 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({ onNavigateToAgents }
 
     setOrders(updated);
     persistPaperTrades(updated);
-    setToastMessage(`✓ Position ${orderId} squared off at current market price.`);
-    setTimeout(() => setToastMessage(null), 3500);
+    setLearningRefreshTick(t => t + 1);
+    setToastMessage(
+      closedPnl < 0
+        ? `🛡️ Losing script ${closedSym} discarded (₹${closedPnl.toFixed(2)}) & quarantined in Learning Ledger.`
+        : `✓ Position ${closedSym || orderId} squared off (+₹${closedPnl.toFixed(2)}).`
+    );
+    setTimeout(() => setToastMessage(null), 4000);
+  };
+
+  // 1-Click Prune Losing Scripts (including ULTRACEMCO) & Rotate to Learned Positive Leaders
+  const handlePruneAndRotate = () => {
+    setIsScanning(true);
+    setTimeout(() => {
+      setIsScanning(false);
+      const { updatedOrders, prunedSymbols, rotatedSymbols, prunedCount } =
+        executeAdaptivePruneAndRotateCycle(orders, quotes, true);
+      setOrders(updatedOrders);
+      setLastScanAudit(getLastScanVetoAuditBatch());
+      setLearningRefreshTick(t => t + 1);
+      const prunedLabel = prunedSymbols.length > 0 ? prunedSymbols.join(', ') : 'weak scripts';
+      const rotatedLabel = rotatedSymbols.length > 0 ? rotatedSymbols.join(', ') : 'none (existing winners open)';
+      setToastMessage(
+        `🧠 Adaptive Learner discarded ${prunedCount} losing position(s) [${prunedLabel}], quarantined them, and deployed confirmed >2% net leader(s) [${rotatedLabel}]!`
+      );
+      setTimeout(() => setToastMessage(null), 5500);
+    }, 350);
+  };
+
+  const handleToggleAutoPrune = () => {
+    const next = !autoPruneEnabled;
+    setAutoPruneEnabled(next);
+    setAutoPruneLosersEnabled(next);
+    if (next) {
+      const { updatedOrders, prunedSymbols } = executeAdaptivePruneAndRotateCycle(orders, quotes, false);
+      setOrders(updatedOrders);
+      setLearningRefreshTick(t => t + 1);
+      setToastMessage(
+        prunedSymbols.length > 0
+          ? `🛡️ Auto-Prune Armed: Immediately discarded losing script(s) [${prunedSymbols.join(', ')}] & rotated to positive leaders.`
+          : `🛡️ Auto-Prune Losers & 82% Anti-Profit-Erosion Guard ARMED on every tick.`
+      );
+    } else {
+      setToastMessage(`Auto-Prune paused. Manual prune & 1R hard stop remain active.`);
+    }
+    setTimeout(() => setToastMessage(null), 4000);
   };
 
   // Square off all open orders with exact current exitPrice and P&L reconciliation
@@ -314,27 +404,6 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({ onNavigateToAgents }
     setTimeout(() => setToastMessage(null), 4000);
   };
 
-  // 1-Click Simulate Step-Ratchet Trailing Stop-Loss Profit Lock
-  const handleSimulateTslLock = (orderId?: string) => {
-    let targetOrder = orderId ? orders.find(o => o.id === orderId) : orders.find(o => o.status === 'OPEN');
-    if (!targetOrder) {
-      const fresh = generateLiveMarketOrder(quotes, 'agent_arjuna');
-      const locked = simulateTrailingProfitLockCycle(fresh, 'RALLY_AND_LOCK_EXIT');
-      const updated = [locked, ...orders];
-      setOrders(updated);
-      persistPaperTrades(updated);
-      setToastMessage(`✅ TSL PROFIT LOCKED: ${locked.symbol} rallied to +₹${locked.peakPnlINR} Peak, ratcheted TSL to 75% (+₹${locked.trailingStopPnlINR}), and booked +₹${locked.pnlINR}!`);
-      setTimeout(() => setToastMessage(null), 5000);
-      return;
-    }
-    const locked = simulateTrailingProfitLockCycle(targetOrder, 'RALLY_AND_LOCK_EXIT');
-    const updated = orders.map(o => (o.id === targetOrder!.id ? locked : o));
-    setOrders(updated);
-    persistPaperTrades(updated);
-    setToastMessage(`✅ TSL PROFIT LOCKED: ${locked.symbol} rallied to +₹${locked.peakPnlINR} Peak, ratcheted TSL to 75% (+₹${locked.trailingStopPnlINR}), and booked +₹${locked.pnlINR}!`);
-    setTimeout(() => setToastMessage(null), 5000);
-  };
-
   return (
     <div className="flex flex-col gap-6 w-full font-mono text-slate-100">
       {/* Toast Alert */}
@@ -359,9 +428,12 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({ onNavigateToAgents }
               <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-950/60 text-cyan-300 border border-cyan-500/30">
                 CANONICAL LEDGER
               </span>
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950/70 text-emerald-300 border border-emerald-500/40">
+                STRICT &gt;2.0% NET PROFIT VETO GATE
+              </span>
             </div>
             <p className="text-xs text-slate-400 mt-1">
-              Canonical Order Management System, Winsorized Factor &amp; Statutory Veto Explainability, and P&amp;L Attribution.
+              Canonical Order Management System, 2026 Statutory Tax &amp; Cost-of-Trading Veto Engine, and Reversible Change Audit Ledger.
             </p>
           </div>
         </div>
@@ -382,10 +454,10 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({ onNavigateToAgents }
             onClick={() => handleDeployOrder('ALL')}
             disabled={isScanning}
             className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 shadow-[0_0_15px_rgba(0,240,255,0.35)] transition cursor-pointer active:scale-95"
-            title="Have the 5 agents evaluate broader market regime and auto-execute paper trades across NSE F&O, NSE Cash, BSE Cash, and MCX"
+            title="Scan all desks through the 3-Stage Veto Gate: (1) Confirmed Leader & Non-Duplicate, (2) Gross Profit >= 3.0x Statutory Tax+Brokerage, (3) Net Profit > 2.00%"
           >
             <RotateCw className={`w-3.5 h-3.5 ${isScanning ? 'animate-spin' : ''}`} />
-            <span>SCAN & DEPLOY (ALL DESKS)</span>
+            <span>SCAN &amp; DEPLOY (ALL DESKS · &gt;2% NET GATE)</span>
           </button>
         </div>
       </div>
@@ -451,7 +523,7 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({ onNavigateToAgents }
         </div>
       </div>
 
-      {/* Sub-Tab Switcher: Order Book vs "Why?" Signal & Veto Audit vs P&L Attribution */}
+      {/* Sub-Tab Switcher: Order Book vs Adaptive Script Learner vs "Why?" Signal & Veto Audit vs P&L Attribution vs Revert Ledger */}
       <div className="flex flex-wrap items-center justify-between gap-3 p-2 rounded-2xl bg-slate-900/70 border border-slate-800">
         <div className="flex flex-wrap items-center gap-1.5">
           <button
@@ -465,6 +537,16 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({ onNavigateToAgents }
             01. Canonical Order Book ({filteredRecords.length})
           </button>
           <button
+            onClick={() => setActiveOmsSubTab('ADAPTIVE_LEARNER')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+              activeOmsSubTab === 'ADAPTIVE_LEARNER'
+                ? 'bg-emerald-500 text-slate-950 shadow-[0_0_12px_rgba(16,185,129,0.35)]'
+                : 'text-emerald-300 hover:text-white border border-emerald-500/30 bg-emerald-950/30'
+            }`}
+          >
+            02. Adaptive Script Learner ({learnedPositiveLeaders.length} Confirmed / {quarantinedScripts.length} Quarantined)
+          </button>
+          <button
             onClick={() => setActiveOmsSubTab('WHY_EXPLAINABILITY')}
             className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
               activeOmsSubTab === 'WHY_EXPLAINABILITY'
@@ -472,7 +554,7 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({ onNavigateToAgents }
                 : 'text-slate-400 hover:text-white'
             }`}
           >
-            02. &ldquo;Why?&rdquo; Signal Rank &amp; Statutory Veto Audit
+            03. &ldquo;Why?&rdquo; Signal Rank &amp; Statutory Veto Audit
           </button>
           <button
             onClick={() => setActiveOmsSubTab('PNL_ATTRIBUTION')}
@@ -482,13 +564,164 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({ onNavigateToAgents }
                 : 'text-slate-400 hover:text-white'
             }`}
           >
-            03. P&amp;L Attribution &amp; Implementation Shortfall
+            04. P&amp;L Attribution &amp; Shortfall
+          </button>
+          <button
+            onClick={() => setActiveOmsSubTab('REVERT_LEDGER')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
+              activeOmsSubTab === 'REVERT_LEDGER'
+                ? 'bg-amber-500 text-slate-950 shadow-[0_0_12px_rgba(245,158,11,0.35)]'
+                : 'text-amber-300 hover:text-white border border-amber-500/30 bg-amber-950/30'
+            }`}
+          >
+            <FileText className="w-3.5 h-3.5" />
+            <span>05. Revert &amp; Change Audit ({ARCHITECTURE_REVERT_LEDGER.length})</span>
           </button>
         </div>
         <span className="text-[11px] text-slate-400 px-2">
-          Pipeline: <strong className="text-cyan-300">Data → Factor → Signal → Strategy → Portfolio → Order</strong>
+          Mandate: <strong className="text-emerald-300">Confirmed Scripts Only · Cost &lt; Profit (≥3.0x) · Net Profit &gt; 2.00%</strong>
         </span>
       </div>
+
+      {activeOmsSubTab === 'ADAPTIVE_LEARNER' && (
+        <div className="p-5 rounded-2xl bg-[#080d1a]/95 border border-emerald-500/30 flex flex-col gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">
+            <div>
+              <h2 className="text-sm font-bold text-white uppercase tracking-wide flex items-center gap-2">
+                <span>Adaptive Script Learning, Intraday Trajectory (Low → Flat → High) &amp; Anti-Profit-Erosion Matrix</span>
+                <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/40 text-[10px]">
+                  ZERO STATIC LOCK-IN
+                </span>
+              </h2>
+              <p className="text-xs text-slate-400 mt-1">
+                Prevents getting glued to losing scripts (such as <strong className="text-rose-300">ULTRACEMCO</strong> when in drawdown). Continuously observes intraday transitions (<strong className="text-slate-300">LOW → FLAT → RISING → HIGH LEADER</strong>), quarantines losing scripts from re-entry, and protects gains with a 4-tier <strong className="text-emerald-300">Trailing Profit Erosion Guard (locks +₹28 at +0.3R, 65% at +0.75R, and 82% at +1.35R)</strong>.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={handlePruneAndRotate}
+                disabled={isScanning}
+                className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition cursor-pointer shadow-[0_0_15px_rgba(16,185,129,0.3)]"
+              >
+                PRUNE LOSING SCRIPTS &amp; ROTATE TO LEARNED WINNERS
+              </button>
+              <button
+                onClick={() => {
+                  resetScriptQuarantineMemory();
+                  setLearningRefreshTick(t => t + 1);
+                  setToastMessage('Script Quarantine Memory reset. Observing fresh intraday ticks.');
+                  setTimeout(() => setToastMessage(null), 3500);
+                }}
+                className="px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 text-xs font-semibold transition cursor-pointer"
+              >
+                Reset Quarantine Ledger
+              </button>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto rounded-xl border border-slate-800">
+            <table className="w-full text-left text-xs font-mono tabular-nums">
+              <thead className="bg-slate-950 text-slate-400 border-b border-slate-800 uppercase text-[10px]">
+                <tr>
+                  <th className="py-2.5 px-3">Script &amp; Sector</th>
+                  <th className="py-2.5 px-3 text-right">LTP &amp; Day Chg</th>
+                  <th className="py-2.5 px-3 text-right">Intraday Range Pos</th>
+                  <th className="py-2.5 px-3">Intraday Regime (Low → Flat → High)</th>
+                  <th className="py-2.5 px-3 text-right">Session W/L &amp; P&amp;L</th>
+                  <th className="py-2.5 px-3 text-right">Learned Score</th>
+                  <th className="py-2.5 px-3">Action Verdict &amp; Quarantine / Anti-Erosion Rationale</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/70 bg-slate-950/60">
+                {scriptLearningMatrix.map((row) => {
+                  const totalSymPnl = row.sessionRealizedPnlINR + row.sessionOpenPnlINR;
+                  return (
+                    <tr key={row.symbol} className="hover:bg-slate-900/60">
+                      <td className="py-3 px-3">
+                        <div className="font-bold text-white flex items-center gap-1.5">
+                          <span>{row.symbol}</span>
+                          {row.isQuarantined && (
+                            <span className="px-1.5 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-500/40 text-[9px] font-bold">
+                              QUARANTINED
+                            </span>
+                          )}
+                          {row.isEligibleForDeploy && (
+                            <span className="px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/40 text-[9px] font-bold">
+                              CONFIRMED WINNER
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[10px] text-slate-500">{row.name} · {row.sector}</div>
+                      </td>
+                      <td className="py-3 px-3 text-right">
+                        <div className="font-bold text-slate-100">
+                          {row.ltp > 0 ? `₹${row.ltp.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+                        </div>
+                        <div className={`text-[10px] ${row.changePct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          {row.changePct >= 0 ? '+' : ''}{row.changePct.toFixed(2)}% (α {row.relAlphaVsNifty >= 0 ? '+' : ''}{row.relAlphaVsNifty.toFixed(2)}%)
+                        </div>
+                      </td>
+                      <td className="py-3 px-3 text-right">
+                        <div className="font-bold text-cyan-300">{row.intradayRangePct}% of Day Range</div>
+                        <div className="w-24 h-1.5 bg-slate-800 rounded-full overflow-hidden ml-auto mt-1">
+                          <div
+                            className={`h-full ${
+                              row.intradayRangePct >= 65
+                                ? 'bg-emerald-400'
+                                : row.intradayRangePct >= 40
+                                  ? 'bg-amber-400'
+                                  : 'bg-rose-400'
+                            }`}
+                            style={{ width: `${row.intradayRangePct}%` }}
+                          />
+                        </div>
+                      </td>
+                      <td className="py-3 px-3">
+                        <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold border ${
+                          row.intradayPhase === 'LEARNED_HIGH_LEADER' || row.intradayPhase === 'RISING_ACCUMULATING'
+                            ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40'
+                            : row.intradayPhase === 'FLAT_OBSERVING'
+                              ? 'bg-amber-950/80 text-amber-300 border-amber-500/40'
+                              : 'bg-rose-950/80 text-rose-300 border-rose-500/40'
+                        }`}>
+                          {row.phaseLabel}
+                        </span>
+                        <div className="text-[10px] text-slate-500 mt-0.5">
+                          Observed {row.observationTicks} ticks
+                        </div>
+                      </td>
+                      <td className="py-3 px-3 text-right">
+                        <div className={`font-bold ${totalSymPnl > 0 ? 'text-emerald-400' : totalSymPnl < 0 ? 'text-rose-400' : 'text-slate-400'}`}>
+                          {totalSymPnl >= 0 ? '+' : ''}₹{totalSymPnl.toFixed(2)}
+                        </div>
+                        <div className="text-[10px] text-slate-500">
+                          {row.wins}W / {row.losses}L {row.peakPnlSeenINR > 0 ? `· Peak +₹${row.peakPnlSeenINR}` : ''}
+                        </div>
+                      </td>
+                      <td className="py-3 px-3 text-right">
+                        <span className={`px-2 py-1 rounded-lg font-bold border ${
+                          row.learnedScore >= 75
+                            ? 'bg-emerald-950/60 text-emerald-300 border-emerald-500/40'
+                            : row.learnedScore >= 50
+                              ? 'bg-slate-900 text-amber-300 border-slate-700'
+                              : 'bg-rose-950/60 text-rose-300 border-rose-500/40'
+                        }`}>
+                          {row.learnedScore}/100
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 max-w-md">
+                        <div className="text-[11px] text-slate-300 font-sans leading-snug">
+                          {row.rationale}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {activeOmsSubTab === 'WHY_EXPLAINABILITY' && (
         <div className="p-5 rounded-2xl bg-[#080d1a]/95 border border-cyan-500/30 flex flex-col gap-4">
@@ -672,6 +905,68 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({ onNavigateToAgents }
         </div>
       )}
 
+      {activeOmsSubTab === 'REVERT_LEDGER' && (
+        <div className="p-5 rounded-2xl bg-[#080d1a]/95 border border-amber-500/30 flex flex-col gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-bold text-white uppercase tracking-wide">
+                  Architecture Change, Module Pruning &amp; Easy Revert Ledger
+                </h2>
+                <span className="px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-500/40 text-[10px] font-bold">
+                  SYNCED WITH PROJECT_CHANGELOG_AND_REVERT_LEDGER.md
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-1">
+                Every discarded static item, pruned simulator button, and upgraded strategy/veto formula is logged below with its exact Revert ID and step-by-step restoration path.
+              </p>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto rounded-xl border border-slate-800">
+            <table className="w-full text-left text-xs font-mono tabular-nums">
+              <thead className="bg-slate-950 text-slate-400 border-b border-slate-800 uppercase text-[10px]">
+                <tr>
+                  <th className="py-2.5 px-3">Revert ID &amp; Date</th>
+                  <th className="py-2.5 px-3">Category &amp; Module</th>
+                  <th className="py-2.5 px-3">Previous Behavior (Before Audit)</th>
+                  <th className="py-2.5 px-3">New Institutional Behavior</th>
+                  <th className="py-2.5 px-3">Exact Revert Instruction</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/70 bg-slate-950/60">
+                {ARCHITECTURE_REVERT_LEDGER.map((item) => (
+                  <tr key={item.revertId} className="hover:bg-slate-900/60">
+                    <td className="py-3 px-3 whitespace-nowrap align-top">
+                      <span className="px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-500/40 font-bold text-[10px]">
+                        {item.revertId}
+                      </span>
+                      <div className="text-[10px] text-slate-500 mt-1">{item.dateIST}</div>
+                    </td>
+                    <td className="py-3 px-3 max-w-xs align-top">
+                      <span className="inline-block px-1.5 py-0.5 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-500/30 text-[9px] font-bold mb-1">
+                        {item.category.replace(/_/g, ' ')}
+                      </span>
+                      <div className="font-bold text-slate-100 text-xs font-sans">{item.moduleName}</div>
+                      <div className="text-[10px] text-slate-500 mt-0.5 break-all">{item.filePath}</div>
+                    </td>
+                    <td className="py-3 px-3 max-w-xs align-top text-[11px] text-slate-400 font-sans leading-relaxed">
+                      {item.previousStateSummary}
+                    </td>
+                    <td className="py-3 px-3 max-w-xs align-top text-[11px] text-emerald-300/95 font-sans leading-relaxed">
+                      {item.newStateSummary}
+                    </td>
+                    <td className="py-3 px-3 max-w-xs align-top text-[11px] text-amber-200/90 font-mono leading-relaxed">
+                      {item.revertInstruction}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {activeOmsSubTab === 'ORDER_BOOK' && (
         <>
       {/* Filter Ribbon & Fast Execution Bar */}
@@ -779,50 +1074,150 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({ onNavigateToAgents }
         </div>
       </div>
 
-      {/* QUICK DEPLOY DESK BAR */}
-      <div className="flex items-center justify-between p-3 rounded-xl bg-[#070b14] border border-slate-800/80 text-xs text-slate-400">
-        <div className="flex items-center gap-2">
-          <Zap className="w-3.5 h-3.5 text-amber-400" />
-          <span className="font-bold text-slate-300">Autonomous Agent Desk Triggers:</span>
-          <span className="text-[11px] hidden sm:inline">Agents size & execute defined-risk paper trades from current market ticks:</span>
+      {/* ADAPTIVE SCRIPT LEARNING, LOSER QUARANTINE & ANTI-PROFIT-EROSION CONTROL BAR */}
+      <div className="p-3.5 rounded-xl bg-gradient-to-r from-[#071318] via-[#091526] to-[#080d1a] border border-emerald-500/30 flex flex-col lg:flex-row lg:items-center justify-between gap-3 text-xs">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span className="font-bold text-emerald-300 uppercase tracking-wide">
+              Adaptive Script Learner &amp; Anti-Profit-Erosion Guard:
+            </span>
+            <span className="px-2 py-0.5 rounded bg-emerald-950/90 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold">
+              Confirmed Leaders: {learnedPositiveLeaders.slice(0, 4).map(s => `${s.symbol} (+${s.changePct}%)`).join(', ') || 'Observing'}
+            </span>
+            <span className="px-2 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-500/40 text-[10px] font-semibold">
+              Observing (Flat/Low): {observingScripts.length}
+            </span>
+            <span className="px-2 py-0.5 rounded bg-rose-950/80 text-rose-300 border border-rose-500/40 text-[10px] font-bold">
+              Discarded / Quarantined: {quarantinedScripts.map(s => s.symbol).join(', ') || 'None'}
+            </span>
+          </div>
+          <p className="text-[11px] text-slate-400">
+            Losing or weak scripts (including <strong className="text-rose-300">ULTRACEMCO</strong> when in loss/flat) are automatically quarantined and rotated out. Open gains are guarded by a <strong className="text-cyan-300">4-Tier Anti-Erosion Ratchet (+₹28 floor @ +0.3R → 65% lock @ +0.75R → 82% lock @ +1.35R)</strong>.
+          </p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap shrink-0">
           <button
-            onClick={() => handleDeployOrder('NSE_FNO')}
-            disabled={isScanning}
-            className="px-2.5 py-1 rounded-lg bg-sky-950/60 hover:bg-sky-900/80 text-sky-300 border border-sky-500/30 text-[11px] font-semibold transition cursor-pointer"
+            onClick={handleToggleAutoPrune}
+            className={`px-3 py-1.5 rounded-lg text-[11px] font-bold border transition cursor-pointer ${
+              autoPruneEnabled
+                ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/50'
+                : 'bg-slate-900 text-slate-400 border-slate-700'
+            }`}
+            title="Automatically discard losing scripts and lock profit erosion on every tick"
           >
-            + NSE F&O (Bhishma)
+            Auto-Prune Losers: {autoPruneEnabled ? 'ARMED (ON)' : 'PAUSED'}
           </button>
           <button
-            onClick={() => handleDeployOrder('NSE_CASH')}
+            onClick={handlePruneAndRotate}
             disabled={isScanning}
-            className="px-2.5 py-1 rounded-lg bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-500/30 text-[11px] font-semibold transition cursor-pointer"
+            className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-[11px] font-bold transition cursor-pointer shadow-[0_0_12px_rgba(16,185,129,0.3)]"
+            title="Immediately discard any losing open script (e.g. ULTRACEMCO), quarantine it, and deploy top learned positive leaders"
           >
-            + NSE Cash (Arjuna)
-          </button>
-          <button
-            onClick={() => handleDeployOrder('BSE_CASH')}
-            disabled={isScanning}
-            className="px-2.5 py-1 rounded-lg bg-indigo-950/60 hover:bg-indigo-900/80 text-indigo-300 border border-indigo-500/30 text-[11px] font-semibold transition cursor-pointer"
-          >
-            + BSE Cash (Chanakya)
-          </button>
-          <button
-            onClick={() => handleDeployOrder('MCX')}
-            disabled={isScanning}
-            className="px-2.5 py-1 rounded-lg bg-amber-950/60 hover:bg-amber-900/80 text-amber-300 border border-amber-500/30 text-[11px] font-semibold transition cursor-pointer"
-          >
-            + MCX Commodity (Kuber)
-          </button>
-          <button
-            onClick={() => handleSimulateTslLock()}
-            className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-[11px] font-bold transition cursor-pointer"
-            title="Simulate a trade rallying to +2.5R, ratcheting TSL to 75% Profit Lock, and auto-closing with locked profit"
-          >
-            1-Click Simulate TSL Profit Lock
+            Prune Losers &amp; Rotate to Winners
           </button>
         </div>
+      </div>
+
+      {/* QUICK DEPLOY DESK BAR (STRICT >2% NET PROFIT & STATUTORY TAX VETO GATED) */}
+      <div className="flex flex-col gap-2.5 p-3.5 rounded-xl bg-[#070b14] border border-slate-800/80 text-xs text-slate-400">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Zap className="w-3.5 h-3.5 text-amber-400" />
+            <span className="font-bold text-slate-200">Strict Veto Desk Scanners (&gt;2.0% Net Profit &amp; Cost &lt; Profit):</span>
+            <span className="text-[11px] hidden xl:inline text-slate-400">
+              Evaluates 2026 STT/CTT + Exch + GST + ₹20/order Brokerage; vetoes duplicates &amp; sub-2% setups:
+            </span>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => handleDeployOrder('NSE_FNO')}
+              disabled={isScanning}
+              className="px-2.5 py-1 rounded-lg bg-sky-950/60 hover:bg-sky-900/80 text-sky-300 border border-sky-500/30 text-[11px] font-semibold transition cursor-pointer"
+            >
+              Scan NSE F&amp;O (Bhishma)
+            </button>
+            <button
+              onClick={() => handleDeployOrder('NSE_CASH')}
+              disabled={isScanning}
+              className="px-2.5 py-1 rounded-lg bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-500/30 text-[11px] font-semibold transition cursor-pointer"
+            >
+              Scan NSE Cash Leader (Arjuna)
+            </button>
+            <button
+              onClick={() => handleDeployOrder('BSE_CASH')}
+              disabled={isScanning}
+              className="px-2.5 py-1 rounded-lg bg-indigo-950/60 hover:bg-indigo-900/80 text-indigo-300 border border-indigo-500/30 text-[11px] font-semibold transition cursor-pointer"
+            >
+              Scan BSE Cash Leader (Chanakya)
+            </button>
+            <button
+              onClick={() => handleDeployOrder('MCX')}
+              disabled={isScanning}
+              className="px-2.5 py-1 rounded-lg bg-amber-950/60 hover:bg-amber-900/80 text-amber-300 border border-amber-500/30 text-[11px] font-semibold transition cursor-pointer"
+            >
+              Scan MCX Commodity (Kuber)
+            </button>
+          </div>
+        </div>
+
+        {/* LIVE PRE-TRADE STATUTORY VETO & >2.0% NET PROFIT AUDIT STRIP */}
+        {lastScanAudit && (
+          <div className="pt-2.5 border-t border-slate-800/80 flex flex-col gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-500/40 font-bold text-[10px]">
+                  LAST VETO AUDIT ({lastScanAudit.timestampIST})
+                </span>
+                <span className="text-slate-200 font-semibold">{lastScanAudit.summaryHeadline}</span>
+              </div>
+              <div className="flex items-center gap-2 text-[10px]">
+                <span className="px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-500/40 font-bold">
+                  Approved (&gt;2% Net): {lastScanAudit.approvedCount}
+                </span>
+                <span className="px-2 py-0.5 rounded bg-rose-950/80 text-rose-300 border border-rose-500/40 font-bold">
+                  Vetoed: {lastScanAudit.vetoedCount}
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-2">
+              {lastScanAudit.evaluations.map((ev) => (
+                <div
+                  key={ev.id}
+                  className={`p-2.5 rounded-lg border flex flex-col justify-between gap-1 text-[10px] ${
+                    ev.approved
+                      ? 'bg-emerald-950/20 border-emerald-500/40 text-slate-200'
+                      : 'bg-rose-950/20 border-rose-500/35 text-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="font-bold text-white truncate">{ev.symbol}</span>
+                    <span
+                      className={`px-1.5 py-0.2 rounded font-bold text-[9px] shrink-0 border ${
+                        ev.approved
+                          ? 'bg-emerald-950 text-emerald-300 border-emerald-500/50'
+                          : 'bg-rose-950 text-rose-300 border-rose-500/50'
+                      }`}
+                    >
+                      {ev.approved ? `DEPLOYED (+${ev.netProfitPct}% NET)` : 'VETOED'}
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-slate-400 flex items-center justify-between tabular-nums">
+                    <span>Gross Target: +₹{ev.grossTargetProfitINR.toFixed(0)}</span>
+                    <span className="text-amber-300">2026 Tax+Brok: -₹{ev.friction.totalFrictionINR.toFixed(2)}</span>
+                    <span className={ev.netProfitPct > 2.0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
+                      Net: +₹{ev.netProfitINR.toFixed(0)} ({ev.grossToFrictionRatio}x)
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-slate-300 font-sans leading-snug">
+                    {ev.verdictReason}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* THE DEDICATED TRADE HISTORY TABLE */}
@@ -833,29 +1228,30 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({ onNavigateToAgents }
             No Executed Paper Trades Matching Filter
           </div>
           <p className="text-xs text-slate-500 max-w-md">
-            All static seed rows have been removed. Only real paper trades evaluated and executed by the 5 autonomous agents are recorded here.
+            All static seed rows have been removed. Only confirmed setups passing the 2026 Statutory Tax &amp; &gt;2.0% Net Profit Veto Gate are deployed here.
           </p>
           <div className="flex items-center gap-2 mt-2">
             <button
               onClick={() => handleDeployOrder('ALL')}
               className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-bold uppercase rounded-xl transition cursor-pointer shadow-[0_0_15px_rgba(0,240,255,0.3)]"
             >
-              Run 5-Agent Auto-Execution Across All Desks
+              Scan &amp; Deploy Confirmed &gt;2% Net Setups
             </button>
           </div>
         </div>
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-[#080d1a]/90 shadow-2xl">
           <table className="w-full text-left text-xs font-mono">
-            {/* Table Header: STRICTLY adhering to the 8 required columns */}
+            {/* Table Header: Instrument + Expiry + 2-Leg Breakdown + Total Instrument Cost */}
             <thead className="bg-[#0b1224] text-slate-400 border-b border-slate-800 uppercase tracking-wider text-[11px]">
               <tr>
-                <th className="py-3.5 px-4 font-bold text-slate-200">Instrument</th>
+                <th className="py-3.5 px-4 font-bold text-slate-200">Instrument, Expiry &amp; Leg Breakdown</th>
                 <th className="py-3.5 px-3 font-bold text-center">Side</th>
-                <th className="py-3.5 px-3 font-bold text-right">Qty</th>
-                <th className="py-3.5 px-4 font-bold text-right text-slate-200">Entry Price</th>
-                <th className="py-3.5 px-4 font-bold text-right text-slate-200">Exit Price</th>
-                <th className="py-3.5 px-4 font-bold text-right text-slate-200">P&L</th>
+                <th className="py-3.5 px-3 font-bold text-right">Qty &amp; Lots</th>
+                <th className="py-3.5 px-4 font-bold text-right text-slate-200">Entry Price (Unit)</th>
+                <th className="py-3.5 px-4 font-bold text-right text-cyan-300">Total Instrument Cost</th>
+                <th className="py-3.5 px-4 font-bold text-right text-slate-200">Exit Price &amp; Value</th>
+                <th className="py-3.5 px-4 font-bold text-right text-slate-200">P&amp;L</th>
                 <th className="py-3.5 px-4 font-bold text-cyan-400 whitespace-nowrap">Date (dd-mmm-yyyy)</th>
                 <th className="py-3.5 px-4 font-bold text-amber-400 whitespace-nowrap">Time ([hh]:mm:ss)</th>
                 <th className="py-3.5 px-3 font-bold text-center text-slate-400">Action / Status</th>
@@ -884,55 +1280,165 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({ onNavigateToAgents }
                     key={`${trade.id}-row-${rowIdx}`} 
                     className="hover:bg-slate-900/60 transition-colors group"
                   >
-                    {/* 1. Instrument */}
-                    <td className="py-3 px-4">
-                      <div className="flex flex-col">
-                        <div className="flex items-center gap-2">
+                    {/* 1. Instrument + Expiry Date + 2-Position Spread Breakdown */}
+                    <td className="py-3.5 px-4 min-w-[310px]">
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="text-slate-100 font-bold text-xs tracking-wide">
                             {trade.instrument}
                           </span>
-                          <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold uppercase border ${segmentBadge}`}>
+                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase border ${segmentBadge}`}>
                             {segmentLabel}
                           </span>
+                          {trade.expiryDateStr ? (
+                            <span
+                              className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950/80 text-amber-300 border border-amber-500/40 inline-flex items-center gap-1"
+                              title={trade.expirySeriesLabel || 'Contract Expiry Date'}
+                            >
+                              <Calendar className="w-3 h-3 text-amber-400 shrink-0" />
+                              <span>EXP: {trade.expiryDateStr}</span>
+                            </span>
+                          ) : (
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-slate-900 text-slate-400 border border-slate-700">
+                              SPOT EQ · No Expiry
+                            </span>
+                          )}
                         </div>
-                        <span className="text-[10px] text-slate-400 truncate max-w-xs mt-0.5">
-                          {trade.strategyName} · {trade.agentName}
-                        </span>
+
+                        <div className="text-[10px] text-slate-400">
+                          {trade.strategyName} · <strong className="text-slate-300">{trade.agentName}</strong>
+                          {trade.expirySeriesLabel && (
+                            <span className="text-cyan-400 ml-1.5">({trade.expirySeriesLabel})</span>
+                          )}
+                        </div>
+
+                        {/* Explicit 2-Position (2-Leg Spread) Breakdown when applicable */}
+                        {trade.isTwoLegSpread && trade.constituentLegs.length === 2 ? (
+                          <div className="mt-1 p-2 rounded-lg bg-slate-950/90 border border-sky-500/30 flex flex-col gap-1 text-[10px]">
+                            <div className="flex items-center justify-between text-[9px] font-bold uppercase tracking-wider text-sky-300 border-b border-slate-800 pb-1">
+                              <span>{trade.positionCountBadge}</span>
+                              <span className="text-amber-300">EXP: {trade.expiryDateStr}</span>
+                            </div>
+                            {trade.constituentLegs.map((leg) => (
+                              <div key={leg.legNumber} className="flex items-center justify-between gap-2 tabular-nums flex-wrap">
+                                <span className="flex items-center gap-1.5">
+                                  <span
+                                    className={`px-1.5 py-0.2 rounded text-[9px] font-bold border ${
+                                      leg.action === 'SELL'
+                                        ? 'bg-rose-950/80 text-rose-300 border-rose-500/40'
+                                        : 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40'
+                                    }`}
+                                  >
+                                    Leg {leg.legNumber}: {leg.action}
+                                  </span>
+                                  <span className="font-bold text-slate-200">{leg.instrument}</span>
+                                  {leg.moneynessBadge && (
+                                    <span
+                                      className={`px-1 py-0.2 rounded text-[8px] font-bold border ${
+                                        leg.moneynessBadge === 'OTM'
+                                          ? 'bg-emerald-950/70 text-emerald-300 border-emerald-500/30'
+                                          : leg.moneynessBadge === 'ITM'
+                                            ? 'bg-amber-950/80 text-amber-300 border-amber-500/40'
+                                            : 'bg-cyan-950/80 text-cyan-300 border-cyan-500/40'
+                                      }`}
+                                    >
+                                      {leg.moneynessBadge}
+                                    </span>
+                                  )}
+                                  <span className="text-slate-400">× {leg.qty}</span>
+                                </span>
+                                <span className="text-slate-300 font-semibold">
+                                  Entry ₹{leg.unitPrice.toFixed(2)} (
+                                  <strong className={leg.action === 'SELL' ? 'text-amber-300' : 'text-cyan-300'}>
+                                    ₹{leg.totalLegCostINR.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                  </strong>
+                                  ) · LTP ₹{leg.currentUnitPrice.toFixed(2)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-[10px] text-slate-500 flex items-center gap-1.5">
+                            <span className="px-1.5 py-0.2 rounded bg-slate-900 border border-slate-800 text-slate-300 font-semibold text-[9px]">
+                              {trade.positionCountBadge}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </td>
 
                     {/* 2. Side */}
-                    <td className="py-3 px-3 text-center whitespace-nowrap">
-                      <span className={`px-2.5 py-1 rounded text-[10px] font-bold tracking-wider inline-flex items-center gap-1 ${
-                        trade.side === 'BUY'
-                          ? 'bg-emerald-950/70 text-emerald-300 border border-emerald-500/40'
-                          : 'bg-rose-950/70 text-rose-300 border border-rose-500/40'
-                      }`}>
-                        {trade.side === 'BUY' ? <ArrowUpRight className="w-3 h-3 text-emerald-400" /> : <ArrowDownRight className="w-3 h-3 text-rose-400" />}
-                        <span>{trade.side}</span>
-                      </span>
+                    <td className="py-3.5 px-3 text-center whitespace-nowrap">
+                      <div className="flex flex-col items-center gap-1">
+                        <span className={`px-2.5 py-1 rounded text-[10px] font-bold tracking-wider inline-flex items-center gap-1 ${
+                          trade.side === 'BUY'
+                            ? 'bg-emerald-950/70 text-emerald-300 border border-emerald-500/40'
+                            : 'bg-rose-950/70 text-rose-300 border border-rose-500/40'
+                        }`}>
+                          {trade.side === 'BUY' ? <ArrowUpRight className="w-3 h-3 text-emerald-400" /> : <ArrowDownRight className="w-3 h-3 text-rose-400" />}
+                          <span>{trade.isTwoLegSpread ? `NET ${trade.side}` : trade.side}</span>
+                        </span>
+                        {trade.isTwoLegSpread && (
+                          <span className="text-[9px] text-slate-400 font-semibold">
+                            2 Legs (1 SELL + 1 BUY)
+                          </span>
+                        )}
+                      </div>
                     </td>
 
-                    {/* 3. Qty */}
-                    <td className="py-3 px-3 text-right text-slate-200 font-medium tabular-nums whitespace-nowrap">
-                      {trade.qty.toLocaleString('en-IN')}
+                    {/* 3. Qty & Lots */}
+                    <td className="py-3.5 px-3 text-right text-slate-200 font-medium tabular-nums whitespace-nowrap">
+                      <div className="font-bold text-xs">
+                        {trade.qty.toLocaleString('en-IN')} {trade.isTwoLegSpread ? '/ leg' : ''}
+                      </div>
+                      <div className="text-[10px] text-slate-400 font-normal">
+                        {trade.qtyDisplayLabel}
+                      </div>
                     </td>
 
-                    {/* 4. Entry Price & Live TSL Stop Price */}
-                    <td className="py-3 px-4 text-right text-slate-200 font-semibold tabular-nums whitespace-nowrap">
-                      <div>₹{trade.entryPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                    {/* 4. Entry Price (Per Unit) & Live TSL Stop Price */}
+                    <td className="py-3.5 px-4 text-right text-slate-200 font-semibold tabular-nums whitespace-nowrap">
+                      <div className="text-xs font-bold">
+                        ₹{trade.entryPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        <span className="text-[10px] text-slate-400 font-normal"> / unit</span>
+                      </div>
+                      {trade.isTwoLegSpread && trade.constituentLegs.length === 2 && (
+                        <div className="text-[10px] text-amber-300 font-normal">
+                          Net of ₹{trade.constituentLegs[0].unitPrice.toFixed(2)} − ₹{trade.constituentLegs[1].unitPrice.toFixed(2)}
+                        </div>
+                      )}
                       <div className="text-[10px] text-cyan-300/90 font-normal">
                         TSL: ₹{trade.trailingStopPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (1R ≤₹{trade.maxDefinedLossINR})
                       </div>
                     </td>
 
-                    {/* 5. Exit Price */}
-                    <td className="py-3 px-4 text-right font-semibold tabular-nums whitespace-nowrap">
+                    {/* 5. Total Instrument Cost (Entry × Qty + Margin Deployed) */}
+                    <td className="py-3.5 px-4 text-right tabular-nums whitespace-nowrap">
+                      <div className="text-xs font-bold text-cyan-300">
+                        ₹{trade.totalEntryCostINR.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                      <div className="text-[10px] text-slate-400">
+                        {trade.isTwoLegSpread
+                          ? `Net Premium (₹${trade.entryPrice.toFixed(2)} × ${trade.qty})`
+                          : `Contract Value (₹${trade.entryPrice.toFixed(2)} × ${trade.qty})`}
+                      </div>
+                      <div className="text-[10px] text-emerald-400 font-semibold">
+                        {trade.isTwoLegSpread
+                          ? `Hedged Margin: ₹${trade.marginDeployedINR.toLocaleString('en-IN')}`
+                          : `Capital / Margin: ₹${trade.marginDeployedINR.toLocaleString('en-IN')}`}
+                      </div>
+                    </td>
+
+                    {/* 6. Exit Price & Current Total Value */}
+                    <td className="py-3.5 px-4 text-right font-semibold tabular-nums whitespace-nowrap">
                       {trade.isOpen ? (
                         <div className="flex flex-col items-end">
                           <span className="text-cyan-300 inline-flex items-center gap-1">
                             <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping"></span>
                             <span>LTP ₹{trade.exitPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          </span>
+                          <span className="text-[10px] text-slate-300 font-semibold">
+                            Curr Total: ₹{trade.totalCurrentValueINR.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </span>
                           <span className={`text-[10px] font-normal ${
                             trade.priceDeltaPerUnit > 0 ? 'text-emerald-400/90' : trade.priceDeltaPerUnit < 0 ? 'text-rose-400/90' : 'text-slate-500'
@@ -945,6 +1451,9 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({ onNavigateToAgents }
                           <span className="text-slate-200">
                             ₹{trade.exitPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </span>
+                          <span className="text-[10px] text-slate-300 font-semibold">
+                            Exit Total: ₹{trade.totalCurrentValueINR.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
                           <span className={`text-[10px] font-normal ${
                             trade.priceDeltaPerUnit > 0 ? 'text-emerald-400/90' : trade.priceDeltaPerUnit < 0 ? 'text-rose-400/90' : 'text-slate-500'
                           }`}>
@@ -954,8 +1463,8 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({ onNavigateToAgents }
                       )}
                     </td>
 
-                    {/* 6. P&L + High-Water-Mark Peak P&L vs Locked TSL Floor */}
-                    <td className="py-3 px-4 text-right font-bold tabular-nums whitespace-nowrap">
+                    {/* 7. P&L + High-Water-Mark Peak P&L vs Locked TSL Floor */}
+                    <td className="py-3.5 px-4 text-right font-bold tabular-nums whitespace-nowrap">
                       <span className={`inline-flex items-center gap-1 ${
                         isProfit ? 'text-emerald-400' : isLoss ? 'text-rose-400' : 'text-slate-400'
                       }`}>
@@ -989,21 +1498,14 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({ onNavigateToAgents }
                       </div>
                     </td>
 
-                    {/* Action / Status */}
+                    {/* Action / Status (Pruned synthetic SIM TSL LOCK button — REV-003) */}
                     <td className="py-3 px-3 text-center whitespace-nowrap">
                       {trade.isOpen ? (
                         <div className="flex items-center justify-center gap-1.5">
                           <button
-                            onClick={() => handleSimulateTslLock(trade.orderId)}
-                            className="px-2 py-1 bg-emerald-950/70 hover:bg-emerald-900 border border-emerald-500/40 text-emerald-300 text-[10px] font-bold rounded-lg transition cursor-pointer"
-                            title="Simulate +2.5R Rally & 75% TSL Profit Lock"
-                          >
-                            SIM TSL LOCK
-                          </button>
-                          <button
                             onClick={() => handleSquareOffOrder(trade.orderId)}
-                            className="px-2 py-1 bg-rose-950/60 hover:bg-rose-900 border border-rose-500/40 text-rose-300 text-[10px] font-bold rounded-lg transition cursor-pointer"
-                            title="Square off this open position immediately"
+                            className="px-2.5 py-1 bg-rose-950/60 hover:bg-rose-900 border border-rose-500/40 text-rose-300 text-[10px] font-bold rounded-lg transition cursor-pointer"
+                            title="Square off this open position at live exchange LTP"
                           >
                             SQUARE OFF
                           </button>

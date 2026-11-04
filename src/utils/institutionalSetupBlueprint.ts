@@ -3,6 +3,8 @@
 // Pure browser- and server-safe module (zero Node fs/path dependencies)
 // ============================================================================
 
+import { resolveDerivativeExpiryInfo } from './orderFormatters';
+
 export type SetupInstrumentMode = 'CASH_CNC' | 'INTRADAY_MIS' | 'NSE_FUTURES' | 'NSE_OPTION';
 
 export interface StatutoryTaxBreakdown2026 {
@@ -51,7 +53,9 @@ export interface InstitutionalStockSetupBlueprint {
   onePctRiskRupees: number;
   quarterKellyFractionPct: number;
   quarterKellyRiskRupees: number;
+  totalInstrumentCostINR: number;
   marginRequired: number;
+  expiryDateStr: string | null;
   taxAudit: StatutoryTaxBreakdown2026;
 }
 
@@ -297,7 +301,12 @@ export function computeInstitutionalStockSetupBlueprint(params: {
     onePctRiskRupees,
     quarterKellyFractionPct: Number((quarterKelly * 100).toFixed(2)),
     quarterKellyRiskRupees,
+    totalInstrumentCostINR: Number((instrumentEntryPrice * quantity).toFixed(2)),
     marginRequired,
+    expiryDateStr:
+      instrumentMode === 'NSE_FUTURES' || instrumentMode === 'NSE_OPTION'
+        ? resolveDerivativeExpiryInfo('NSE_FNO', contractSymbol).expiryDateStr
+        : null,
     taxAudit: {
       brokerage: Number(brokerage.toFixed(2)),
       stt: Number(stt.toFixed(2)),
