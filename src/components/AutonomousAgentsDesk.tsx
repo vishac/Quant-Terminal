@@ -9,7 +9,9 @@ import {
   updateOrdersLivePnl,
   autoSquareOffBreachedAgentOrders,
   generateStrategyHealingReport,
-  computeLeakProofPositionSize
+  computeLeakProofPositionSize,
+  evaluateStepRatchetTSL,
+  simulateTrailingProfitLockCycle
 } from '../services/agentQuantEngine';
 import { formatOrderDate, formatOrderTime } from '../utils/orderFormatters';
 import {
@@ -17,7 +19,6 @@ import {
   persistPaperTrades,
   runAutonomousAgentCycleIfArmed
 } from '../services/paperTradeService';
-import { FirstPrinciplesMarketEngine } from './FirstPrinciplesMarketEngine';
 import { 
   Bot, 
   ShieldCheck, 
@@ -137,7 +138,9 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({
   const [showDeskInfo, setShowDeskInfo] = useState<boolean>(false);
   const [showKillConfirmModal, setShowKillConfirmModal] = useState<boolean>(false);
   const [intelligenceAgentFilter, setIntelligenceAgentFilter] = useState<string>('ALL');
-  const [intelligenceViewTab, setIntelligenceViewTab] = useState<'DECISION_SCRIPTS' | 'LIVE_INSIGHTS'>('DECISION_SCRIPTS');
+  const [activeDeskSubTab, setActiveDeskSubTab] = useState<
+    'LIVE_AGENTS' | 'DECISION_SCRIPTS' | 'MARKET_INTEL' | 'GOVERNANCE_CALENDAR'
+  >('LIVE_AGENTS');
 
   // Strict Leak-Proof Weekly Drawdown Tracking (≤ ₹5,000 per week limit)
   const [weeklyLosses, setWeeklyLosses] = useState<Record<string, number>>(() => {
@@ -329,6 +332,43 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({
     setTimeout(() => setSyncToastMessage(null), 6000);
   };
 
+  // Simulator helper: 1-Click test of the Step-Ratchet Trailing Stop-Loss (TSL) Profit Lock
+  const handleSimulateTrailingProfitLock = (
+    agentId?: string,
+    orderId?: string,
+    mode: 'RALLY_AND_LOCK_EXIT' | 'RALLY_ARM_75PCT' = 'RALLY_AND_LOCK_EXIT'
+  ) => {
+    const targetAgentId = agentId || selectedAgentId || 'agent_arjuna';
+    let targetOrder = orderId
+      ? orders.find(o => o.id === orderId)
+      : orders.find(o => o.agentId === targetAgentId && o.status === 'OPEN') ||
+        orders.find(o => o.status === 'OPEN');
+
+    if (!targetOrder) {
+      const freshOrder = generateLiveMarketOrder(quotes, targetAgentId);
+      const simulated = simulateTrailingProfitLockCycle(freshOrder, mode);
+      setOrders(prev => [simulated, ...prev]);
+      const lockedAmt = simulated.trailingStopPnlINR ?? simulated.pnlINR;
+      setSyncToastMessage(
+        mode === 'RALLY_ARM_75PCT'
+          ? `🛡️ TSL ARMED (75% LOCK): ${simulated.symbol} rallied to +₹${simulated.peakPnlINR} Peak (+2.5R). Trailing Stop ratcheted to +₹${lockedAmt} (₹${simulated.trailingStopPrice}).`
+          : `✅ TSL PROFIT LOCKED: ${simulated.symbol} rallied to +₹${simulated.peakPnlINR} Peak, ratcheted TSL to 75% (+₹${lockedAmt}), and auto-booked +₹${simulated.pnlINR} on pullback!`
+      );
+      setTimeout(() => setSyncToastMessage(null), 5500);
+      return;
+    }
+
+    const simulated = simulateTrailingProfitLockCycle(targetOrder, mode);
+    setOrders(prev => prev.map(o => (o.id === targetOrder!.id ? simulated : o)));
+    const lockedAmt = simulated.trailingStopPnlINR ?? simulated.pnlINR;
+    setSyncToastMessage(
+      mode === 'RALLY_ARM_75PCT'
+        ? `🛡️ TSL ARMED (75% LOCK): ${simulated.symbol} rallied to +₹${simulated.peakPnlINR} Peak (+2.5R). Trailing Stop ratcheted to +₹${lockedAmt} (₹${simulated.trailingStopPrice}).`
+        : `✅ TSL PROFIT LOCKED: ${simulated.symbol} rallied to +₹${simulated.peakPnlINR} Peak, ratcheted TSL to 75% (+₹${lockedAmt}), and auto-booked +₹${simulated.pnlINR} on pullback!`
+    );
+    setTimeout(() => setSyncToastMessage(null), 5500);
+  };
+
   // Reset agent breaker (restores active status after testing or daily reset)
   const handleResetAgentBreaker = (agentId: string) => {
     setOrders(prev => prev.filter(o => !(o.agentId === agentId && (o.pnlINR || 0) < 0)));
@@ -476,9 +516,29 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({
     const now = new Date();
     setOrders(prev => prev.map(o => {
       if (o.id === orderId) {
+        const leg = o.legs?.[0];
+        const entryP = Number((o.entryPrice ?? leg?.price ?? 100).toFixed(2));
+        const qty = Math.max(1, o.qty ?? leg?.qty ?? 1);
+        const side: 'BUY' | 'SELL' = (o.side ?? leg?.action ?? 'BUY') === 'SELL' ? 'SELL' : 'BUY';
+        const exitP = Number((o.exitPrice ?? leg?.exitPrice ?? entryP).toFixed(2));
+        const exactPnl = Number(((side === 'BUY' ? exitP - entryP : entryP - exitP) * qty).toFixed(2));
         return {
           ...o,
           status: 'SQUARED_OFF',
+          entryPrice: entryP,
+          exitPrice: exitP,
+          pnlINR: exactPnl,
+          legs: [
+            {
+              instrument: leg?.instrument || o.symbol,
+              action: side,
+              qty,
+              price: entryP,
+              exitPrice: exitP,
+              strike: leg?.strike,
+              optionType: leg?.optionType
+            }
+          ],
           orderDate: o.orderDate || formatOrderDate(now),
           orderTime: o.orderTime || formatOrderTime(now),
           timestamp: `${o.orderDate || formatOrderDate(now)} ${formatOrderTime(now)} (Closed)`
@@ -533,12 +593,32 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({
     const now = new Date();
     const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) + ' IST (Kill Switch)';
 
-    // Square off all open orders
+    // Square off all open orders with exact current exitPrice & P&L reconciliation
     setOrders(prev => prev.map(o => {
       if (o.status === 'OPEN') {
+        const leg = o.legs?.[0];
+        const entryP = Number((o.entryPrice ?? leg?.price ?? 100).toFixed(2));
+        const qty = Math.max(1, o.qty ?? leg?.qty ?? 1);
+        const side: 'BUY' | 'SELL' = (o.side ?? leg?.action ?? 'BUY') === 'SELL' ? 'SELL' : 'BUY';
+        const exitP = Number((o.exitPrice ?? leg?.exitPrice ?? entryP).toFixed(2));
+        const exactPnl = Number(((side === 'BUY' ? exitP - entryP : entryP - exitP) * qty).toFixed(2));
         return {
           ...o,
           status: 'SQUARED_OFF',
+          entryPrice: entryP,
+          exitPrice: exitP,
+          pnlINR: exactPnl,
+          legs: [
+            {
+              instrument: leg?.instrument || o.symbol,
+              action: side,
+              qty,
+              price: entryP,
+              exitPrice: exitP,
+              strike: leg?.strike,
+              optionType: leg?.optionType
+            }
+          ],
           timestamp: timeStr,
         };
       }
@@ -585,7 +665,7 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Top Banner: Multi-Agent Performance & Strict Capital Preservation */}
+      {/* Top Banner: Multi-Agent Performance, Single Command Bar & Sub-Tab Navigation */}
       <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 backdrop-blur-md flex flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">
           <div className="flex items-center gap-3">
@@ -595,25 +675,7 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-base font-bold text-slate-100 flex items-center gap-2 font-display flex-wrap">
-                  <span>Autonomous Multi-Agent Quant & Hedge Desk</span>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950/60 border border-emerald-500/40 text-emerald-400 font-bold">
-                    SEBI / NSE / MCX COMPLIANT
-                  </span>
-                  <span
-                    className={`text-[10px] font-mono px-2 py-0.5 rounded border font-bold inline-flex items-center gap-1 ${
-                      isUpstoxLive
-                        ? 'bg-emerald-950/70 border-emerald-500/40 text-emerald-300'
-                        : 'bg-amber-950/60 border-amber-500/40 text-amber-300'
-                    }`}
-                    title={
-                      isUpstoxLive
-                        ? 'Upstox Analytics API Connected: Real-time NSE/BSE quotes & Option Chain active (No Static IP required). All trades executed by the 5 agents are paper trades.'
-                        : 'Delayed Data Notice: Quotes are currently ~15m delayed via Yahoo Finance fallback. Configure your Upstox Analytics Token in Sync Hub -> Broker Gateway for real-time ticks (No Static IP needed).'
-                    }
-                  >
-                    <Info className="w-3 h-3 shrink-0" />
-                    <span>{isUpstoxLive ? 'UPSTOX REALTIME FEED' : 'DELAYED FEED (INFO)'}</span>
-                  </span>
+                  <span>Autonomous 5-Agent Quant &amp; Execution Desk</span>
                 </h2>
                 <div className="relative">
                   <button
@@ -632,7 +694,7 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({
                         </button>
                       </div>
                       <p className="text-[11px] text-slate-300">
-                        5 specialized strategy bots executing strictly defined-risk positions with zero naked exposures and mathematical asymmetry: <strong className="text-sky-300">Chanakya</strong> (Macro Policy), <strong className="text-sky-300">Bhishma</strong> (Vega & Iron Condor), <strong className="text-sky-300">Arjuna</strong> (Momentum Gamma), <strong className="text-sky-300">Kuber</strong> (Cash Delivery), and <strong className="text-sky-300">Vidura</strong> (Statutory Risk Arbitrage).
+                        5 specialized strategy bots executing strictly defined-risk positions with zero naked exposures and mathematical asymmetry: <strong className="text-sky-300">Chanakya</strong> (Macro Policy), <strong className="text-sky-300">Bhishma</strong> (Vega &amp; Iron Condor), <strong className="text-sky-300">Arjuna</strong> (Momentum Gamma), <strong className="text-sky-300">Kuber</strong> (Cash Delivery), and <strong className="text-sky-300">Vidura</strong> (Statutory Risk Arbitrage).
                       </p>
                       <div className="mt-2 pt-2 border-t border-slate-800/80 text-[10px] text-emerald-400 font-mono">
                         ✓ Peak Margin Rule Compliant · Zero Overnight Naked Risk
@@ -641,13 +703,17 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({
                   )}
                 </div>
               </div>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Dedicated roster, live decision scripts, market intelligence, and statutory risk governance.
+              </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          {/* Single Unified Command Bar */}
+          <div className="flex flex-wrap items-center gap-2.5">
             <button
               onClick={() => setShowAllocationModal(true)}
-              className="flex items-center gap-1.5 px-3 py-2 text-xs font-mono font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-500/30 transition-all cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-mono font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-500/30 transition-all cursor-pointer whitespace-nowrap shrink-0"
               title="Configure real capital allocation pool"
             >
               <Edit3 className="w-3.5 h-3.5" />
@@ -657,16 +723,25 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({
             <button
               onClick={() => handleTriggerScanCycle()}
               disabled={isScanning || !allBotsArmed}
-              className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-sky-600 hover:bg-sky-500 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl transition-all shadow-md shadow-sky-600/20 active:scale-95 cursor-pointer"
+              className="flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-white bg-sky-600 hover:bg-sky-500 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl transition-all shadow-md shadow-sky-600/20 active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
               title={!allBotsArmed ? 'Bots are paused. Re-arm bots to resume algorithmic market scanning.' : 'Trigger algorithmic scan cycle'}
             >
               <RotateCw className={`w-3.5 h-3.5 ${isScanning ? 'animate-spin' : ''}`} />
-              <span>{isScanning ? 'Scanning Markets...' : 'Scan All Markets Now'}</span>
+              <span>{isScanning ? 'Scanning Markets...' : 'Scan All Markets'}</span>
+            </button>
+
+            <button
+              onClick={() => handleSimulateTrailingProfitLock(selectedAgentId, undefined, 'RALLY_AND_LOCK_EXIT')}
+              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-mono font-bold rounded-xl bg-emerald-600 hover:bg-emerald-500 text-slate-950 shadow-[0_0_15px_rgba(16,185,129,0.3)] transition-all active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
+              title="1-Click Test: Simulate an intraday rally to +2.5R Peak, ratchet TSL to 75% Profit Lock, and auto-book profit on pullback"
+            >
+              <TrendingUp className="w-3.5 h-3.5" />
+              <span>SIMULATE TSL PROFIT LOCK</span>
             </button>
 
             <button
               onClick={handleToggleMasterBotsArmed}
-              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-mono font-semibold rounded-xl border transition-all cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-mono font-semibold rounded-xl border transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                 allBotsArmed 
                   ? 'bg-emerald-950/60 border-emerald-500/50 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.15)]' 
                   : 'bg-rose-950/60 border-rose-500/50 text-rose-300 shadow-[0_0_12px_rgba(244,63,94,0.15)]'
@@ -679,7 +754,7 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({
 
             <button
               onClick={() => setShowKillConfirmModal(true)}
-              className="flex items-center gap-1.5 px-3 py-2 text-xs font-mono font-bold rounded-xl bg-rose-600 hover:bg-rose-500 text-white shadow-[0_0_15px_rgba(225,29,72,0.35)] transition-all active:scale-95 cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-mono font-bold rounded-xl bg-rose-600 hover:bg-rose-500 text-white shadow-[0_0_15px_rgba(225,29,72,0.35)] transition-all active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
               title="Emergency Stop: Pause all bots and square off all open positions"
             >
               <AlertTriangle className="w-3.5 h-3.5" />
@@ -689,7 +764,7 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({
         </div>
 
         {/* Live Capital & Risk Ledger */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 text-xs font-mono">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 text-xs font-mono tabular-nums">
           <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800 flex flex-col justify-between">
             <div className="flex items-center justify-between">
               <span className="text-[10px] text-slate-500 uppercase">Allocated Capital</span>
@@ -709,12 +784,12 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({
           </div>
 
           <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800 flex flex-col justify-between">
-            <span className="text-[10px] text-slate-500 uppercase">Daily Drawdown Cap</span>
-            <span className="text-base font-bold text-rose-400 mt-0.5">
-              ₹2,000 / Agent
+            <span className="text-[10px] text-slate-500 uppercase">Per-Trade Stop &amp; TSL</span>
+            <span className="text-base font-bold text-emerald-400 mt-0.5 tabular-nums">
+              1R &le; ₹400 · Step-TSL
             </span>
             <span className="text-[10px] text-slate-400 mt-1">
-              Auto-Liquidate & Self-Heal at ≥ ₹2k
+              BE @ +0.8R · 50%/75% Lock (₹2k Emergency)
             </span>
           </div>
 
@@ -740,401 +815,400 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({
             </span>
           </div>
         </div>
-      </div>
 
-      {/* ========================================================================= */}
-      {/* CHALLENGING THE LOGIC: 5 CRITICAL EXECUTION LEAKS & LEAK-PROOF PROOFS */}
-      {/* ========================================================================= */}
-      <div className="p-5 rounded-2xl bg-gradient-to-br from-slate-900/90 via-[#0a101f] to-slate-950 border border-cyan-500/40 shadow-2xl backdrop-blur-md flex flex-col gap-4">
-        <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-400/30 flex items-center justify-center text-cyan-400">
-              <ShieldCheck className="w-6 h-6" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-base font-bold text-white font-display flex items-center gap-2">
-                  <span>Challenging The Logic: Leak-Proof Risk Guardrails</span>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-950/80 border border-cyan-500/40 text-cyan-300 font-bold uppercase">
-                    5 Critical Leaks Sealed
-                  </span>
-                </h3>
-              </div>
-              <p className="text-xs text-slate-400">
-                Why standard algorithmic trading rules fail in real Indian markets, and how J.A.R.V.I.S. mathematically prevents breaches.
-              </p>
-            </div>
-          </div>
-
-          <button
-            onClick={() => setShowLeakProofInspector(!showLeakProofInspector)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 transition cursor-pointer"
-          >
-            {showLeakProofInspector ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-            <span>{showLeakProofInspector ? 'Collapse Proofs' : 'Expand 5 Leaks'}</span>
-          </button>
-        </div>
-
-        {showLeakProofInspector && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 text-xs font-mono">
-            {/* Leak 1 */}
-            <div className="p-3.5 rounded-xl bg-[#070d1a] border border-cyan-500/30 flex flex-col justify-between gap-2.5">
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[10px] font-bold text-rose-400 uppercase tracking-wider">LEAK #1: FLOATING MTM</span>
-                  <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
-                </div>
-                <div className="font-bold text-slate-100 text-[11px] mb-1 font-sans">Unrealized Slippage Bypass</div>
-                <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
-                  <strong className="text-rose-300">The Flaw:</strong> Checking only realized loss lets open positions sink to -₹4,000 floating without tripping the breaker.
-                </p>
-              </div>
-              <div className="p-2 rounded-lg bg-emerald-950/40 border border-emerald-500/30 text-[10px] text-emerald-300 font-sans">
-                <strong>Fix:</strong> Continuous MTM surveillance evaluates <code className="text-cyan-300">Realized + Peak Floating Loss</code> on every tick. Auto-liquidates at ₹2,000.
-              </div>
-            </div>
-
-            {/* Leak 2 */}
-            <div className="p-3.5 rounded-xl bg-[#070d1a] border border-cyan-500/30 flex flex-col justify-between gap-2.5">
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">LEAK #2: OVERNIGHT GAPS</span>
-                  <span className="w-2 h-2 rounded-full bg-amber-500" />
-                </div>
-                <div className="font-bold text-slate-100 text-[11px] mb-1 font-sans">09:15 AM Black Swan Gap</div>
-                <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
-                  <strong className="text-amber-300">The Flaw:</strong> Foreign crashes can cause NIFTY/stocks to gap down -3% at 09:15 AM, blowing ₹2k & ₹5k limits in 1 second.
-                </p>
-              </div>
-              <div className="p-2 rounded-lg bg-emerald-950/40 border border-emerald-500/30 text-[10px] text-emerald-300 font-sans">
-                <strong>Fix:</strong> Mandatory 15:15 IST intraday auto-exit; overnight positions restricted to defined-risk spreads with mathematical max loss &le; ₹800.
-              </div>
-            </div>
-
-            {/* Leak 3 */}
-            <div className="p-3.5 rounded-xl bg-[#070d1a] border border-cyan-500/30 flex flex-col justify-between gap-2.5">
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[10px] font-bold text-sky-400 uppercase tracking-wider">LEAK #3: PRE-TRADE SIZING</span>
-                  <span className="w-2 h-2 rounded-full bg-sky-500" />
-                </div>
-                <div className="font-bold text-slate-100 text-[11px] mb-1 font-sans">Trade #1 Limit Exhaustion</div>
-                <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
-                  <strong className="text-sky-300">The Flaw:</strong> Entering a trade with ₹2,500 stop loss trips the entire ₹2,000 daily budget on a single normal stop-out.
-                </p>
-              </div>
-              <div className="p-2 rounded-lg bg-emerald-950/40 border border-emerald-500/30 text-[10px] text-emerald-300 font-sans">
-                <strong>Fix:</strong> Pre-trade sizing fence bounds single trade risk to &le; ₹800 (0.8% of capital). Blocks orders if remaining loss budget &lt; ₹500.
-              </div>
-            </div>
-
-            {/* Leak 4 */}
-            <div className="p-3.5 rounded-xl bg-[#070d1a] border border-cyan-500/30 flex flex-col justify-between gap-2.5">
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">LEAK #4: CALENDAR TRAP</span>
-                  <span className="w-2 h-2 rounded-full bg-indigo-500" />
-                </div>
-                <div className="font-bold text-slate-100 text-[11px] mb-1 font-sans">Friday to Monday Drawdown</div>
-                <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
-                  <strong className="text-indigo-300">The Flaw:</strong> Losing ₹4,800 Friday and ₹4,800 Monday is a ₹9,600 loss across 2 sessions that evades calendar week limits.
-                </p>
-              </div>
-              <div className="p-2 rounded-lg bg-emerald-950/40 border border-emerald-500/30 text-[10px] text-emerald-300 font-sans">
-                <strong>Fix:</strong> Dual tracking monitors both the Monday-Friday calendar week and a trailing 5-session rolling drawdown.
-              </div>
-            </div>
-
-            {/* Leak 5 */}
-            <div className="p-3.5 rounded-xl bg-[#070d1a] border border-cyan-500/30 flex flex-col justify-between gap-2.5">
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">LEAK #5: REPETITIVE FAILURE</span>
-                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                </div>
-                <div className="font-bold text-slate-100 text-[11px] mb-1 font-sans">Hollow Self-Healing Loop</div>
-                <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
-                  <strong className="text-emerald-300">The Flaw:</strong> Simply displaying a text log without recalibrating parameters means the bot repeats the exact same loss tomorrow.
-                </p>
-              </div>
-              <div className="p-2 rounded-lg bg-emerald-950/40 border border-emerald-500/30 text-[10px] text-emerald-300 font-sans">
-                <strong>Fix:</strong> Automated Diagnostic Pipeline runs backtest sweeps, scans live news catalysts & sentiment, and recalibrates rules before re-arming.
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* First-Principles Market Intelligence, Sector Gain/Loss Matrix & Self-Learning 5 Agents */}
-      <FirstPrinciplesMarketEngine quotes={quotes} />
-
-      {/* 5-Agent Strategy Roster Cards with Live Risk Gauges */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3.5">
-        {agents.map((agent) => {
-          const isSelected = agent.id === selectedAgentId;
-          const netTodayPnl = agent.realizedPnlINR + agent.unrealizedPnlINR;
-          const todayDrawdown = Math.max(0, -(agent.realizedPnlINR + Math.min(0, agent.unrealizedPnlINR)));
-          const dayLimit = agent.dailyLossLimitINR || 2000;
-          const dayDrawdownPct = Math.min(100, (todayDrawdown / dayLimit) * 100);
-
-          const weekDrawdown = agent.weeklyDrawdownINR || todayDrawdown;
-          const weekLimit = agent.weeklyLossLimitINR || 5000;
-          const weekDrawdownPct = Math.min(100, (weekDrawdown / weekLimit) * 100);
-
-          const isDailyHalted = (agent.tradingState === 'DAILY_HALTED');
-          const isWeeklyHalted = (agent.tradingState === 'WEEKLY_HALTED');
-          const hasHealingReport = !!(healingReports[agent.id] || agent.lastHealingReport);
-
-          return (
-            <div
-              key={agent.id}
-              onClick={() => setSelectedAgentId(agent.id)}
-              className={`p-4 rounded-xl cursor-pointer transition-all border flex flex-col justify-between gap-3 ${
-                isDailyHalted || isWeeklyHalted
-                  ? 'bg-rose-950/20 border-rose-500/50 shadow-[0_0_20px_rgba(244,63,94,0.2)] ring-1 ring-rose-500/30'
-                  : isSelected
-                    ? 'bg-sky-500/10 border-sky-400/50 shadow-[0_0_15px_rgba(56,189,248,0.15)] ring-1 ring-sky-400/30'
-                    : 'bg-slate-900/40 border-slate-800 hover:border-slate-700 hover:bg-slate-900/70'
-              }`}
-            >
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs font-bold font-display text-slate-100 flex items-center gap-1.5">
-                    <span className={`w-2 h-2 rounded-full ${
-                      isDailyHalted || isWeeklyHalted
-                        ? 'bg-rose-500 animate-ping'
-                        : agent.status === 'ACTIVE_HEDGING' ? 'bg-emerald-400 animate-pulse' : 'bg-rose-500'
-                    }`} />
-                    <span>{agent.name}</span>
-                  </span>
-                  <span className="text-[10px] font-mono text-slate-500">{agent.codeName}</span>
-                </div>
-
-                <div className="text-[11px] text-sky-400 font-semibold font-mono mb-1">{agent.role}</div>
-                <p className="text-[11px] text-slate-400 line-clamp-2 leading-relaxed font-sans">{agent.strategyType}</p>
-              </div>
-
-              {/* Status Banner */}
-              {isWeeklyHalted ? (
-                <div className="px-2 py-1 rounded bg-purple-950/80 border border-purple-500/80 text-purple-300 text-[10px] font-bold font-mono flex items-center gap-1.5">
-                  <AlertTriangle className="w-3 h-3 text-purple-400 shrink-0" />
-                  <span>WEEKLY HALTED (≥ ₹5,000)</span>
-                </div>
-              ) : isDailyHalted ? (
-                <div className="px-2 py-1 rounded bg-rose-950/80 border border-rose-500/80 text-rose-300 text-[10px] font-bold font-mono flex items-center gap-1.5">
-                  <ShieldAlert className="w-3 h-3 text-rose-400 shrink-0" />
-                  <span>DAILY HALTED (≥ ₹2,000)</span>
-                </div>
-              ) : null}
-
-              <div className="pt-2 border-t border-slate-800 text-[11px] font-mono flex flex-col gap-2">
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Allocated:</span>
-                  <span className="text-emerald-400 font-bold">
-                    ₹{agent.allocatedCapitalINR > 0 ? agent.allocatedCapitalINR.toLocaleString('en-IN') : '1,00,000'}
-                  </span>
-                </div>
-
-                {/* Daily Risk Gauge (₹2,000 Cap) */}
-                <div className="flex flex-col gap-1">
-                  <div className="flex justify-between text-[10px]">
-                    <span className="text-slate-400">Day Drawdown:</span>
-                    <span className={todayDrawdown >= 2000 ? 'text-rose-400 font-bold' : todayDrawdown > 1200 ? 'text-amber-400' : 'text-slate-300'}>
-                      -₹{Math.round(todayDrawdown).toLocaleString('en-IN')} / ₹2,000
-                    </span>
-                  </div>
-                  <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                    <div 
-                      className={`h-full transition-all duration-300 ${
-                        dayDrawdownPct >= 100 ? 'bg-rose-500' : dayDrawdownPct >= 60 ? 'bg-amber-400' : 'bg-emerald-500'
-                      }`}
-                      style={{ width: `${dayDrawdownPct}%` }}
-                    />
-                  </div>
-                </div>
-
-                {/* Weekly Risk Gauge (₹5,000 Cap) */}
-                <div className="flex flex-col gap-1">
-                  <div className="flex justify-between text-[10px]">
-                    <span className="text-slate-400">Week Drawdown:</span>
-                    <span className={weekDrawdown >= 5000 ? 'text-purple-400 font-bold' : 'text-slate-300'}>
-                      -₹{Math.round(weekDrawdown).toLocaleString('en-IN')} / ₹5,000
-                    </span>
-                  </div>
-                  <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                    <div 
-                      className={`h-full transition-all duration-300 ${
-                        weekDrawdownPct >= 100 ? 'bg-purple-500' : weekDrawdownPct >= 60 ? 'bg-amber-400' : 'bg-sky-500'
-                      }`}
-                      style={{ width: `${weekDrawdownPct}%` }}
-                    />
-                  </div>
-                </div>
-
-                <div className="flex justify-between text-[10px] pt-1 border-t border-slate-800/80">
-                  <span className="text-slate-500">Day PnL:</span>
-                  <span className={`font-bold ${
-                    netTodayPnl > 0 ? 'text-emerald-400' : netTodayPnl < 0 ? 'text-rose-400' : 'text-slate-400'
-                  }`}>
-                    {netTodayPnl > 0 ? '+' : ''}₹{netTodayPnl.toLocaleString('en-IN')}
-                  </span>
-                </div>
-
-                {/* Healing Report Trigger Button (when report exists or agent halted) */}
-                {hasHealingReport && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setActiveHealingModalReport(healingReports[agent.id] || agent.lastHealingReport || null);
-                    }}
-                    className="w-full py-1 text-[10px] rounded-lg bg-cyan-950/70 border border-cyan-400/60 hover:bg-cyan-900/60 text-cyan-200 font-bold flex items-center justify-center gap-1.5 transition cursor-pointer shadow-[0_0_10px_rgba(6,182,212,0.2)]"
-                  >
-                    <Wrench className="w-3 h-3 text-cyan-300 animate-spin" style={{ animationDuration: '6s' }} />
-                    <span>View Strategy Healing Plan</span>
-                  </button>
-                )}
-                
-                {/* Direct Paper Trade Deploy Button */}
-                {!(isDailyHalted || isWeeklyHalted) && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedAgentId(agent.id);
-                      handleTriggerScanCycle(agent.id);
-                    }}
-                    disabled={isScanning || agent.status !== 'ACTIVE_HEDGING'}
-                    className="w-full py-1 text-[10px] rounded-lg bg-sky-950/70 border border-sky-500/40 hover:bg-sky-900/60 text-sky-200 font-bold flex items-center justify-center gap-1.5 transition cursor-pointer disabled:opacity-40"
-                    title={`Trigger paper trade order for ${agent.name}`}
-                  >
-                    <Zap className="w-2.5 h-2.5 text-cyan-300" />
-                    <span>Deploy {agent.name.split(' ')[0]} Order</span>
-                  </button>
-                )}
-
-                {/* Simulator & Control Buttons */}
-                <div className="flex items-center justify-between pt-1 border-t border-slate-800/80">
-                  {isDailyHalted || isWeeklyHalted ? (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleResetAgentBreaker(agent.id); }}
-                      className="text-[10px] text-emerald-400 hover:text-emerald-300 hover:underline flex items-center gap-1 font-mono cursor-pointer"
-                      title="Reset drawdown limits and re-enable trading"
-                    >
-                      <RefreshCcw className="w-2.5 h-2.5" />
-                      <span>Reset Limits</span>
-                    </button>
-                  ) : (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleSimulateDrawdownBreach(agent.id); }}
-                      className="text-[10px] text-amber-400/90 hover:text-amber-300 hover:underline flex items-center gap-1 font-mono cursor-pointer"
-                      title="Simulate -₹2,100 loss to test auto-squareoff & self-healing"
-                    >
-                      <Zap className="w-2.5 h-2.5 text-amber-400" />
-                      <span>Test ₹2k Breaker</span>
-                    </button>
-                  )}
-
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleToggleAgentStatus(agent.id); }}
-                    className={`text-[10px] px-2 py-0.5 rounded font-bold transition-all cursor-pointer ${
-                      agent.status === 'ACTIVE_HEDGING'
-                        ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-500/40 hover:bg-rose-950 hover:text-rose-300'
-                        : 'bg-rose-950/60 text-rose-300 border border-rose-500/40 hover:bg-emerald-950 hover:text-emerald-400'
-                    }`}
-                    title={agent.status === 'ACTIVE_HEDGING' ? 'Click to Pause this bot' : 'Click to Arm this bot'}
-                  >
-                    {agent.status === 'ACTIVE_HEDGING' ? 'ARMED' : 'PAUSED'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* ========================================================================= */}
-      {/* MARKET HOURS AUTONOMOUS INTELLIGENCE & ACTIONABLE DECISION-MAKING SCRIPTS */}
-      {/* ========================================================================= */}
-      <div className="p-5 rounded-2xl bg-slate-900/60 border border-cyan-500/30 backdrop-blur-md flex flex-col gap-4 shadow-xl">
-        {/* Header */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-cyan-950/80 border border-cyan-500/40 flex items-center justify-center text-cyan-400">
-              <Radio className="w-5 h-5 animate-pulse" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-base font-bold text-slate-100 font-display flex items-center gap-2">
-                  <span>Market Hours Multi-Agent Live Intelligence & Decision Scripts Hub</span>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 font-bold flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                    LIVE SURVEILLANCE ACTIVE
-                  </span>
-                </h3>
-              </div>
-              <p className="text-xs text-slate-400 mt-0.5">
-                All 5 agents continuously analyze Global News, Global Policies, Option Chain OI & formulate decision-making scripts during market hours. Zero hallucination.
-              </p>
-            </div>
-          </div>
-
-          {/* Sub-view Switcher: Decision Scripts vs Live Intelligence Feed */}
-          <div className="flex items-center gap-2">
-            <div className="flex items-center p-1 bg-slate-950 border border-slate-800 rounded-xl text-xs font-mono">
-              <button
-                onClick={() => setIntelligenceViewTab('DECISION_SCRIPTS')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
-                  intelligenceViewTab === 'DECISION_SCRIPTS'
-                    ? 'bg-cyan-500 text-slate-950 shadow-[0_0_12px_rgba(0,240,255,0.35)]'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <Target className="w-3.5 h-3.5" />
-                <span>DECISION-MAKING SCRIPTS ({allDecisionScripts.length})</span>
-              </button>
-              <button
-                onClick={() => setIntelligenceViewTab('LIVE_INSIGHTS')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
-                  intelligenceViewTab === 'LIVE_INSIGHTS'
-                    ? 'bg-cyan-500 text-slate-950 shadow-[0_0_12px_rgba(0,240,255,0.35)]'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <Globe className="w-3.5 h-3.5" />
-                <span>GLOBAL NEWS & POLICY INTELLIGENCE ({allLiveInsights.length})</span>
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Agent Filter Strip */}
-        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
-          <span className="text-[10px] font-mono text-slate-500 uppercase tracking-wider shrink-0 mr-1">
-            AGENT FILTER:
-          </span>
-          {[
-            { id: 'ALL', label: 'All 5 Agents' },
-            { id: 'agent_chanakya', label: 'Chanakya (Global Macro & Policies)' },
-            { id: 'agent_bhishma', label: 'Bhishma (F&O Institutional Signals)' },
-            { id: 'agent_arjuna', label: 'Arjuna (Cash Alpha Decision Scripts)' },
-            { id: 'agent_kuber', label: 'Kuber (Commodity Policies & Energy)' },
-            { id: 'agent_vidura', label: 'Vidura (SEBI Regulatory Arbiter)' },
-          ].map(f => (
+        {/* Clean 4-Tab Segmented Workspace Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800">
+          <div className="flex flex-wrap items-center gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800 font-mono text-xs">
             <button
-              key={f.id}
-              onClick={() => setIntelligenceAgentFilter(f.id)}
-              className={`px-2.5 py-1 text-xs font-mono rounded-lg transition-all shrink-0 cursor-pointer border ${
-                intelligenceAgentFilter === f.id
-                  ? 'bg-sky-500/20 text-sky-200 border-sky-400/50 font-bold shadow-sm'
-                  : 'bg-slate-950/60 text-slate-400 border-slate-800 hover:border-slate-700 hover:text-slate-200'
+              onClick={() => setActiveDeskSubTab('LIVE_AGENTS')}
+              className={`px-3.5 py-2 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
+                activeDeskSubTab === 'LIVE_AGENTS'
+                  ? 'bg-cyan-500 text-slate-950 shadow-[0_0_12px_rgba(0,240,255,0.3)]'
+                  : 'text-slate-400 hover:text-white'
               }`}
             >
-              {f.label}
+              <Bot className="w-3.5 h-3.5" />
+              <span>01. Live Agents &amp; Execution</span>
             </button>
-          ))}
-        </div>
+            <button
+              onClick={() => setActiveDeskSubTab('DECISION_SCRIPTS')}
+              className={`px-3.5 py-2 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
+                activeDeskSubTab === 'DECISION_SCRIPTS'
+                  ? 'bg-cyan-500 text-slate-950 shadow-[0_0_12px_rgba(0,240,255,0.3)]'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Target className="w-3.5 h-3.5" />
+              <span>02. Decision Scripts ({allDecisionScripts.length})</span>
+            </button>
+            <button
+              onClick={() => setActiveDeskSubTab('MARKET_INTEL')}
+              className={`px-3.5 py-2 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
+                activeDeskSubTab === 'MARKET_INTEL'
+                  ? 'bg-cyan-500 text-slate-950 shadow-[0_0_12px_rgba(0,240,255,0.3)]'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Globe className="w-3.5 h-3.5" />
+              <span>03. Market Intelligence ({allLiveInsights.length})</span>
+            </button>
+            <button
+              onClick={() => setActiveDeskSubTab('GOVERNANCE_CALENDAR')}
+              className={`px-3.5 py-2 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
+                activeDeskSubTab === 'GOVERNANCE_CALENDAR'
+                  ? 'bg-cyan-500 text-slate-950 shadow-[0_0_12px_rgba(0,240,255,0.3)]'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>04. Governance &amp; Calendar</span>
+            </button>
+          </div>
 
-        {/* VIEW 1: DECISION-MAKING SCRIPTS */}
-        {intelligenceViewTab === 'DECISION_SCRIPTS' && (
+          {onNavigateToTradeHistory && (
+            <button
+              onClick={onNavigateToTradeHistory}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-950 hover:bg-slate-900 border border-cyan-500/40 text-cyan-300 text-xs font-mono font-bold transition cursor-pointer whitespace-nowrap shrink-0"
+            >
+              <span>Open Trade History ({orders.length})</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* SUB-TAB 1: LIVE 5-AGENT ROSTER, INVARIANT RULEBOOK & EXECUTION SUMMARY    */}
+      {/* ========================================================================= */}
+      {activeDeskSubTab === 'LIVE_AGENTS' && (
+        <div className="flex flex-col gap-6">
+          {/* 5-Agent Strategy Roster Cards with Live Risk Gauges */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3.5">
+            {agents.map((agent) => {
+              const isSelected = agent.id === selectedAgentId;
+              const netTodayPnl = agent.realizedPnlINR + agent.unrealizedPnlINR;
+              const todayDrawdown = Math.max(0, -(agent.realizedPnlINR + Math.min(0, agent.unrealizedPnlINR)));
+              const dayLimit = agent.dailyLossLimitINR || 2000;
+              const dayDrawdownPct = Math.min(100, (todayDrawdown / dayLimit) * 100);
+
+              const weekDrawdown = agent.weeklyDrawdownINR || todayDrawdown;
+              const weekLimit = agent.weeklyLossLimitINR || 5000;
+              const weekDrawdownPct = Math.min(100, (weekDrawdown / weekLimit) * 100);
+
+              const isDailyHalted = (agent.tradingState === 'DAILY_HALTED');
+              const isWeeklyHalted = (agent.tradingState === 'WEEKLY_HALTED');
+              const hasHealingReport = !!(healingReports[agent.id] || agent.lastHealingReport);
+
+              return (
+                <div
+                  key={agent.id}
+                  onClick={() => setSelectedAgentId(agent.id)}
+                  className={`p-4 rounded-xl cursor-pointer transition-all border flex flex-col justify-between gap-3 ${
+                    isDailyHalted || isWeeklyHalted
+                      ? 'bg-rose-950/20 border-rose-500/50 shadow-[0_0_20px_rgba(244,63,94,0.2)] ring-1 ring-rose-500/30'
+                      : isSelected
+                        ? 'bg-sky-500/10 border-sky-400/50 shadow-[0_0_15px_rgba(56,189,248,0.15)] ring-1 ring-sky-400/30'
+                        : 'bg-slate-900/40 border-slate-800 hover:border-slate-700 hover:bg-slate-900/70'
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs font-bold font-display text-slate-100 flex items-center gap-1.5">
+                        <span className={`w-2 h-2 rounded-full ${
+                          isDailyHalted || isWeeklyHalted
+                            ? 'bg-rose-500 animate-ping'
+                            : agent.status === 'ACTIVE_HEDGING' ? 'bg-emerald-400 animate-pulse' : 'bg-rose-500'
+                        }`} />
+                        <span>{agent.name}</span>
+                      </span>
+                      <span className="text-[10px] font-mono text-slate-500">{agent.codeName}</span>
+                    </div>
+
+                    <div className="text-[11px] text-sky-400 font-semibold font-mono mb-1">{agent.role}</div>
+                    <p className="text-[11px] text-slate-400 line-clamp-2 leading-relaxed font-sans">{agent.strategyType}</p>
+                  </div>
+
+                  {/* Status Banner */}
+                  {isWeeklyHalted ? (
+                    <div className="px-2 py-1 rounded bg-purple-950/80 border border-purple-500/80 text-purple-300 text-[10px] font-bold font-mono flex items-center gap-1.5">
+                      <AlertTriangle className="w-3 h-3 text-purple-400 shrink-0" />
+                      <span>WEEKLY HALTED (≥ ₹5,000)</span>
+                    </div>
+                  ) : isDailyHalted ? (
+                    <div className="px-2 py-1 rounded bg-rose-950/80 border border-rose-500/80 text-rose-300 text-[10px] font-bold font-mono flex items-center gap-1.5">
+                      <ShieldAlert className="w-3 h-3 text-rose-400 shrink-0" />
+                      <span>DAILY HALTED (≥ ₹2,000)</span>
+                    </div>
+                  ) : null}
+
+                  <div className="pt-2 border-t border-slate-800 text-[11px] font-mono tabular-nums flex flex-col gap-2">
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Allocated:</span>
+                      <span className="text-emerald-400 font-bold">
+                        ₹{agent.allocatedCapitalINR > 0 ? agent.allocatedCapitalINR.toLocaleString('en-IN') : '1,00,000'}
+                      </span>
+                    </div>
+
+                    {/* Daily Risk Gauge (₹2,000 Cap) */}
+                    <div className="flex flex-col gap-1">
+                      <div className="flex justify-between text-[10px]">
+                        <span className="text-slate-400">Day Drawdown:</span>
+                        <span className={todayDrawdown >= 2000 ? 'text-rose-400 font-bold' : todayDrawdown > 1200 ? 'text-amber-400' : 'text-slate-300'}>
+                          -₹{Math.round(todayDrawdown).toLocaleString('en-IN')} / ₹2,000
+                        </span>
+                      </div>
+                      <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                        <div 
+                          className={`h-full transition-all duration-300 ${
+                            dayDrawdownPct >= 100 ? 'bg-rose-500' : dayDrawdownPct >= 60 ? 'bg-amber-400' : 'bg-emerald-500'
+                          }`}
+                          style={{ width: `${dayDrawdownPct}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Weekly Risk Gauge (₹5,000 Cap) */}
+                    <div className="flex flex-col gap-1">
+                      <div className="flex justify-between text-[10px]">
+                        <span className="text-slate-400">Week Drawdown:</span>
+                        <span className={weekDrawdown >= 5000 ? 'text-purple-400 font-bold' : 'text-slate-300'}>
+                          -₹{Math.round(weekDrawdown).toLocaleString('en-IN')} / ₹5,000
+                        </span>
+                      </div>
+                      <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                        <div 
+                          className={`h-full transition-all duration-300 ${
+                            weekDrawdownPct >= 100 ? 'bg-purple-500' : weekDrawdownPct >= 60 ? 'bg-amber-400' : 'bg-sky-500'
+                          }`}
+                          style={{ width: `${weekDrawdownPct}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex justify-between text-[10px] pt-1 border-t border-slate-800/80">
+                      <span className="text-slate-500">Day PnL:</span>
+                      <span className={`font-bold ${
+                        netTodayPnl > 0 ? 'text-emerald-400' : netTodayPnl < 0 ? 'text-rose-400' : 'text-slate-400'
+                      }`}>
+                        {netTodayPnl > 0 ? '+' : ''}₹{netTodayPnl.toLocaleString('en-IN')}
+                      </span>
+                    </div>
+
+                    {/* Healing Report Trigger Button */}
+                    {hasHealingReport && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveHealingModalReport(healingReports[agent.id] || agent.lastHealingReport || null);
+                        }}
+                        className="w-full py-1 text-[10px] rounded-lg bg-cyan-950/70 border border-cyan-400/60 hover:bg-cyan-900/60 text-cyan-200 font-bold flex items-center justify-center gap-1.5 transition cursor-pointer"
+                      >
+                        <Wrench className="w-3 h-3 text-cyan-300" />
+                        <span>View Strategy Healing Plan</span>
+                      </button>
+                    )}
+
+                    {/* Clean Action Footer: Deploy Order + Arm/Pause */}
+                    <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-slate-800/80">
+                      {isDailyHalted || isWeeklyHalted ? (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleResetAgentBreaker(agent.id); }}
+                          className="flex-1 py-1 px-2 text-[10px] rounded-lg bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/60 flex items-center justify-center gap-1 font-mono font-bold cursor-pointer whitespace-nowrap"
+                          title="Reset drawdown limits and re-enable trading"
+                        >
+                          <RefreshCcw className="w-2.5 h-2.5" />
+                          <span>Reset Limits</span>
+                        </button>
+                      ) : (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedAgentId(agent.id);
+                            handleTriggerScanCycle(agent.id);
+                          }}
+                          disabled={isScanning || agent.status !== 'ACTIVE_HEDGING'}
+                          className="flex-1 py-1 px-2 text-[10px] rounded-lg bg-sky-950/70 border border-sky-500/40 hover:bg-sky-900/60 text-sky-200 font-bold flex items-center justify-center gap-1 transition cursor-pointer disabled:opacity-40 whitespace-nowrap"
+                          title={`Trigger paper trade order for ${agent.name}`}
+                        >
+                          <Zap className="w-2.5 h-2.5 text-cyan-300 shrink-0" />
+                          <span>Deploy {agent.name.split(' ')[0]}</span>
+                        </button>
+                      )}
+
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleToggleAgentStatus(agent.id); }}
+                        className={`text-[10px] px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                          agent.status === 'ACTIVE_HEDGING'
+                            ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-500/40 hover:bg-rose-950 hover:text-rose-300'
+                            : 'bg-rose-950/60 text-rose-300 border border-rose-500/40 hover:bg-emerald-950 hover:text-emerald-400'
+                        }`}
+                        title={agent.status === 'ACTIVE_HEDGING' ? 'Click to Pause this bot' : 'Click to Arm this bot'}
+                      >
+                        {agent.status === 'ACTIVE_HEDGING' ? 'ARMED' : 'PAUSED'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Selected Agent Invariant Rulebook & Latest Action */}
+          <div className="p-5 rounded-2xl bg-slate-900/50 border border-slate-800 backdrop-blur-sm flex flex-col gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                <span className="text-xs font-bold text-slate-200 font-mono uppercase tracking-wider">
+                  {selectedAgent.name} ({selectedAgent.codeName}) — Statutory Invariants &amp; Execution Rules
+                </span>
+              </div>
+              <span className="text-[11px] font-mono text-slate-500">
+                LAST DECISION: {selectedAgent.lastActionTimestamp}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 mt-1">
+              {/* Rules Checklist (7 cols) */}
+              <div className="lg:col-span-7 flex flex-col gap-2">
+                <span className="text-[11px] font-mono text-slate-400 uppercase">Non-Negotiable Execution Rules:</span>
+                <div className="flex flex-col gap-1.5">
+                  {selectedAgent.strictRuleSet.map((rule, idx) => (
+                    <div key={idx} className="flex items-start gap-2 p-2 rounded-lg bg-slate-950/70 border border-slate-800/80 text-xs text-slate-300 font-sans">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
+                      <span>{rule}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Last Action Transcript (5 cols) */}
+              <div className="lg:col-span-5 p-3.5 rounded-xl bg-slate-950/80 border border-sky-500/20 flex flex-col justify-between gap-2">
+                <div>
+                  <span className="text-[10px] font-mono text-sky-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Zap className="w-3.5 h-3.5" />
+                    <span>Autonomous Market Action Audit</span>
+                  </span>
+                  <p className="text-xs text-slate-200 leading-relaxed font-mono mt-2">
+                    "{selectedAgent.lastAction}"
+                  </p>
+                </div>
+                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] font-mono text-slate-400">
+                  <span>Execution Pipeline: DIRECT NSE/MCX</span>
+                  <span className="text-emerald-400">0 RULE VIOLATIONS</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Compact Session Execution Summary Bar (Canonical Table lives in Trade History) */}
+          <div className="p-5 rounded-2xl bg-slate-900/60 border border-cyan-500/30 backdrop-blur-md flex flex-col gap-4 shadow-xl">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+                  <Scale className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-100 font-mono uppercase tracking-wide">
+                    Session Execution Summary &amp; Step-Ratchet TSL Telemetry
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Full order audit table with live TSL floors, High-Water-Mark Peak P&amp;L, and individual trade controls is maintained in the dedicated <strong>Trade History</strong> tab.
+                  </p>
+                </div>
+              </div>
+
+              {onNavigateToTradeHistory && (
+                <button
+                  onClick={onNavigateToTradeHistory}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs rounded-xl shadow-[0_0_20px_rgba(0,240,255,0.3)] transition cursor-pointer active:scale-95 font-mono whitespace-nowrap shrink-0"
+                >
+                  <span>VIEW FULL ORDER TABLE IN TRADE HISTORY</span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-slate-800/80 font-mono tabular-nums">
+              <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 flex flex-col">
+                <span className="text-[10px] text-slate-400 uppercase">ACTIVE ORDERS</span>
+                <span className="text-base font-bold text-cyan-300 mt-0.5">
+                  {openOrders.length} Working
+                </span>
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 flex flex-col">
+                <span className="text-[10px] text-slate-400 uppercase">CLOSED POSITIONS</span>
+                <span className="text-base font-bold text-slate-200 mt-0.5">
+                  {closedOrders.length} Settled
+                </span>
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 flex flex-col">
+                <span className="text-[10px] text-slate-400 uppercase">REALIZED P&amp;L</span>
+                <span className={`text-base font-bold mt-0.5 ${totalRealizedPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {totalRealizedPnl >= 0 ? '+' : ''}₹{totalRealizedPnl.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 flex flex-col">
+                <span className="text-[10px] text-slate-400 uppercase">UNREALIZED MTM</span>
+                <span className={`text-base font-bold mt-0.5 ${totalUnrealizedPnl >= 0 ? 'text-cyan-300' : 'text-rose-400'}`}>
+                  {totalUnrealizedPnl >= 0 ? '+' : ''}₹{totalUnrealizedPnl.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* SUB-TAB 2: ACTIONABLE MULTI-AGENT DECISION SCRIPTS                        */}
+      {/* ========================================================================= */}
+      {activeDeskSubTab === 'DECISION_SCRIPTS' && (
+        <div className="p-5 rounded-2xl bg-slate-900/60 border border-cyan-500/30 backdrop-blur-md flex flex-col gap-4 shadow-xl">
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-cyan-950/80 border border-cyan-500/40 flex items-center justify-center text-cyan-400">
+                <Target className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-100 font-display">
+                  Multi-Agent Actionable Decision Scripts ({filteredDecisionScripts.length})
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Deterministic entry triggers, targets, and 1R &le; ₹400 stop-losses formulated across NSE F&amp;O, Cash, and MCX.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Agent Filter Strip */}
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
+            <span className="text-[10px] font-mono text-slate-500 uppercase tracking-wider shrink-0 mr-1">
+              AGENT FILTER:
+            </span>
+            {[
+              { id: 'ALL', label: 'All 5 Agents' },
+              { id: 'agent_chanakya', label: 'Chanakya (Global Macro & Policies)' },
+              { id: 'agent_bhishma', label: 'Bhishma (F&O Institutional Signals)' },
+              { id: 'agent_arjuna', label: 'Arjuna (Cash Alpha Decision Scripts)' },
+              { id: 'agent_kuber', label: 'Kuber (Commodity Policies & Energy)' },
+              { id: 'agent_vidura', label: 'Vidura (SEBI Regulatory Arbiter)' },
+            ].map(f => (
+              <button
+                key={f.id}
+                onClick={() => setIntelligenceAgentFilter(f.id)}
+                className={`px-2.5 py-1 text-xs font-mono rounded-lg transition-all shrink-0 cursor-pointer border ${
+                  intelligenceAgentFilter === f.id
+                    ? 'bg-sky-500/20 text-sky-200 border-sky-400/50 font-bold shadow-sm'
+                    : 'bg-slate-950/60 text-slate-400 border-slate-800 hover:border-slate-700 hover:text-slate-200'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
             {filteredDecisionScripts.map((script) => (
               <div
@@ -1142,7 +1216,6 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({
                 className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 hover:border-cyan-500/40 transition-all flex flex-col justify-between gap-3 shadow-md"
               >
                 <div>
-                  {/* Top line: Symbol, Agent, Segment */}
                   <div className="flex items-center justify-between mb-1.5">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-bold text-slate-100 font-mono">{script.symbol}</span>
@@ -1157,8 +1230,7 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({
 
                   <h4 className="text-xs font-semibold text-slate-300 mb-2">{script.name}</h4>
 
-                  {/* Quantitative Levels Box */}
-                  <div className="grid grid-cols-3 gap-2 p-2.5 rounded-lg bg-[#070b14] border border-slate-800/80 text-[11px] font-mono mb-2">
+                  <div className="grid grid-cols-3 gap-2 p-2.5 rounded-lg bg-[#070b14] border border-slate-800/80 text-[11px] font-mono tabular-nums mb-2">
                     <div>
                       <span className="text-[9px] text-slate-500 uppercase block">ENTRY TRIGGER</span>
                       <span className="text-sky-300 font-bold block truncate" title={script.entryTrigger}>
@@ -1179,7 +1251,6 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({
                     </div>
                   </div>
 
-                  {/* Conviction Score & Catalyst */}
                   <div className="flex items-center justify-between text-[11px] font-mono mb-1.5">
                     <span className="text-slate-400">Conviction Score:</span>
                     <span className="text-cyan-300 font-bold flex items-center gap-1.5">
@@ -1195,14 +1266,13 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({
                   </p>
                 </div>
 
-                {/* Staging Button */}
                 <div className="pt-2.5 border-t border-slate-800/80 flex items-center justify-between">
-                  <span className="text-[10px] font-mono text-slate-500">
+                  <span className="text-[10px] font-mono tabular-nums text-slate-500">
                     LTP: ₹{script.derivedMetrics.ltp.toLocaleString('en-IN')} ({script.derivedMetrics.changePct >= 0 ? '+' : ''}{script.derivedMetrics.changePct.toFixed(2)}%)
                   </span>
                   <button
                     onClick={() => handleStageScript(script)}
-                    className="flex items-center gap-1 px-3 py-1.5 text-xs font-mono font-bold rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition shadow-sm hover:shadow-[0_0_12px_rgba(16,185,129,0.3)] active:scale-95 cursor-pointer"
+                    className="flex items-center gap-1 px-3 py-1.5 text-xs font-mono font-bold rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition shadow-sm active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
                   >
                     <Zap className="w-3.5 h-3.5" />
                     <span>STAGE SCRIPT</span>
@@ -1211,10 +1281,57 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({
               </div>
             ))}
           </div>
-        )}
+        </div>
+      )}
 
-        {/* VIEW 2: GLOBAL NEWS & POLICY INTELLIGENCE STREAM */}
-        {intelligenceViewTab === 'LIVE_INSIGHTS' && (
+      {/* ========================================================================= */}
+      {/* SUB-TAB 3: GLOBAL NEWS & POLICY INTELLIGENCE STREAM                       */}
+      {/* ========================================================================= */}
+      {activeDeskSubTab === 'MARKET_INTEL' && (
+        <div className="p-5 rounded-2xl bg-slate-900/60 border border-cyan-500/30 backdrop-blur-md flex flex-col gap-4 shadow-xl">
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-cyan-950/80 border border-cyan-500/40 flex items-center justify-center text-cyan-400">
+                <Globe className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-100 font-display">
+                  Global News, Macro Policy &amp; Institutional Intelligence ({filteredLiveInsights.length})
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Real-time macro catalysts, central bank policy shifts, and institutional flow alerts monitored by the 5 agents.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Agent Filter Strip */}
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
+            <span className="text-[10px] font-mono text-slate-500 uppercase tracking-wider shrink-0 mr-1">
+              AGENT FILTER:
+            </span>
+            {[
+              { id: 'ALL', label: 'All 5 Agents' },
+              { id: 'agent_chanakya', label: 'Chanakya (Global Macro & Policies)' },
+              { id: 'agent_bhishma', label: 'Bhishma (F&O Institutional Signals)' },
+              { id: 'agent_arjuna', label: 'Arjuna (Cash Alpha Decision Scripts)' },
+              { id: 'agent_kuber', label: 'Kuber (Commodity Policies & Energy)' },
+              { id: 'agent_vidura', label: 'Vidura (SEBI Regulatory Arbiter)' },
+            ].map(f => (
+              <button
+                key={f.id}
+                onClick={() => setIntelligenceAgentFilter(f.id)}
+                className={`px-2.5 py-1 text-xs font-mono rounded-lg transition-all shrink-0 cursor-pointer border ${
+                  intelligenceAgentFilter === f.id
+                    ? 'bg-sky-500/20 text-sky-200 border-sky-400/50 font-bold shadow-sm'
+                    : 'bg-slate-950/60 text-slate-400 border-slate-800 hover:border-slate-700 hover:text-slate-200'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
             {filteredLiveInsights.map((insight) => (
               <div
@@ -1259,227 +1376,173 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({
               </div>
             ))}
           </div>
-        )}
-      </div>
-
-      {/* Selected Agent Invariant Rulebook & Latest Action */}
-      <div className="p-5 rounded-2xl bg-slate-900/50 border border-slate-800 backdrop-blur-sm flex flex-col gap-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            <span className="text-xs font-bold text-slate-200 font-mono uppercase tracking-wider">
-              {selectedAgent.name} ({selectedAgent.codeName}) — Hard-Coded Statutory Invariants & Rules
-            </span>
-          </div>
-          <span className="text-[11px] font-mono text-slate-500">
-            LAST DECISION: {selectedAgent.lastActionTimestamp}
-          </span>
         </div>
+      )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 mt-1">
-          {/* Rules Checklist (7 cols) */}
-          <div className="lg:col-span-7 flex flex-col gap-2">
-            <span className="text-[11px] font-mono text-slate-400 uppercase">Non-Negotiable Execution Rules:</span>
-            <div className="flex flex-col gap-1.5">
-              {selectedAgent.strictRuleSet.map((rule, idx) => (
-                <div key={idx} className="flex items-start gap-2 p-2 rounded-lg bg-slate-950/70 border border-slate-800/80 text-xs text-slate-300 font-sans">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
-                  <span>{rule}</span>
+      {/* ========================================================================= */}
+      {/* SUB-TAB 4: GOVERNANCE, 5 LEAK PROOFS & 2026/2027 HOLIDAY CALENDAR         */}
+      {/* ========================================================================= */}
+      {activeDeskSubTab === 'GOVERNANCE_CALENDAR' && (
+        <div className="flex flex-col gap-6">
+          {/* 5 Critical Execution Leaks & Leak-Proof Proofs */}
+          <div className="p-5 rounded-2xl bg-gradient-to-br from-slate-900/90 via-[#0a101f] to-slate-950 border border-cyan-500/40 shadow-2xl backdrop-blur-md flex flex-col gap-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-400/30 flex items-center justify-center text-cyan-400">
+                  <ShieldCheck className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white font-display flex items-center gap-2">
+                    <span>Leak-Proof Risk Guardrails (5 Critical Execution Leaks Sealed)</span>
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    How J.A.R.V.I.S. mathematically prevents floating slippage, overnight gaps, and round-trip losses.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 text-xs font-mono">
+              <div className="p-3.5 rounded-xl bg-[#070d1a] border border-cyan-500/30 flex flex-col justify-between gap-2.5">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] font-bold text-rose-400 uppercase tracking-wider">LEAK #1: FLOATING MTM</span>
+                    <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+                  </div>
+                  <div className="font-bold text-slate-100 text-[11px] mb-1 font-sans">Unrealized Slippage Bypass</div>
+                  <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
+                    <strong className="text-rose-300">The Flaw:</strong> Checking only realized loss lets open positions sink to -₹4,000 floating without tripping the breaker.
+                  </p>
+                </div>
+                <div className="p-2 rounded-lg bg-emerald-950/40 border border-emerald-500/30 text-[10px] text-emerald-300 font-sans">
+                  <strong>Fix:</strong> Continuous MTM surveillance evaluates <code className="text-cyan-300">Realized + Peak Floating Loss</code> on every tick. Auto-liquidates at ₹2,000.
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-[#070d1a] border border-cyan-500/30 flex flex-col justify-between gap-2.5">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">LEAK #2: OVERNIGHT GAPS</span>
+                    <span className="w-2 h-2 rounded-full bg-amber-500" />
+                  </div>
+                  <div className="font-bold text-slate-100 text-[11px] mb-1 font-sans">09:15 AM Black Swan Gap</div>
+                  <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
+                    <strong className="text-amber-300">The Flaw:</strong> Foreign crashes can cause NIFTY/stocks to gap down -3% at 09:15 AM, blowing ₹2k &amp; ₹5k limits in 1 second.
+                  </p>
+                </div>
+                <div className="p-2 rounded-lg bg-emerald-950/40 border border-emerald-500/30 text-[10px] text-emerald-300 font-sans">
+                  <strong>Fix:</strong> Mandatory 15:15 IST intraday auto-exit; overnight positions restricted to defined-risk spreads with mathematical max loss &le; ₹800.
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-[#070d1a] border border-cyan-500/30 flex flex-col justify-between gap-2.5">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] font-bold text-sky-400 uppercase tracking-wider">LEAK #3: ROUND-TRIP LOSS</span>
+                    <span className="w-2 h-2 rounded-full bg-sky-500" />
+                  </div>
+                  <div className="font-bold text-slate-100 text-[11px] mb-1 font-sans">Step-Ratchet TSL &amp; 1R &le; ₹400 Stop</div>
+                  <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
+                    <strong className="text-sky-300">The Flaw:</strong> Waiting for -₹2,000 or letting +₹700 unrealized gains reverse into losses destroys profitability.
+                  </p>
+                </div>
+                <div className="p-2 rounded-lg bg-emerald-950/40 border border-emerald-500/30 text-[10px] text-emerald-300 font-sans">
+                  <strong>Fix:</strong> Per-trade stop is capped at <strong>1R &le; ₹400</strong>. Step-Ratchet TSL arms <strong>Breakeven (+₹15) at +0.8R</strong>, locks <strong>50% at +1.5R</strong>, and <strong>75% at +2.2R+</strong>.
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-[#070d1a] border border-cyan-500/30 flex flex-col justify-between gap-2.5">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">LEAK #4: CALENDAR TRAP</span>
+                    <span className="w-2 h-2 rounded-full bg-indigo-500" />
+                  </div>
+                  <div className="font-bold text-slate-100 text-[11px] mb-1 font-sans">Friday to Monday Drawdown</div>
+                  <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
+                    <strong className="text-indigo-300">The Flaw:</strong> Losing ₹4,800 Friday and ₹4,800 Monday is a ₹9,600 loss across 2 sessions that evades calendar week limits.
+                  </p>
+                </div>
+                <div className="p-2 rounded-lg bg-emerald-950/40 border border-emerald-500/30 text-[10px] text-emerald-300 font-sans">
+                  <strong>Fix:</strong> Dual tracking monitors both the Monday-Friday calendar week and a trailing 5-session rolling drawdown.
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-[#070d1a] border border-cyan-500/30 flex flex-col justify-between gap-2.5">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">LEAK #5: REPETITIVE FAILURE</span>
+                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                  </div>
+                  <div className="font-bold text-slate-100 text-[11px] mb-1 font-sans">Self-Healing Diagnostic Loop</div>
+                  <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
+                    <strong className="text-emerald-300">The Flaw:</strong> Simply displaying a text log without recalibrating parameters means the bot repeats the exact same loss tomorrow.
+                  </p>
+                </div>
+                <div className="p-2 rounded-lg bg-emerald-950/40 border border-emerald-500/30 text-[10px] text-emerald-300 font-sans">
+                  <strong>Fix:</strong> Automated Diagnostic Pipeline runs backtest sweeps, scans live news catalysts &amp; sentiment, and recalibrates rules before re-arming.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* SEBI / NSE / RBI Compliance Rule Engine Audit */}
+          <div className="p-5 rounded-2xl bg-slate-900/50 border border-slate-800 backdrop-blur-sm flex flex-col gap-3">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-sky-400" />
+                <h3 className="text-xs font-bold text-slate-200 uppercase tracking-wider font-mono">
+                  SEBI, NSE, BSE, MCX &amp; RBI Statutory Rule Invariants
+                </h3>
+              </div>
+              <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/40 px-2.5 py-0.5 rounded border border-emerald-500/40">
+                6/6 INVARIANTS SATISFIED
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pt-1">
+              {SEBI_COMPLIANCE_RULES.map((rule) => (
+                <div
+                  key={rule.ruleId}
+                  className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800/90 flex flex-col justify-between gap-2"
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-sky-950 text-sky-300 border border-sky-800/60">
+                        {rule.authority}
+                      </span>
+                      <span className="text-[10px] font-mono text-emerald-400 font-bold">
+                        {rule.status}
+                      </span>
+                    </div>
+                    <h4 className="text-xs font-semibold text-slate-200">{rule.name}</h4>
+                    <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">{rule.requirement}</p>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-800/80 text-[10px] font-mono text-emerald-400/90">
+                    {rule.details}
+                  </div>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Last Action Transcript (5 cols) */}
-          <div className="lg:col-span-5 p-3.5 rounded-xl bg-slate-950/80 border border-sky-500/20 flex flex-col justify-between gap-2">
-            <div>
-              <span className="text-[10px] font-mono text-sky-400 uppercase tracking-wider flex items-center gap-1.5">
-                <Zap className="w-3.5 h-3.5" />
-                <span>Autonomous Market Action Audit</span>
-              </span>
-              <p className="text-xs text-slate-200 leading-relaxed font-mono mt-2">
-                "{selectedAgent.lastAction}"
-              </p>
-            </div>
-            <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] font-mono text-slate-400">
-              <span>Execution Pipeline: DIRECT NSE/MCX</span>
-              <span className="text-emerald-400">0 RULE VIOLATIONS</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Paper Trading Execution Gateway (Directs to Dedicated Trade History Table) */}
-      <div className="p-5 rounded-2xl bg-gradient-to-r from-slate-900/80 via-[#0a1022] to-slate-900/80 border border-cyan-500/30 backdrop-blur-md flex flex-col gap-4 shadow-xl">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
-              <Scale className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2 font-mono uppercase tracking-wide">
-                  <span>Paper Trading Execution & Order Ledger</span>
-                </h3>
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-950/80 text-cyan-300 border border-cyan-500/30 font-mono">
-                  DEDICATED VIEW NOW IN MAIN NAVIGATION
-                </span>
-              </div>
-              <p className="text-xs text-slate-400 font-mono mt-0.5">
-                Session trades are managed in the dedicated <strong>Trade History</strong> audit terminal with 8 standard columns (Instrument, Side, Qty, Entry, Exit, P&L, Date, Time).
-              </p>
-            </div>
-          </div>
-
-          {/* Action button to open dedicated Trade History */}
-          {onNavigateToTradeHistory && (
-            <button
-              onClick={onNavigateToTradeHistory}
-              className="flex items-center gap-2 px-4 py-2.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs rounded-xl shadow-[0_0_20px_rgba(0,240,255,0.35)] transition cursor-pointer active:scale-95 font-mono"
-            >
-              <span>VIEW DEDICATED TRADE HISTORY TABLE</span>
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-
-        {/* Quick Tally & Instant Trigger Controls */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-slate-800/80 font-mono">
-          <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 flex flex-col">
-            <span className="text-[10px] text-slate-400 uppercase">ACTIVE ORDERS</span>
-            <span className="text-base font-bold text-cyan-300 mt-0.5">
-              {openOrders.length} Working
-            </span>
-          </div>
-
-          <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 flex flex-col">
-            <span className="text-[10px] text-slate-400 uppercase">CLOSED POSITIONS</span>
-            <span className="text-base font-bold text-slate-200 mt-0.5">
-              {closedOrders.length} Settled
-            </span>
-          </div>
-
-          <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 flex flex-col">
-            <span className="text-[10px] text-slate-400 uppercase">REALIZED P&L</span>
-            <span className={`text-base font-bold mt-0.5 ${totalRealizedPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-              {totalRealizedPnl >= 0 ? '+' : ''}₹{totalRealizedPnl.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-            </span>
-          </div>
-
-          <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 flex flex-col">
-            <span className="text-[10px] text-slate-400 uppercase">UNREALIZED MTM</span>
-            <span className={`text-base font-bold mt-0.5 ${totalUnrealizedPnl >= 0 ? 'text-cyan-300' : 'text-rose-400'}`}>
-              {totalUnrealizedPnl >= 0 ? '+' : ''}₹{totalUnrealizedPnl.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-            </span>
-          </div>
-        </div>
-
-        {/* Instant Multi-Desk Deployer */}
-        <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-xl bg-slate-950/60 border border-slate-800 text-xs font-mono">
-          <div className="flex items-center gap-1.5 text-slate-300 font-semibold">
-            <Zap className="w-3.5 h-3.5 text-amber-400" />
-            <span>Deploy Paper Order via Live Quotes:</span>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              onClick={() => handleTriggerScanCycle('agent_bhishma')}
-              disabled={isScanning}
-              className="px-2.5 py-1 rounded-lg bg-sky-950/60 hover:bg-sky-900 text-sky-300 border border-sky-500/30 text-[11px] font-semibold transition cursor-pointer"
-            >
-              + NSE F&O (Bhishma)
-            </button>
-            <button
-              onClick={() => handleTriggerScanCycle('agent_arjuna')}
-              disabled={isScanning}
-              className="px-2.5 py-1 rounded-lg bg-emerald-950/60 hover:bg-emerald-900 text-emerald-300 border border-emerald-500/30 text-[11px] font-semibold transition cursor-pointer"
-            >
-              + NSE Cash (Arjuna)
-            </button>
-            <button
-              onClick={() => handleTriggerScanCycle('agent_chanakya')}
-              disabled={isScanning}
-              className="px-2.5 py-1 rounded-lg bg-indigo-950/60 hover:bg-indigo-900 text-indigo-300 border border-indigo-500/30 text-[11px] font-semibold transition cursor-pointer"
-            >
-              + BSE Cash (Chanakya)
-            </button>
-            <button
-              onClick={() => handleTriggerScanCycle('agent_kuber')}
-              disabled={isScanning}
-              className="px-2.5 py-1 rounded-lg bg-amber-950/60 hover:bg-amber-900 text-amber-300 border border-amber-500/30 text-[11px] font-semibold transition cursor-pointer"
-            >
-              + MCX Commodity (Kuber)
-            </button>
-            <button
-              onClick={() => handleTriggerScanCycle()}
-              disabled={isScanning}
-              className="flex items-center gap-1 px-3 py-1 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 text-[11px] font-bold transition cursor-pointer"
-            >
-              <RotateCw className={`w-3 h-3 ${isScanning ? 'animate-spin' : ''}`} />
-              <span>Scan All 3 Desks</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* SEBI / NSE / RBI Compliance Rule Engine Audit */}
-      <div className="p-5 rounded-2xl bg-slate-900/50 border border-slate-800 backdrop-blur-sm flex flex-col gap-3">
-        <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="w-4 h-4 text-sky-400" />
-            <h3 className="text-xs font-bold text-slate-200 uppercase tracking-wider font-mono">
-              SEBI, NSE, BSE, MCX & RBI Statutory Rule Invariants
-            </h3>
-          </div>
-          <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/40 px-2.5 py-0.5 rounded border border-emerald-500/40">
-            6/6 INVARIANTS SATISFIED
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pt-1">
-          {SEBI_COMPLIANCE_RULES.map((rule) => (
-            <div
-              key={rule.ruleId}
-              className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800/90 flex flex-col justify-between gap-2"
-            >
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-sky-950 text-sky-300 border border-sky-800/60">
-                    {rule.authority}
-                  </span>
-                  <span className="text-[10px] font-mono text-emerald-400 font-bold">
-                    {rule.status}
-                  </span>
+          {/* Official NSE & BSE 2026 / 2027 Holiday Calendar & Daily 5:00 PM IST Auto-Task */}
+          <div className="p-5 rounded-2xl bg-slate-900/50 border border-slate-800 backdrop-blur-sm flex flex-col gap-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <Calendar className="w-5 h-5 text-amber-400" />
+                <div>
+                  <h3 className="text-xs font-bold text-slate-200 uppercase tracking-wider font-mono flex items-center gap-2">
+                    <span>NSE / BSE {holidayYear} Trading Holiday &amp; Preceding-Day Expiry Adjustment Matrix</span>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-300 font-bold">
+                      PRECEDING TRADING DAY RULE ACTIVE
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Statutory Rule: When Tuesday (Nifty) or Thursday (Sensex) falls on an exchange holiday, contracts expire on the immediately preceding trading day.
+                  </p>
                 </div>
-                <h4 className="text-xs font-semibold text-slate-200">{rule.name}</h4>
-                <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">{rule.requirement}</p>
               </div>
-
-              <div className="pt-2 border-t border-slate-800/80 text-[10px] font-mono text-emerald-400/90">
-                {rule.details}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Official NSE & BSE 2026 / 2027 Holiday Calendar & Daily 5:00 PM IST Auto-Task */}
-      <div className="p-5 rounded-2xl bg-slate-900/50 border border-slate-800 backdrop-blur-sm flex flex-col gap-4">
-        {/* Header with Year Selector & Daily 5 PM IST Auto-Task Status */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">
-          <div className="flex items-center gap-2.5">
-            <Calendar className="w-5 h-5 text-amber-400" />
-            <div>
-              <h3 className="text-xs font-bold text-slate-200 uppercase tracking-wider font-mono flex items-center gap-2">
-                <span>NSE / BSE {holidayYear} Trading Holiday & Preceding-Day Expiry Adjustment Matrix</span>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-300 font-bold">
-                  PRECEDING TRADING DAY RULE ACTIVE
-                </span>
-              </h3>
-              <p className="text-[11px] text-slate-400 mt-0.5">
-                Statutory Rule: When Tuesday (Nifty) or Thursday (Sensex) falls on an exchange holiday, contracts expire on the immediately preceding trading day.
-              </p>
-            </div>
-          </div>
 
           {/* Year Switcher (2026 / 2027) */}
           <div className="flex items-center gap-2">
@@ -1714,7 +1777,9 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({
             </tbody>
           </table>
         </div>
-      </div>
+          </div>
+        </div>
+      )}
 
       {/* User Capital Allocation Modal */}
       {showAllocationModal && (

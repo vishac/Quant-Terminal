@@ -1,19 +1,19 @@
 {
   "generationNumber": 15,
-  "lastCalibratedAt": "8:30:30 pm IST",
-  "overallSystemAccuracyPct": 51.7,
+  "lastCalibratedAt": "10:55:02 am IST",
+  "overallSystemAccuracyPct": 46.1,
   "livePredictions": [
     {
-      "id": "live-audit-2026-10-28-INFY.NS",
-      "recordedDate": "2026-10-28 (Pre-Open / Open)",
-      "evaluatedDate": "2026-10-28 (Live Intraday)",
+      "id": "live-audit-2026-11-02-INFY.NS",
+      "recordedDate": "2026-11-02 (Pre-Open / Open)",
+      "evaluatedDate": "2026-11-02 (Live Intraday)",
       "symbol": "INFY.NS",
       "sector": "IT & Digital Exports",
       "predictedDirection": "FALL",
-      "entryPrice": 1163,
-      "evaluatedPrice": 1123.15,
-      "realizedReturnPct": -3.43,
-      "directionalEdgePct": 3.43,
+      "entryPrice": 1185,
+      "evaluatedPrice": 1171.6,
+      "realizedReturnPct": -1.13,
+      "directionalEdgePct": 1.13,
       "outcome": "VERIFIED_WIN",
       "leadAgent": "Vidura (US Tech & Global Macro)",
       "supportingAgents": [
@@ -22,20 +22,20 @@
         "Bhishma"
       ],
       "dissentingAgents": [],
-      "rootCauseLesson": "Live session verification: INFY fell -3.43% (₹1163 → ₹1123.15), confirming Vidura (US Tech & Global Macro)'s warning on global crude/tech headwinds.",
-      "weightAdjustmentApplied": "+1.20% live reinforcement to Vidura"
+      "rootCauseLesson": "Live session verification: INFY fell -1.13% (₹1185 → ₹1171.6), confirming Vidura (US Tech & Global Macro)'s warning on global crude/tech headwinds.",
+      "weightAdjustmentApplied": "+0.40% live reinforcement to Vidura"
     },
     {
-      "id": "live-audit-2026-10-28-ASIANPAINT.NS",
-      "recordedDate": "2026-10-28 (Pre-Open / Open)",
-      "evaluatedDate": "2026-10-28 (Live Intraday)",
+      "id": "live-audit-2026-11-02-ASIANPAINT.NS",
+      "recordedDate": "2026-11-02 (Pre-Open / Open)",
+      "evaluatedDate": "2026-11-02 (Live Intraday)",
       "symbol": "ASIANPAINT.NS",
       "sector": "Paints & Crude Consumers",
       "predictedDirection": "FALL",
-      "entryPrice": 2277,
-      "evaluatedPrice": 2284.6,
-      "realizedReturnPct": 0.33,
-      "directionalEdgePct": -0.33,
+      "entryPrice": 2320,
+      "evaluatedPrice": 2362.6,
+      "realizedReturnPct": 1.84,
+      "directionalEdgePct": -1.84,
       "outcome": "VERIFIED_LOSS",
       "leadAgent": "Vidura (Geopolitics & Brent Crude)",
       "supportingAgents": [
@@ -46,20 +46,20 @@
       "dissentingAgents": [
         "Arjuna"
       ],
-      "rootCauseLesson": "Live intraday divergence on ASIANPAINT (0.33%): updating short-term crowd sentiment factor.",
+      "rootCauseLesson": "Live intraday divergence on ASIANPAINT (1.84%): updating short-term crowd sentiment factor.",
       "weightAdjustmentApplied": "Recalibrated intraday stop-buffer"
     },
     {
-      "id": "live-audit-2026-10-28-ICICIBANK.NS",
-      "recordedDate": "2026-10-28 (Pre-Open / Open)",
-      "evaluatedDate": "2026-10-28 (Live Intraday)",
+      "id": "live-audit-2026-11-02-ICICIBANK.NS",
+      "recordedDate": "2026-11-02 (Pre-Open / Open)",
+      "evaluatedDate": "2026-11-02 (Live Intraday)",
       "symbol": "ICICIBANK.NS",
       "sector": "Banking & Financials",
       "predictedDirection": "RISE",
-      "entryPrice": 1386.9,
-      "evaluatedPrice": 1377.6,
-      "realizedReturnPct": -0.67,
-      "directionalEdgePct": -0.67,
+      "entryPrice": 1398,
+      "evaluatedPrice": 1392,
+      "realizedReturnPct": -0.43,
+      "directionalEdgePct": -0.43,
       "outcome": "VERIFIED_LOSS",
       "leadAgent": "Chanakya (Institutional Flows)",
       "supportingAgents": [
@@ -70,113 +70,67 @@
       "dissentingAgents": [
         "Arjuna"
       ],
-      "rootCauseLesson": "Live intraday divergence on ICICIBANK (-0.67%): updating short-term crowd sentiment factor.",
+      "rootCauseLesson": "Live intraday divergence on ICICIBANK (-0.43%): updating short-term crowd sentiment factor.",
       "weightAdjustmentApplied": "Recalibrated intraday stop-buffer"
     },
     {
-      "id": "live-audit-2026-10-28-ULTRACEMCO.NS",
-      "recordedDate": "2026-10-28 (Pre-Open / Open)",
-      "evaluatedDate": "2026-10-28 (Live Intraday)",
+      "id": "live-audit-2026-11-02-ULTRACEMCO.NS",
+      "recordedDate": "2026-11-02 (Pre-Open / Open)",
+      "evaluatedDate": "2026-11-02 (Live Intraday)",
       "symbol": "ULTRACEMCO.NS",
       "sector": "Cement & Infrastructure",
       "predictedDirection": "RISE",
-      "entryPrice": 11150,
-      "evaluatedPrice": 11104,
-      "realizedReturnPct": -0.41,
-      "directionalEdgePct": -0.41,
-      "outcome": "VERIFIED_LOSS",
+      "entryPrice": 11045,
+      "evaluatedPrice": 11301,
+      "realizedReturnPct": 2.32,
+      "directionalEdgePct": 2.32,
+      "outcome": "VERIFIED_WIN",
       "leadAgent": "Chanakya (Govt Policy & Capex)",
       "supportingAgents": [
         "Vidura",
         "Chanakya",
         "Bhishma"
       ],
-      "dissentingAgents": [
-        "Arjuna"
-      ],
-      "rootCauseLesson": "Live intraday divergence on ULTRACEMCO (-0.41%): updating short-term crowd sentiment factor.",
-      "weightAdjustmentApplied": "Recalibrated intraday stop-buffer"
-    },
-    {
-      "id": "live-audit-2026-10-28-CIPLA.NS",
-      "recordedDate": "2026-10-28 (Pre-Open / Open)",
-      "evaluatedDate": "2026-10-28 (Live Intraday)",
-      "symbol": "CIPLA.NS",
-      "sector": "Pharma & Healthcare",
-      "predictedDirection": "RISE",
-      "entryPrice": 1350,
-      "evaluatedPrice": 1365.6,
-      "realizedReturnPct": 1.16,
-      "directionalEdgePct": 1.16,
-      "outcome": "VERIFIED_WIN",
-      "leadAgent": "Bhishma (Market Basics & Margins)",
-      "supportingAgents": [
-        "Vidura",
-        "Chanakya",
-        "Bhishma"
-      ],
       "dissentingAgents": [],
-      "rootCauseLesson": "Live session verification: CIPLA is up +1.16% from prev close ₹1350 → ₹1365.6 as domestic institutional rotation confirmed Bhishma (Market Basics & Margins)'s thesis.",
-      "weightAdjustmentApplied": "+0.41% live reinforcement to Bhishma"
+      "rootCauseLesson": "Live session verification: ULTRACEMCO is up +2.32% from prev close ₹11045 → ₹11301 as domestic institutional rotation confirmed Chanakya (Govt Policy & Capex)'s thesis.",
+      "weightAdjustmentApplied": "+0.81% live reinforcement to Chanakya"
     },
     {
-      "id": "audit-2026-09-29-CIPLA.NS",
-      "recordedDate": "2026-09-29",
-      "evaluatedDate": "2026-09-30",
-      "symbol": "CIPLA.NS",
-      "sector": "Pharma & Healthcare",
-      "predictedDirection": "FALL",
-      "entryPrice": 1379.3,
-      "evaluatedPrice": 1346,
-      "realizedReturnPct": -2.41,
-      "directionalEdgePct": 2.41,
-      "outcome": "VERIFIED_WIN",
-      "leadAgent": "Bhishma (Market Basics & Margins)",
-      "supportingAgents": [
-        "Chanakya (Policy/Flows)",
-        "Vidura (Geopolitics/Macro)",
-        "Bhishma (Market Basics)",
-        "Arjuna (Crowd Emotions)"
-      ],
-      "dissentingAgents": [],
-      "rootCauseLesson": "Verified +2.41% downside protection on CIPLA: Bhishma (Market Basics & Margins) flagged input-cost/global headwinds before the drop.",
-      "weightAdjustmentApplied": "+1.0% Bayesian trust boost to Chanakya & Vidura"
-    },
-    {
-      "id": "audit-2026-09-29-ULTRACEMCO.NS",
-      "recordedDate": "2026-09-29",
-      "evaluatedDate": "2026-09-30",
+      "id": "audit-2026-10-05-ULTRACEMCO.NS",
+      "recordedDate": "2026-10-05",
+      "evaluatedDate": "2026-10-06",
       "symbol": "ULTRACEMCO.NS",
       "sector": "Cement & Infrastructure",
       "predictedDirection": "FALL",
-      "entryPrice": 10829,
-      "evaluatedPrice": 10956,
-      "realizedReturnPct": -1.3,
-      "directionalEdgePct": 1.3,
+      "entryPrice": 10850,
+      "evaluatedPrice": 10750,
+      "realizedReturnPct": -1.53,
+      "directionalEdgePct": 1.53,
       "outcome": "VERIFIED_WIN",
       "leadAgent": "Chanakya (Govt Policy & Institutional Flow)",
       "supportingAgents": [
-        "Chanakya (Policy/Flows)",
         "Vidura (Geopolitics/Macro)",
-        "Bhishma (Market Basics)",
-        "Arjuna (Crowd Emotions)"
+        "Bhishma (Market Basics)"
       ],
-      "dissentingAgents": [],
-      "rootCauseLesson": "Verified +1.30% downside protection on ULTRACEMCO: Chanakya (Govt Policy & Institutional Flow) flagged input-cost/global headwinds before the drop.",
-      "weightAdjustmentApplied": "+0.5% Bayesian trust boost to Chanakya & Vidura"
+      "dissentingAgents": [
+        "Chanakya",
+        "Arjuna"
+      ],
+      "rootCauseLesson": "Verified +1.53% downside protection on ULTRACEMCO: Chanakya (Govt Policy & Institutional Flow) flagged input-cost/global headwinds before the drop.",
+      "weightAdjustmentApplied": "+0.6% Bayesian trust boost to Vidura & Bhishma"
     },
     {
-      "id": "audit-2026-09-29-ICICIBANK.NS",
-      "recordedDate": "2026-09-29",
-      "evaluatedDate": "2026-09-30",
+      "id": "audit-2026-10-05-ICICIBANK.NS",
+      "recordedDate": "2026-10-05",
+      "evaluatedDate": "2026-10-06",
       "symbol": "ICICIBANK.NS",
       "sector": "Banking & Financials",
-      "predictedDirection": "FALL",
-      "entryPrice": 1292.2,
-      "evaluatedPrice": 1321.7,
-      "realizedReturnPct": 2.28,
-      "directionalEdgePct": -2.28,
-      "outcome": "VERIFIED_LOSS",
+      "predictedDirection": "RISE",
+      "entryPrice": 1332,
+      "evaluatedPrice": 1342.8,
+      "realizedReturnPct": 1.37,
+      "directionalEdgePct": 1.37,
+      "outcome": "VERIFIED_WIN",
       "leadAgent": "Bhishma (Market Basics & Margins)",
       "supportingAgents": [
         "Chanakya (Policy/Flows)",
@@ -185,44 +139,67 @@
         "Arjuna (Crowd Emotions)"
       ],
       "dissentingAgents": [],
-      "rootCauseLesson": "Prediction miss (+2.28%) on ICICIBANK: Contrarian flow was right — Kuber increased Arjuna weight for Banking & Financials.",
-      "weightAdjustmentApplied": "Rebalanced +1.1% weight toward Vidura"
+      "rootCauseLesson": "Verified +1.37% gain on ICICIBANK: Bhishma (Market Basics & Margins) correctly identified institutional accumulation & margin insulation despite global noise.",
+      "weightAdjustmentApplied": "+0.5% Bayesian trust boost to Chanakya & Vidura"
     },
     {
-      "id": "audit-2026-09-29-INFY.NS",
-      "recordedDate": "2026-09-29",
-      "evaluatedDate": "2026-09-30",
-      "symbol": "INFY.NS",
-      "sector": "IT & Digital Exports",
+      "id": "audit-2026-10-05-ASIANPAINT.NS",
+      "recordedDate": "2026-10-05",
+      "evaluatedDate": "2026-10-06",
+      "symbol": "ASIANPAINT.NS",
+      "sector": "Paints & Crude Consumers",
       "predictedDirection": "FALL",
-      "entryPrice": 1015.4,
-      "evaluatedPrice": 994.1,
-      "realizedReturnPct": -2.1,
-      "directionalEdgePct": 2.1,
-      "outcome": "VERIFIED_WIN",
+      "entryPrice": 2366,
+      "evaluatedPrice": 2424.2,
+      "realizedReturnPct": 2.46,
+      "directionalEdgePct": -2.46,
+      "outcome": "VERIFIED_LOSS",
       "leadAgent": "Vidura (Geopolitics & Global Supply)",
       "supportingAgents": [
         "Chanakya (Policy/Flows)",
         "Vidura (Geopolitics/Macro)",
+        "Bhishma (Market Basics)",
+        "Arjuna (Crowd Emotions)"
+      ],
+      "dissentingAgents": [],
+      "rootCauseLesson": "Prediction miss (+2.46%) on ASIANPAINT: Contrarian flow was right — Kuber increased Arjuna weight for Paints & Crude Consumers.",
+      "weightAdjustmentApplied": "Rebalanced +1.2% weight toward Vidura"
+    },
+    {
+      "id": "audit-2026-10-05-INFY.NS",
+      "recordedDate": "2026-10-05",
+      "evaluatedDate": "2026-10-06",
+      "symbol": "INFY.NS",
+      "sector": "IT & Digital Exports",
+      "predictedDirection": "RISE",
+      "entryPrice": 1020.5,
+      "evaluatedPrice": 1013.85,
+      "realizedReturnPct": -1.94,
+      "directionalEdgePct": -1.94,
+      "outcome": "VERIFIED_LOSS",
+      "leadAgent": "Vidura (Geopolitics & Global Supply)",
+      "supportingAgents": [
+        "Vidura (Geopolitics/Macro)",
         "Arjuna (Crowd Emotions)"
       ],
       "dissentingAgents": [
+        "Chanakya",
         "Bhishma"
       ],
-      "rootCauseLesson": "Verified +2.10% downside protection on INFY: Vidura (Geopolitics & Global Supply) flagged input-cost/global headwinds before the drop.",
-      "weightAdjustmentApplied": "+0.8% Bayesian trust boost to Chanakya & Vidura"
+      "rootCauseLesson": "Prediction miss (-1.94%) on INFY: Chanakya & Bhishma was right — Kuber increased Chanakya weight for IT & Digital Exports.",
+      "weightAdjustmentApplied": "Rebalanced +1.0% weight toward Chanakya"
     },
     {
-      "id": "audit-2026-09-29-SBIN.NS",
-      "recordedDate": "2026-09-29",
-      "evaluatedDate": "2026-09-30",
-      "symbol": "SBIN.NS",
-      "sector": "Banking & Financials",
+      "id": "audit-2026-10-05-LT.NS",
+      "recordedDate": "2026-10-05",
+      "evaluatedDate": "2026-10-06",
+      "symbol": "LT.NS",
+      "sector": "Cement & Infrastructure",
       "predictedDirection": "RISE",
-      "entryPrice": 964.7,
-      "evaluatedPrice": 959.5,
-      "realizedReturnPct": -1.27,
-      "directionalEdgePct": -1.27,
+      "entryPrice": 3750,
+      "evaluatedPrice": 3770,
+      "realizedReturnPct": -1.13,
+      "directionalEdgePct": -1.13,
       "outcome": "VERIFIED_LOSS",
       "leadAgent": "Chanakya (Govt Policy & Institutional Flow)",
       "supportingAgents": [
@@ -233,44 +210,21 @@
       "dissentingAgents": [
         "Vidura"
       ],
-      "rootCauseLesson": "Prediction miss (-1.27%) on SBIN: Vidura was right — Kuber increased Vidura weight for Banking & Financials.",
+      "rootCauseLesson": "Prediction miss (-1.13%) on LT: Vidura was right — Kuber increased Vidura weight for Cement & Infrastructure.",
       "weightAdjustmentApplied": "Rebalanced +0.6% weight toward Vidura"
     },
     {
-      "id": "audit-2026-09-29-LT.NS",
-      "recordedDate": "2026-09-29",
-      "evaluatedDate": "2026-09-30",
-      "symbol": "LT.NS",
-      "sector": "Cement & Infrastructure",
-      "predictedDirection": "FALL",
-      "entryPrice": 3749.1,
-      "evaluatedPrice": 3760,
-      "realizedReturnPct": -1.62,
-      "directionalEdgePct": 1.62,
-      "outcome": "VERIFIED_WIN",
-      "leadAgent": "Chanakya (Govt Policy & Institutional Flow)",
-      "supportingAgents": [
-        "Chanakya (Policy/Flows)",
-        "Vidura (Geopolitics/Macro)",
-        "Bhishma (Market Basics)",
-        "Arjuna (Crowd Emotions)"
-      ],
-      "dissentingAgents": [],
-      "rootCauseLesson": "Verified +1.62% downside protection on LT: Chanakya (Govt Policy & Institutional Flow) flagged input-cost/global headwinds before the drop.",
-      "weightAdjustmentApplied": "+0.6% Bayesian trust boost to Chanakya & Vidura"
-    },
-    {
-      "id": "audit-2026-09-29-TATASTEEL.NS",
-      "recordedDate": "2026-09-29",
-      "evaluatedDate": "2026-09-30",
+      "id": "audit-2026-10-05-TATASTEEL.NS",
+      "recordedDate": "2026-10-05",
+      "evaluatedDate": "2026-10-06",
       "symbol": "TATASTEEL.NS",
       "sector": "Metals & Mining",
-      "predictedDirection": "RISE",
-      "entryPrice": 188,
-      "evaluatedPrice": 184.3,
-      "realizedReturnPct": -4.24,
-      "directionalEdgePct": -4.24,
-      "outcome": "VERIFIED_LOSS",
+      "predictedDirection": "FALL",
+      "entryPrice": 178.14,
+      "evaluatedPrice": 178.69,
+      "realizedReturnPct": -1.29,
+      "directionalEdgePct": 1.29,
+      "outcome": "VERIFIED_WIN",
       "leadAgent": "Bhishma (Market Basics & Margins)",
       "supportingAgents": [
         "Chanakya (Policy/Flows)",
@@ -279,8 +233,56 @@
         "Arjuna (Crowd Emotions)"
       ],
       "dissentingAgents": [],
-      "rootCauseLesson": "Prediction miss (-4.24%) on TATASTEEL: Contrarian flow was right — Kuber increased Arjuna weight for Metals & Mining.",
-      "weightAdjustmentApplied": "Rebalanced +2.1% weight toward Vidura"
+      "rootCauseLesson": "Verified +1.29% downside protection on TATASTEEL: Bhishma (Market Basics & Margins) flagged input-cost/global headwinds before the drop.",
+      "weightAdjustmentApplied": "+0.5% Bayesian trust boost to Chanakya & Vidura"
+    },
+    {
+      "id": "audit-2026-10-05-NTPC.NS",
+      "recordedDate": "2026-10-05",
+      "evaluatedDate": "2026-10-06",
+      "symbol": "NTPC.NS",
+      "sector": "Power & Energy Utilities",
+      "predictedDirection": "RISE",
+      "entryPrice": 321.8,
+      "evaluatedPrice": 321.45,
+      "realizedReturnPct": -1.19,
+      "directionalEdgePct": -1.19,
+      "outcome": "VERIFIED_LOSS",
+      "leadAgent": "Chanakya (Govt Policy & Institutional Flow)",
+      "supportingAgents": [
+        "Chanakya (Policy/Flows)",
+        "Bhishma (Market Basics)"
+      ],
+      "dissentingAgents": [
+        "Vidura",
+        "Arjuna"
+      ],
+      "rootCauseLesson": "Prediction miss (-1.19%) on NTPC: Vidura & Arjuna was right — Kuber increased Vidura weight for Power & Energy Utilities.",
+      "weightAdjustmentApplied": "Rebalanced +0.6% weight toward Vidura"
+    },
+    {
+      "id": "audit-2026-10-05-ONGC.NS",
+      "recordedDate": "2026-10-05",
+      "evaluatedDate": "2026-10-06",
+      "symbol": "ONGC.NS",
+      "sector": "Upstream Oil & Energy",
+      "predictedDirection": "FALL",
+      "entryPrice": 224.9,
+      "evaluatedPrice": 224.2,
+      "realizedReturnPct": -1.23,
+      "directionalEdgePct": 1.23,
+      "outcome": "VERIFIED_WIN",
+      "leadAgent": "Bhishma (Market Basics & Margins)",
+      "supportingAgents": [
+        "Chanakya (Policy/Flows)",
+        "Vidura (Geopolitics/Macro)",
+        "Bhishma (Market Basics)"
+      ],
+      "dissentingAgents": [
+        "Arjuna"
+      ],
+      "rootCauseLesson": "Verified +1.23% downside protection on ONGC: Bhishma (Market Basics & Margins) flagged input-cost/global headwinds before the drop.",
+      "weightAdjustmentApplied": "+0.5% Bayesian trust boost to Chanakya & Vidura"
     }
   ]
 }

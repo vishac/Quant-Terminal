@@ -139,26 +139,19 @@ class AgentBackgroundScheduler {
         const q = quotesCache[cand.symbol];
         if (!q || !q.price || q.price <= 0) continue;
 
-        // Check if trade passes risk rules
+        // Check if trade passes tighter 1R <= ₹400 per-trade initial stop rules
         const entryPrice = q.price;
-        const stopLossPrice = Math.round(entryPrice * 0.985 * 100) / 100; // 1.5% protective stop
-        const targetPrice = Math.round(entryPrice * 1.03 * 100) / 100;    // 3.0% target
+        const stopLossPrice = Math.round(entryPrice * 0.991 * 100) / 100; // 0.9% tight initial stop
+        const targetPrice = Math.round(entryPrice * 1.025 * 100) / 100;   // 2.5% target (~2.8R)
 
-        const sizing = calculatePositionSize({
-          capitalInr: 1_000_000,
-          riskPct: 1.0,
-          entryPrice,
-          stopLossPrice,
-          segment: 'NSE_CASH',
-        });
-
-        if (!sizing.isValid || sizing.qty <= 0) continue;
+        const stopDistance = Math.max(0.5, Math.abs(entryPrice - stopLossPrice));
+        const cappedQty = Math.max(1, Math.floor(380 / stopDistance));
 
         const preOrder: PreTradeOrder = {
           symbol: cand.baseSym,
           side: 'BUY',
           productType: 'EQ_INTRADAY',
-          qty: sizing.qty,
+          qty: cappedQty,
           price: entryPrice,
         };
 
@@ -170,14 +163,14 @@ class AgentBackgroundScheduler {
             symbol: cand.baseSym,
             segment: 'NSE_CASH',
             side: 'BUY',
-            qty: sizing.qty,
+            qty: cappedQty,
             entryPrice,
             exitPrice: null,
             targetPrice,
             stopLossPrice,
             pnlInr: 0,
             status: 'OPEN',
-            strategyName: 'AUTONOMOUS_ENSEMBLE_MOMENTUM',
+            strategyName: 'AUTONOMOUS_ENSEMBLE_STEP_RATCHET_TSL',
             agentId: learningState.agents[0]?.agentId || 'chanakya',
             openedAt: new Date().toISOString(),
             closedAt: null,
@@ -195,13 +188,13 @@ class AgentBackgroundScheduler {
 
     LedgerDatabase.recordSchedulerLog(
       'PRE_MARKET',
-      `Pre-market routine complete. Recalibrated Bayesian weights (Gen #${learningState.generationNumber}). Automatically deployed ${executedCount} high-conviction paper trades.`,
+      `Pre-market routine complete. Recalibrated Bayesian weights (Gen #${learningState.generationNumber}). Automatically deployed ${executedCount} high-conviction paper trades (1R <= ₹400 + Step-Ratchet TSL).`,
       { generation: learningState.generationNumber, autoTradesDeployed: executedCount }
     );
   }
 
   // ---------------------------------------------------------------------------
-  // Routine: Intraday Barrier Monitoring (Targets & Stop-Losses)
+  // Routine: Intraday Barrier Monitoring (Step-Ratchet TSL, Targets & 1R Stops)
   // ---------------------------------------------------------------------------
   private async _executeIntradayMonitor(): Promise<void> {
     const openTrades = LedgerDatabase.getPaperTrades(50, 'OPEN');
@@ -214,16 +207,38 @@ class AgentBackgroundScheduler {
 
       const ltp = q.price;
       const isBuy = trade.side === 'BUY';
+      const qty = Math.max(1, trade.qty || 1);
+      const currentPnl = Math.round((isBuy ? ltp - trade.entryPrice : trade.entryPrice - ltp) * qty);
+      const oneR = 380; // Strictly capped <= ₹400 per-trade initial risk
 
-      // Check Target Hit
+      // Step-Ratchet High-Water-Mark TSL Calculation
+      const prevStopPrice = trade.stopLossPrice ?? (isBuy ? trade.entryPrice - oneR / qty : trade.entryPrice + oneR / qty);
+      const prevLockedFloorInr = Math.round((isBuy ? prevStopPrice - trade.entryPrice : trade.entryPrice - prevStopPrice) * qty);
+      const peakPnlInr = Math.max(0, currentPnl, prevLockedFloorInr > 0 ? Math.round(prevLockedFloorInr / 0.5) : 0);
+      const peakR = peakPnlInr / oneR;
+
+      let candidateStopFloorInr = -oneR;
+      if (peakR >= 2.2) {
+        candidateStopFloorInr = Math.round(peakPnlInr * 0.75);
+      } else if (peakR >= 1.5) {
+        candidateStopFloorInr = Math.round(peakPnlInr * 0.50);
+      } else if (peakR >= 0.8) {
+        candidateStopFloorInr = 15; // Breakeven + brokerage buffer
+      }
+
+      const newStopFloorInr = Math.max(prevLockedFloorInr, candidateStopFloorInr);
+      const ratchetedStopPrice = Number(
+        (isBuy ? trade.entryPrice + newStopFloorInr / qty : trade.entryPrice - newStopFloorInr / qty).toFixed(2)
+      );
+
+      // 1. Check Full Target Hit
       if (trade.targetPrice !== null) {
         const targetHit = isBuy ? ltp >= trade.targetPrice : ltp <= trade.targetPrice;
         if (targetHit) {
-          const pnl = isBuy ? (ltp - trade.entryPrice) * trade.qty : (trade.entryPrice - ltp) * trade.qty;
           LedgerDatabase.updatePaperTrade(trade.orderId, {
             status: 'TARGET_HIT',
             exitPrice: ltp,
-            pnlInr: Math.round(pnl),
+            pnlInr: currentPnl,
             closedAt: new Date().toISOString(),
             closeReason: `Target ₹${trade.targetPrice} breached at LTP ₹${ltp}`,
           });
@@ -231,26 +246,28 @@ class AgentBackgroundScheduler {
         }
       }
 
-      // Check Stop-Loss Hit
-      if (trade.stopLossPrice !== null) {
-        const stopHit = isBuy ? ltp <= trade.stopLossPrice : ltp >= trade.stopLossPrice;
-        if (stopHit) {
-          const pnl = isBuy ? (ltp - trade.entryPrice) * trade.qty : (trade.entryPrice - ltp) * trade.qty;
-          LedgerDatabase.updatePaperTrade(trade.orderId, {
-            status: 'STOP_HIT',
-            exitPrice: ltp,
-            pnlInr: Math.round(pnl),
-            closedAt: new Date().toISOString(),
-            closeReason: `Stop-Loss ₹${trade.stopLossPrice} triggered at LTP ₹${ltp}`,
-          });
-          continue;
-        }
+      // 2. Check Ratcheted Trailing Stop or 1R Initial Stop Hit
+      const stopHit = isBuy ? ltp <= ratchetedStopPrice : ltp >= ratchetedStopPrice;
+      if (stopHit || currentPnl <= -oneR) {
+        const isProfitLock = newStopFloorInr > 0;
+        const realizedPnl = isProfitLock ? newStopFloorInr : Math.max(-oneR, currentPnl);
+        LedgerDatabase.updatePaperTrade(trade.orderId, {
+          status: isProfitLock ? 'TARGET_HIT' : 'STOP_HIT',
+          exitPrice: ltp,
+          stopLossPrice: ratchetedStopPrice,
+          pnlInr: realizedPnl,
+          closedAt: new Date().toISOString(),
+          closeReason: isProfitLock
+            ? `Step-Ratchet TSL Profit Lock (+₹${realizedPnl} locked at ₹${ratchetedStopPrice})`
+            : `Per-Trade 1R Stop-Loss (-₹${Math.abs(realizedPnl)}) triggered at LTP ₹${ltp}`,
+        });
+        continue;
       }
 
-      // Update current unrealized P&L
-      const currentPnl = isBuy ? (ltp - trade.entryPrice) * trade.qty : (trade.entryPrice - ltp) * trade.qty;
+      // 3. Update live unrealized P&L and persist monotonically ratcheted stopLossPrice
       LedgerDatabase.updatePaperTrade(trade.orderId, {
-        pnlInr: Math.round(currentPnl),
+        pnlInr: currentPnl,
+        stopLossPrice: ratchetedStopPrice,
       });
     }
   }

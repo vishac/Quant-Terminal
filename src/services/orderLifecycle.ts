@@ -352,24 +352,61 @@ export function markCancelled(order: LiveOrder, reason: string): LiveOrder {
 export interface AutoSquareOffCheck {
   shouldSquareOff: boolean;
   reason: CloseReason | null;
+  trailingStopPriceInr?: number | null;
+  lockedProfitInr?: number | null;
 }
 
-export function checkAutoSquareOff(order: LiveOrder, ltp: number): AutoSquareOffCheck {
+export function checkAutoSquareOff(order: LiveOrder, ltp: number, peakPriceInr?: number): AutoSquareOffCheck {
   if (order.status !== 'FILLED') return { shouldSquareOff: false, reason: null };
 
   const isBuy = order.entryLeg.action === 'BUY';
+  const entryPrice = order.entryLeg.filledPrice ?? order.entryLeg.requestedPrice ?? ltp;
+  const qty = Math.max(1, order.entryLeg.filledQty || order.entryLeg.qty || 1);
+  const initialStopPrice = order.stopLossPriceInr ?? (isBuy ? entryPrice * 0.991 : entryPrice * 1.009);
+  const oneR = Math.min(400, Math.max(150, Math.round(Math.abs(entryPrice - initialStopPrice) * qty)));
+
+  const effectivePeakPrice = peakPriceInr != null
+    ? (isBuy ? Math.max(peakPriceInr, ltp) : Math.min(peakPriceInr, ltp))
+    : ltp;
+  const peakPnlInr = Math.max(0, Math.round((isBuy ? effectivePeakPrice - entryPrice : entryPrice - effectivePeakPrice) * qty));
+  const livePnlInr = Math.round((isBuy ? ltp - entryPrice : entryPrice - ltp) * qty);
+  const peakR = peakPnlInr / oneR;
+
+  let trailingStopFloorInr = -oneR;
+  if (peakR >= 2.2) {
+    trailingStopFloorInr = Math.round(peakPnlInr * 0.75);
+  } else if (peakR >= 1.5) {
+    trailingStopFloorInr = Math.round(peakPnlInr * 0.50);
+  } else if (peakR >= 0.8) {
+    trailingStopFloorInr = 15; // Breakeven + brokerage buffer
+  }
+
+  const trailingStopPriceInr = Number(
+    (isBuy ? entryPrice + trailingStopFloorInr / qty : entryPrice - trailingStopFloorInr / qty).toFixed(2)
+  );
 
   if (order.targetPriceInr !== null) {
     const targetHit = isBuy ? ltp >= order.targetPriceInr : ltp <= order.targetPriceInr;
-    if (targetHit) return { shouldSquareOff: true, reason: 'TARGET_HIT' };
+    if (targetHit) return { shouldSquareOff: true, reason: 'TARGET_HIT', trailingStopPriceInr, lockedProfitInr: livePnlInr };
+  }
+
+  if (peakR >= 0.8 && livePnlInr <= trailingStopFloorInr) {
+    return {
+      shouldSquareOff: true,
+      reason: 'TARGET_HIT',
+      trailingStopPriceInr,
+      lockedProfitInr: Math.max(15, trailingStopFloorInr),
+    };
   }
 
   if (order.stopLossPriceInr !== null) {
     const stopHit = isBuy ? ltp <= order.stopLossPriceInr : ltp >= order.stopLossPriceInr;
-    if (stopHit) return { shouldSquareOff: true, reason: 'STOP_HIT' };
+    if (stopHit || livePnlInr <= -oneR) {
+      return { shouldSquareOff: true, reason: 'STOP_HIT', trailingStopPriceInr, lockedProfitInr: -oneR };
+    }
   }
 
-  return { shouldSquareOff: false, reason: null };
+  return { shouldSquareOff: false, reason: null, trailingStopPriceInr, lockedProfitInr: trailingStopFloorInr > 0 ? trailingStopFloorInr : null };
 }
 
 // ---------------------------------------------------------------------------

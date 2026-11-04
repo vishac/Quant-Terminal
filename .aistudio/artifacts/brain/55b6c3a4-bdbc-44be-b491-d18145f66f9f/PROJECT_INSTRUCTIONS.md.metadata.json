@@ -1,5 +1,5 @@
 {
-  "summary":  "Updated PROJECT_INSTRUCTIONS.md artifact with the Dynamic Gateway & API Endpoint Attribution rule so all modal footers, dossiers, and source evidence modals dynamically switch between Upstox Analytics v2 API (Primary) and Chartink (Auto-Failover Backup).",
-  "updatedAt":  "2026-10-31T13:35:30.877727772Z",
+  "summary":  "Updated PROJECT_INSTRUCTIONS.md with the 4-Stage Step-Ratchet High-Water-Mark Trailing Stop-Loss (TSL) & Tighter Per-Trade Initial Stop (1R <= Rs 400) architecture and updated roadmap ledger.",
+  "updatedAt":  "2026-11-02T03:05:10.954540579Z",
   "userFacing":  true
 }

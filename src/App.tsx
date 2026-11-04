@@ -18,6 +18,7 @@ import { CircuitBreakerModal } from './components/CircuitBreakerModal';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { OwnerGate } from './components/OwnerGate';
 import { DeskAuthProvider, useDeskAuth } from './context/DeskAuthContext';
+import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { MultiUserDesk } from './components/MultiUserDesk';
 import { FirebaseAuthModal } from './components/FirebaseAuthModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -28,15 +29,13 @@ import { Radio } from 'lucide-react';
 // ---------------------------------------------------------------------------
 
 const MOBILE_NAV_TABS: { id: ActiveTab; icon: string; label: string }[] = [
-  { id: 'quant_bot',         icon: 'monitoring',       label: 'Quant'    },
-  { id: 'autonomous_agents', icon: 'group_work',       label: '5-Agents' },
-  { id: 'trade_history',     icon: 'receipt_long',     label: 'Trades'   },
-  { id: 'equity_radar',      icon: 'candlestick_chart',label: 'Radar'    },
-  { id: 'risk_engine',       icon: 'security',         label: 'Risk'     },
-  { id: 'sync_hub',          icon: 'hub',              label: 'Sync'     },
-  { id: 'risk_guard',        icon: 'gpp_maybe',        label: 'Guard'    },
-  { id: 'backtest_lab',      icon: 'query_stats',      label: 'Backtest' },
-  { id: 'voice_hud',         icon: 'mic',              label: 'Voice'    },
+  { id: 'quant_bot',         icon: 'monitoring',        label: 'Quant'    },
+  { id: 'equity_radar',      icon: 'candlestick_chart', label: 'Screener' },
+  { id: 'autonomous_agents', icon: 'group_work',        label: '5-Agents' },
+  { id: 'trade_history',     icon: 'receipt_long',      label: 'OMS/Why'  },
+  { id: 'risk_engine',       icon: 'security',          label: 'Risk'     },
+  { id: 'backtest_lab',      icon: 'query_stats',       label: 'Backtest' },
+  { id: 'settings',          icon: 'settings',          label: 'Control'  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -54,15 +53,18 @@ function getTimeBasedGreeting(): string {
 export default function App() {
   return (
     <ErrorBoundary>
-      <DeskAuthProvider>
-        <AppInner />
-      </DeskAuthProvider>
+      <ThemeProvider>
+        <DeskAuthProvider>
+          <AppInner />
+        </DeskAuthProvider>
+      </ThemeProvider>
     </ErrorBoundary>
   );
 }
 
 function AppInner() {
   const { currentSeat } = useDeskAuth();
+  const { theme } = useTheme();
   const [userRole, setUserRoleState] = useState<UserRole>(() => {
     try {
       return (localStorage.getItem('jarvis_user_role') as UserRole) || 'admin';
@@ -226,7 +228,10 @@ function AppInner() {
   };
 
   return (
-    <div className="min-h-screen bg-[#060913] text-slate-100 flex antialiased selection:bg-cyan-500/30 selection:text-cyan-200">
+    <div
+      data-theme={theme}
+      className={`min-h-screen bg-[#060913] text-slate-100 flex antialiased selection:bg-cyan-500/30 selection:text-cyan-200 theme-${theme}`}
+    >
       {/* Fixed Left Sidebar: Only displayed in Admin / Operations mode */}
       {userRole === 'admin' && (
         <>

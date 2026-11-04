@@ -822,11 +822,24 @@ export async function computeFirstPrinciplesMarketIntelligence(forceRecalibrate 
   };
 
   // --------------------------------------------------------------------------
+  // Canonical disjoint sets synchronized with globalImpact so no stock can ever be in both Buy/Gain and Avoid/Fall
+  const canonicalRisingSet = new Set(globalImpact.risingStocks.map((s) => s.symbol));
+  const canonicalFallingSet = new Set(globalImpact.fallingStocks.map((s) => s.symbol));
+
+  const isStockGainingLive = (sym: string): boolean => {
+    if (canonicalFallingSet.has(sym)) return false;
+    if (canonicalRisingSet.has(sym)) return true;
+    return getQuote(sym).changePct >= 0;
+  };
+
   // 2. GOVERNMENT POLICY, RBI & INSTITUTIONAL FLOWS
   // --------------------------------------------------------------------------
   const hdfcPct = getQuote('HDFCBANK.NS').changePct;
   const iciciPct = getQuote('ICICIBANK.NS').changePct;
   const sbinPct = getQuote('SBIN.NS').changePct;
+
+  const filterBeneficiaries = (syms: string[]) => syms.filter((s) => isStockGainingLive(s));
+  const filterHeadwinds = (syms: string[]) => syms.filter((s) => !isStockGainingLive(s));
 
   const policyAndFlows: PolicyAndInstitutionalFlowState = {
     fiiFlowStance: (brent.changePct > 1.0 || nasdaq.changePct < -0.5 || hdfcPct < -0.8) ? 'NET_SELLING_PRESSURE' : 'SELECTIVE_ROTATION',
@@ -841,20 +854,20 @@ export async function computeFirstPrinciplesMarketIntelligence(forceRecalibrate 
         transmissionMechanism: 'Direct order-book inflows and volume dispatch growth for large-cap Cement, EPC engineering, and Power Transmission utilities — completely insulated from US/EU recession or tech slowdown.',
         gainingSectors: ['Cement & Building Materials', 'Infrastructure & EPC', 'Power Grid & Utilities'],
         losingSectors: ['Unorganized Small-Cap Contractors with high working-capital debt'],
-        topBeneficiaryStocks: ['ULTRACEMCO.NS', 'LT.NS', 'NTPC.NS', 'POWERGRID.NS', 'INDIACEM.NS'],
-        headwindStocks: [],
+        topBeneficiaryStocks: filterBeneficiaries(['ULTRACEMCO.NS', 'LT.NS', 'NTPC.NS', 'POWERGRID.NS', 'INDIACEM.NS']),
+        headwindStocks: filterHeadwinds(['ULTRACEMCO.NS', 'LT.NS', 'NTPC.NS', 'POWERGRID.NS', 'INDIACEM.NS']),
         impactDirection: 'GAIN',
       },
       {
         id: 'policy-fii-dii',
         policyArea: 'FII_DII_FLOW_DYNAMICS',
         title: 'FII Global Risk-Off Outflows vs ₹20,000+ Cr/Month Domestic SIP (DII) Inflows',
-        currentStatus: `US 10Y Yield at ${us10y.price?.toFixed(2) || '4.28'}% and global oil/geopolitical stress trigger FII selling in over-owned index heavyweights (HDFC Bank, Infosys), while DIIs deploy domestic mutual fund liquidity into Corporate/PSU Banks, Pharma & Cement.`,
-        transmissionMechanism: 'Creates a sharp divergence inside the same index: FII-crowded stocks face supply overhead on every bounce, while DII-accumulated domestic compounders break out.',
+        currentStatus: `US 10Y Yield at ${us10y.price?.toFixed(2) || '4.28'}% and global oil/geopolitical stress trigger FII selling in over-owned index heavyweights, while DIIs deploy domestic mutual fund liquidity into relative-strength domestic leaders.`,
+        transmissionMechanism: 'Creates a sharp divergence inside the same index: FII-crowded stocks face supply overhead on every bounce, while DII-accumulated domestic compounders outperform.',
         gainingSectors: ['PSU & Corporate Banking (ICICI, SBI)', 'Domestic Pharma', 'Domestic Cement'],
         losingSectors: ['FII-Crowded Private Financials (HDFC Bank)', 'Large-Cap US IT Exporters (Infosys, Wipro)'],
-        topBeneficiaryStocks: ['ICICIBANK.NS', 'SBIN.NS', 'CIPLA.NS', 'SUNPHARMA.NS'],
-        headwindStocks: ['HDFCBANK.NS', 'INFY.NS', 'WIPRO.NS'],
+        topBeneficiaryStocks: filterBeneficiaries(['ICICIBANK.NS', 'SBIN.NS', 'CIPLA.NS', 'SUNPHARMA.NS']),
+        headwindStocks: filterHeadwinds(['HDFCBANK.NS', 'INFY.NS', 'WIPRO.NS', 'SUNPHARMA.NS', 'CIPLA.NS']),
         impactDirection: 'MIXED',
       },
       {
@@ -865,8 +878,8 @@ export async function computeFirstPrinciplesMarketIntelligence(forceRecalibrate 
         transmissionMechanism: 'Delays rate-cut relief for high-valuation rate-sensitive NBFCs and compresses marketing margins for Oil Marketing Companies (BPCL), while well-capitalized CASA banks (ICICI Bank, SBI) maintain strong Net Interest Margins (NIMs).',
         gainingSectors: ['High-CASA Corporate & PSU Banks', 'Upstream Oil Producers (ONGC)'],
         losingSectors: ['Downstream Oil Marketing (BPCL)', 'High-Cost Wholesale Funded NBFCs'],
-        topBeneficiaryStocks: ['ICICIBANK.NS', 'SBIN.NS', 'ONGC.NS'],
-        headwindStocks: ['BPCL.NS', 'BAJFINANCE.NS'],
+        topBeneficiaryStocks: filterBeneficiaries(['ICICIBANK.NS', 'SBIN.NS', 'ONGC.NS']),
+        headwindStocks: filterHeadwinds(['BPCL.NS', 'ASIANPAINT.NS', 'INDIGO.NS']),
         impactDirection: 'MIXED',
       },
       {
@@ -874,18 +887,18 @@ export async function computeFirstPrinciplesMarketIntelligence(forceRecalibrate 
         policyArea: 'PLI_AND_MANUFACTURING',
         title: 'India PLI Bulk Drug / API Self-Reliance & US Biosecure China+1 Shift',
         currentStatus: 'Global hospital chains and US generics buyers are actively shifting API and complex generics sourcing toward compliant Indian manufacturers.',
-        transmissionMechanism: 'Combines structural export volume growth with USD/INR currency realization tailwinds, boosting operating leverage for Indian Pharma leaders.',
+        transmissionMechanism: 'Combines structural export volume growth with USD/INR currency realization tailwinds, though individual stocks diverge intraday based on institutional order flow.',
         gainingSectors: ['Pharma & Complex Generics', 'Healthcare Hospitals'],
         losingSectors: [],
-        topBeneficiaryStocks: ['CIPLA.NS', 'SUNPHARMA.NS', 'DRREDDY.NS', 'APOLLOHOSP.NS'],
-        headwindStocks: [],
+        topBeneficiaryStocks: filterBeneficiaries(['CIPLA.NS', 'SUNPHARMA.NS', 'DRREDDY.NS', 'APOLLOHOSP.NS']),
+        headwindStocks: filterHeadwinds(['CIPLA.NS', 'SUNPHARMA.NS', 'DRREDDY.NS', 'APOLLOHOSP.NS']),
         impactDirection: 'GAIN',
       },
     ],
   };
 
   // --------------------------------------------------------------------------
-  // 3. GEOPOLITICAL & GLOBAL SUPPLY CHAIN VECTORS
+  // 3. GEOPOLITICAL & GLOBAL SUPPLY CHAIN VECTORS (Strictly Disjoint Gain/Lose)
   // --------------------------------------------------------------------------
   const geopolitics: GeopoliticalVector[] = [
     {
@@ -900,12 +913,12 @@ export async function computeFirstPrinciplesMarketIntelligence(forceRecalibrate 
         { symbol: 'ONGC.NS', reason: 'Direct upstream crude oil realization beneficiary.' },
         { symbol: 'LT.NS', reason: 'Strong hydrocarbon & infrastructure EPC order book across India & Middle East.' },
         { symbol: 'CIPLA.NS', reason: 'Inelastic healthcare demand insulated from crude input shock.' },
-      ],
+      ].filter((item) => isStockGainingLive(item.symbol)),
       stocksSetToLose: [
         { symbol: 'ASIANPAINT.NS', reason: 'Crude derivatives make up ~55% of raw material cost; severe gross margin squeeze.' },
         { symbol: 'INDIGO.NS', reason: 'Aviation Turbine Fuel (ATF) cost surge directly compresses airline operating margins.' },
         { symbol: 'BPCL.NS', reason: 'Downstream marketing margins squeezed when crude spikes without retail pump price hikes.' },
-      ],
+      ].filter((item) => !isStockGainingLive(item.symbol)),
     },
     {
       id: 'geo-us-tech-rates',
@@ -918,11 +931,12 @@ export async function computeFirstPrinciplesMarketIntelligence(forceRecalibrate 
       stocksSetToGain: [
         { symbol: 'ICICIBANK.NS', reason: '100% domestic credit engine; benefits as institutional money rotates out of IT into domestic banks.' },
         { symbol: 'ULTRACEMCO.NS', reason: 'Pure-play domestic infrastructure demand with zero US enterprise exposure.' },
-      ],
+      ].filter((item) => isStockGainingLive(item.symbol)),
       stocksSetToLose: [
         { symbol: 'INFY.NS', reason: 'High sensitivity to US discretionary BFSI/retail tech budgets and ADR selling.' },
         { symbol: 'WIPRO.NS', reason: 'Consulting & discretionary IT exposure faces deal-ramp delays.' },
-      ],
+        { symbol: 'TCS.NS', reason: 'US BFSI discretionary spend sensitivity.' },
+      ].filter((item) => !isStockGainingLive(item.symbol)),
     },
     {
       id: 'geo-china-metals-tariffs',
@@ -933,20 +947,191 @@ export async function computeFirstPrinciplesMarketIntelligence(forceRecalibrate 
       whatIsHappening: `Asian equities (Hang Seng ${hangSeng.changePct.toFixed(2)}%) and industrial metals (Copper ${copper.changePct.toFixed(2)}%) reflect global manufacturing and tariff headwinds.`,
       indianSectorImpact: 'Global metal weakness weighs on LME-linked non-ferrous producers (Hindalco) while China+1 supply chain diversification structurally supports Indian Pharma & domestic manufacturing.',
       stocksSetToGain: [
+        { symbol: 'CIPLA.NS', reason: 'Respiratory & API export tailwind with positive relative strength.' },
         { symbol: 'SUNPHARMA.NS', reason: 'Specialty pharma & China+1 API supply chain tailwind.' },
         { symbol: 'SBIN.NS', reason: 'Domestic corporate & infra credit growth insulated from China slowdown.' },
-      ],
+      ].filter((item) => isStockGainingLive(item.symbol)),
       stocksSetToLose: [
         { symbol: 'HINDALCO.NS', reason: 'LME aluminium & copper price drop plus Novelis global beverage/auto can cyclicality.' },
-      ],
+        { symbol: 'TATASTEEL.NS', reason: 'Regional HRC steel spread pressure from Asian export supply.' },
+        { symbol: 'SUNPHARMA.NS', reason: 'Intraday defensive profit booking / relative weakness vs benchmark.' },
+      ].filter((item) => !isStockGainingLive(item.symbol)),
     },
   ];
 
   // --------------------------------------------------------------------------
-  // 4. TEN-SECTOR GAIN / LOSS ROTATION MATRIX (First-Principles Scoring)
+  // 4. DYNAMIC SECTOR GAIN / LOSS ROTATION MATRIX (100% Live Quote Driven)
   // --------------------------------------------------------------------------
-  const buildStockPick = (sym: string, name: string, isBuy: boolean, reason: string) => {
+  const STOCK_CATALOGUE: Record<string, { name: string; buyThesis: string; avoidThesis: string }> = {
+    'CIPLA.NS': {
+      name: 'Cipla Ltd',
+      buyThesis: 'Respiratory & domestic chronic leadership with USFDA clearance & USD export tailwind.',
+      avoidThesis: 'Intraday profit distribution in defensive healthcare below VWAP.',
+    },
+    'SUNPHARMA.NS': {
+      name: 'Sun Pharmaceutical',
+      buyThesis: 'Global specialty dermatology/oncology margin expansion and defensive institutional inflow.',
+      avoidThesis: 'Intraday supply & defensive rotation pullback — avoid dip-buying until VWAP is reclaimed.',
+    },
+    'DRREDDY.NS': {
+      name: "Dr. Reddy's Labs",
+      buyThesis: 'US complex generics launches and strong balance sheet cash generation.',
+      avoidThesis: 'US generic pricing & intraday distribution pressure.',
+    },
+    'APOLLOHOSP.NS': {
+      name: 'Apollo Hospitals',
+      buyThesis: 'High-occupancy domestic tertiary healthcare & diagnostics growth.',
+      avoidThesis: 'Valuation consolidation after hospital sector run-up.',
+    },
+    'ULTRACEMCO.NS': {
+      name: 'UltraTech Cement',
+      buyThesis: 'Pan-India >155 MTPA capacity dominance, CCI M&A clearance & Union Budget infra demand.',
+      avoidThesis: 'Short-term pullback on petcoke/logistics cost sensitivity.',
+    },
+    'LT.NS': {
+      name: 'Larsen & Toubro',
+      buyThesis: '₹4.75+ Lakh Cr domestic + Middle East hydrocarbon EPC order backlog.',
+      avoidThesis: 'Intraday capital-goods profit booking & working-capital yield sensitivity.',
+    },
+    'INDIACEM.NS': {
+      name: 'The India Cements',
+      buyThesis: 'Southern India cement consolidation & operational turnaround under UltraTech.',
+      avoidThesis: 'Short-term profit booking pullback after multi-session M&A volume surge.',
+    },
+    'ADANIPORTS.NS': {
+      name: 'Adani Ports & SEZ',
+      buyThesis: 'Record cargo volume market share and domestic logistics monopoly.',
+      avoidThesis: 'Global trade & Red Sea shipping freight beta pullback.',
+    },
+    'ICICIBANK.NS': {
+      name: 'ICICI Bank',
+      buyThesis: '#1 institutional relative-strength private bank with >2.3% RoA and stable NIMs.',
+      avoidThesis: 'Intraday financial index consolidation.',
+    },
+    'SBIN.NS': {
+      name: 'State Bank of India',
+      buyThesis: 'Domestic corporate capex credit leader backed by steady DII SIP inflows.',
+      avoidThesis: 'High-beta PSU banking pullback during elevated VIX.',
+    },
+    'AXISBANK.NS': {
+      name: 'Axis Bank',
+      buyThesis: 'Attractive valuation re-rating and corporate loan book expansion.',
+      avoidThesis: 'Deposit cost & LDR margin consolidation.',
+    },
+    'KOTAKBANK.NS': {
+      name: 'Kotak Mahindra Bank',
+      buyThesis: 'High CASA franchise and pristine asset quality cushion.',
+      avoidThesis: 'FII overweight trimming & NIM compression pressure.',
+    },
+    'HDFCBANK.NS': {
+      name: 'HDFC Bank',
+      buyThesis: 'MSCI weight support and retail deposit mobilization recovery.',
+      avoidThesis: 'Bearing the brunt of passive FII global risk-off basket selling.',
+    },
+    'NTPC.NS': {
+      name: 'NTPC Ltd',
+      buyThesis: 'Regulated thermal + renewable capacity addition with sovereign dividend yield.',
+      avoidThesis: 'Utility sector profit booking after multi-month rally.',
+    },
+    'POWERGRID.NS': {
+      name: 'Power Grid Corp',
+      buyThesis: 'Regulated transmission RoE and national renewable grid capex visibility.',
+      avoidThesis: 'Defensive utility rotation pause.',
+    },
+    'ONGC.NS': {
+      name: 'ONGC Ltd',
+      buyThesis: 'Direct upstream crude realization beneficiary & SAED windfall tax relief.',
+      avoidThesis: 'Crude oil pullback caps upstream per-barrel realization.',
+    },
+    'RELIANCE.NS': {
+      name: 'Reliance Industries',
+      buyThesis: 'O2C Singapore GRM firmness and Jio tariff ARPU cash-flow compounding.',
+      avoidThesis: 'FII index heavyweight supply pressure.',
+    },
+    'ITC.NS': {
+      name: 'ITC Ltd',
+      buyThesis: 'High free-cash-flow yield, agri/FMCG resilience, and low foreign beta.',
+      avoidThesis: 'Defensive consumer staple consolidation.',
+    },
+    'HINDUNILVR.NS': {
+      name: 'Hindustan Unilever',
+      buyThesis: 'Rural volume recovery and defensive staple brand moat.',
+      avoidThesis: 'Palm oil & chemical packaging input inflation limits gross margin upside.',
+    },
+    'TITAN.NS': {
+      name: 'Titan Company',
+      buyThesis: 'Wedding & festive jewellery market share gains.',
+      avoidThesis: 'Record gold prices pinch discretionary carat volume & stud ratios.',
+    },
+    'M&M.NS': {
+      name: 'Mahindra & Mahindra',
+      buyThesis: 'Domestic SUV order backlog & rural tractor demand leadership.',
+      avoidThesis: 'Auto sector cyclical rotation pause.',
+    },
+    'MARUTI.NS': {
+      name: 'Maruti Suzuki',
+      buyThesis: 'CNG/hybrid SUV mix expansion and export growth.',
+      avoidThesis: 'Entry-level small car demand softness & yen/commodity sensitivity.',
+    },
+    'TATAMOTORS.NS': {
+      name: 'Tata Motors',
+      buyThesis: 'Domestic CV cash flows and EV passenger vehicle leadership.',
+      avoidThesis: 'JLR exposure to US/EU import tariffs & China luxury auto slowdown.',
+    },
+    'TATASTEEL.NS': {
+      name: 'Tata Steel',
+      buyThesis: 'Domestic infrastructure steel demand & Kalinganagar capacity ramp-up.',
+      avoidThesis: 'Cheap Chinese steel export dumping compressing domestic HRC spreads.',
+    },
+    'HINDALCO.NS': {
+      name: 'Hindalco Industries',
+      buyThesis: 'Downstream value-added aluminum & copper smelter expansion.',
+      avoidThesis: 'LME copper/aluminium weakness and Novelis global cyclical pressure.',
+    },
+    'JSWSTEEL.NS': {
+      name: 'JSW Steel',
+      buyThesis: 'Domestic value-added flat steel volume growth.',
+      avoidThesis: 'Coking coal & global ferrous metal spread compression.',
+    },
+    'INFY.NS': {
+      name: 'Infosys Ltd',
+      buyThesis: 'Large deal wins in cost-optimization and generative AI enterprise migration.',
+      avoidThesis: 'High US discretionary BFSI sensitivity & overnight NASDAQ ADR selling pressure.',
+    },
+    'TCS.NS': {
+      name: 'TCS Ltd',
+      buyThesis: 'Industry-leading 25%+ operating margins and defensive deal backlog.',
+      avoidThesis: 'US macro slowdown & FII trimming across large-cap IT bellwethers.',
+    },
+    'WIPRO.NS': {
+      name: 'Wipro Ltd',
+      buyThesis: 'Capco consulting stabilization and high dividend yield support.',
+      avoidThesis: 'Weakest revenue growth conversion during US enterprise spending slowdowns.',
+    },
+    'ASIANPAINT.NS': {
+      name: 'Asian Paints',
+      buyThesis: 'Cooling crude derivatives relieve monomer & TiO2 raw material costs.',
+      avoidThesis: '~55% of raw materials are crude derivatives — severe gross margin squeeze plus rising competition.',
+    },
+    'INDIGO.NS': {
+      name: 'InterGlobe Aviation (IndiGo)',
+      buyThesis: '60%+ domestic aviation monopoly and international route expansion.',
+      avoidThesis: 'Elevated ATF jet fuel (~40% of opex) & USD aircraft lease liability pressures.',
+    },
+    'BPCL.NS': {
+      name: 'Bharat Petroleum (BPCL)',
+      buyThesis: 'Refining GRM stability and retail fuel volume growth.',
+      avoidThesis: 'Retail petrol/diesel marketing margins squeezed by elevated international crude.',
+    },
+  };
+
+  const buildStockPick = (sym: string, isBuy: boolean) => {
     const q = getQuote(sym);
+    const meta = STOCK_CATALOGUE[sym] || {
+      name: sym.replace('.NS', ''),
+      buyThesis: 'Institutional accumulation and positive relative strength.',
+      avoidThesis: 'Intraday distribution and relative weakness vs NIFTY.',
+    };
     const price = q.price || 1000;
     const baseTicker = sym.replace('.NS', '');
     const quantProfile = NSE_EQUITY_QUANT_PROFILES[baseTicker];
@@ -956,16 +1141,18 @@ export async function computeFirstPrinciplesMarketIntelligence(forceRecalibrate 
     const dynamicMultiplier = Math.max(1.65, Math.min(3.30, Number((1.85 + ((rsRank - 75) / 25) * 0.45).toFixed(2))));
     const targetDist = stopDist * dynamicMultiplier;
     const expectedRoiPct = Number(((targetDist / price) * 100).toFixed(2));
+    const changeFormatted = `${q.changePct >= 0 ? 'Up +' : 'Down '}${q.changePct.toFixed(2)}%`;
+
     return {
       symbol: sym,
-      name,
+      name: meta.name,
       price: Number(price.toFixed(2)),
       changePct: Number(q.changePct.toFixed(2)),
       entryPrice: Number(price.toFixed(2)),
       targetPrice: Number((isBuy ? price + targetDist : price - targetDist).toFixed(2)),
       stopLoss: Number((isBuy ? price - stopDist : price + stopDist).toFixed(2)),
       expectedRoiPct,
-      reason,
+      reason: `${changeFormatted} at ₹${price.toFixed(2)}; ${isBuy ? meta.buyThesis : meta.avoidThesis}`,
     };
   };
 
@@ -982,133 +1169,90 @@ export async function computeFirstPrinciplesMarketIntelligence(forceRecalibrate 
     policyReason: string;
     geoReason: string;
     dominantAgent: string;
-    buyPicks: { sym: string; name: string; reason: string }[];
-    avoidPicks: { sym: string; name: string; reason: string }[];
   }> = [
     {
       sectorId: 'pharma',
       sectorName: 'Pharma & Healthcare',
       symbols: ['CIPLA.NS', 'SUNPHARMA.NS', 'DRREDDY.NS', 'APOLLOHOSP.NS'],
-      basicsScore: 78,
-      emotionsScore: 72,
-      policyScore: 75,
-      geoScore: 84,
+      basicsScore: 68,
+      emotionsScore: 64,
+      policyScore: 72,
+      geoScore: 76,
       basicsReason: 'Inelastic demand, expanding complex-generics margins, and strong cash flows with low debt.',
       emotionsReason: 'Institutions use Pharma as a high-conviction defensive harbor during global volatility without retail euphoria.',
       policyReason: 'PLI bulk-drug incentives and US Biosecure China+1 sourcing shift support multi-quarter export visibility.',
       geoReason: `Weak Rupee (₹${usdinr.price?.toFixed(2) || '93.15'}) directly boosts USD export realizations while crude movements have minimal impact on formulation margins.`,
       dominantAgent: 'Agent Bhishma & Agent Vidura',
-      buyPicks: [
-        { sym: 'CIPLA.NS', name: 'Cipla Ltd', reason: `${getQuote('CIPLA.NS').changePct >= 0 ? 'Up +' : 'Down '}${getQuote('CIPLA.NS').changePct.toFixed(2)}%; respiratory & domestic chronic leadership with USD export tailwind.` },
-        { sym: 'SUNPHARMA.NS', name: 'Sun Pharma', reason: `${getQuote('SUNPHARMA.NS').changePct >= 0 ? 'Up +' : 'Down '}${getQuote('SUNPHARMA.NS').changePct.toFixed(2)}%; specialty portfolio margin expansion and defensive institutional inflow.` },
-      ],
-      avoidPicks: [],
     },
     {
       sectorId: 'cement_infra',
       sectorName: 'Cement, Infrastructure & Capital Goods',
       symbols: ['ULTRACEMCO.NS', 'LT.NS', 'INDIACEM.NS', 'ADANIPORTS.NS'],
-      basicsScore: 76,
+      basicsScore: 74,
       emotionsScore: 68,
-      policyScore: 88,
+      policyScore: 86,
       geoScore: 65,
       basicsReason: 'Strong volume dispatch visibility, industry consolidation pricing power, and multi-year EPC order books.',
       emotionsReason: 'Steady institutional accumulation on dips; free from retail FOMO froth.',
       policyReason: 'Direct beneficiary of ₹11.11 Lakh Cr Union Budget infrastructure, highways, railways, and housing capex.',
       geoReason: '100% domestic revenue base for Cement insulates it from US tariffs and global tech slowdowns; L&T additionally benefits from Middle East capex.',
       dominantAgent: 'Agent Chanakya',
-      buyPicks: [
-        { sym: 'ULTRACEMCO.NS', name: 'UltraTech Cement', reason: `${getQuote('ULTRACEMCO.NS').changePct >= 0 ? 'Up +' : 'Down '}${getQuote('ULTRACEMCO.NS').changePct.toFixed(2)}%; industry-leading capacity utilization & govt infra demand.` },
-        { sym: 'LT.NS', name: 'Larsen & Toubro', reason: `${getQuote('LT.NS').changePct >= 0 ? 'Up +' : 'Down '}${getQuote('LT.NS').changePct.toFixed(2)}%; domestic + Middle East hydrocarbon EPC order book hedge.` },
-        ...(getQuote('INDIACEM.NS').changePct >= 0
-          ? [{ sym: 'INDIACEM.NS', name: 'India Cements', reason: `Up +${getQuote('INDIACEM.NS').changePct.toFixed(2)}%; Southern India consolidation & operating turn-around.` }]
-          : []),
-      ],
-      avoidPicks: [
-        ...(getQuote('INDIACEM.NS').changePct < -1.0
-          ? [{ sym: 'INDIACEM.NS', name: 'India Cements (Pullback)', reason: `Down ${getQuote('INDIACEM.NS').changePct.toFixed(2)}%; short-term profit booking pullback after multi-session volume runup.` }]
-          : []),
-      ],
     },
     {
       sectorId: 'corporate_psu_banks',
       sectorName: 'Corporate & PSU Banking',
       symbols: ['ICICIBANK.NS', 'SBIN.NS', 'AXISBANK.NS', 'KOTAKBANK.NS', 'HDFCBANK.NS'],
-      basicsScore: 66,
-      emotionsScore: 60,
-      policyScore: 74,
+      basicsScore: 64,
+      emotionsScore: 58,
+      policyScore: 72,
       geoScore: 52,
       basicsReason: 'Decade-low gross NPAs, healthy corporate credit growth, and resilient CASA deposit franchises in ICICI Bank & SBI.',
       emotionsReason: 'Sharp bifurcation: FII selling depresses HDFC Bank, creating an opportunity in relative-strength leaders ICICI Bank and SBI.',
       policyReason: 'Domestic mutual fund SIPs (DIIs) and govt capex project financing strongly back SBI and ICICI Bank.',
       geoReason: 'Zero direct tariff or crude input cost, though FII ETF outflows weigh on HDFC Bank when US yields rise.',
       dominantAgent: 'Agent Chanakya',
-      buyPicks: [
-        { sym: 'ICICIBANK.NS', name: 'ICICI Bank', reason: `${getQuote('ICICIBANK.NS').changePct >= 0 ? 'Up +' : 'Down '}${getQuote('ICICIBANK.NS').changePct.toFixed(2)}%; #1 institutional relative-strength bank with best-in-class RoA.` },
-        { sym: 'SBIN.NS', name: 'State Bank of India', reason: `${getQuote('SBIN.NS').changePct >= 0 ? 'Up +' : 'Down '}${getQuote('SBIN.NS').changePct.toFixed(2)}%; domestic corporate credit leader backed by DII inflows.` },
-      ],
-      avoidPicks: [
-        ...(getQuote('HDFCBANK.NS').changePct < 0
-          ? [{ sym: 'HDFCBANK.NS', name: 'HDFC Bank', reason: `Down ${getQuote('HDFCBANK.NS').changePct.toFixed(2)}%; bearing the brunt of FII global risk-off basket selling.` }]
-          : []),
-      ],
     },
     {
       sectorId: 'power_energy_upstream',
       sectorName: 'Power Utilities & Upstream Oil/Gas',
       symbols: ['NTPC.NS', 'POWERGRID.NS', 'ONGC.NS', 'RELIANCE.NS'],
-      basicsScore: 64,
+      basicsScore: 62,
       emotionsScore: 58,
-      policyScore: 72,
+      policyScore: 70,
       geoScore: 62,
       basicsReason: 'Regulated Assured RoE for Power Grid/NTPC and direct crude realization benefit for ONGC.',
       emotionsReason: 'Low-beta institutional compounding without speculative excess.',
       policyReason: 'National peak power demand and grid modernization capex guarantee regulated earnings visibility.',
       geoReason: `Brent Crude at $${brent.price?.toFixed(2) || '111.95'} (${brent.changePct >= 0 ? '+' : ''}${brent.changePct.toFixed(2)}%) anchors domestic energy upstream realizations.`,
       dominantAgent: 'Agent Chanakya & Agent Vidura',
-      buyPicks: [
-        { sym: 'NTPC.NS', name: 'NTPC Ltd', reason: 'Regulated thermal + renewable capacity addition with sovereign dividend yield.' },
-        { sym: 'ONGC.NS', name: 'ONGC', reason: 'Natural portfolio hedge against rising global energy price levels.' },
-      ],
-      avoidPicks: [],
     },
     {
       sectorId: 'fmcg_consumption',
       sectorName: 'FMCG & Domestic Consumption',
       symbols: ['ITC.NS', 'HINDUNILVR.NS', 'TITAN.NS'],
-      basicsScore: 48,
-      emotionsScore: 52,
-      policyScore: 55,
-      geoScore: 42,
+      basicsScore: 45,
+      emotionsScore: 48,
+      policyScore: 52,
+      geoScore: 40,
       basicsReason: 'Stable staple cash flows (ITC), though palm oil/packaging input inflation caps gross margin expansion for HUL.',
       emotionsReason: 'Neutral defensive positioning.',
       policyReason: 'Rural welfare transfers support volume recovery, offset by food/fuel inflation.',
       geoReason: 'Elevated crude & gold prices slightly pinch urban discretionary and packaging margins.',
       dominantAgent: 'Agent Bhishma',
-      buyPicks: [
-        { sym: 'ITC.NS', name: 'ITC Ltd', reason: 'High free-cash-flow yield, hotels/agri resilience, and low foreign beta.' },
-      ],
-      avoidPicks: [
-        { sym: 'HINDUNILVR.NS', name: 'Hindustan Unilever', reason: 'Packaging & palm oil input inflation limits near-term margin upside.' },
-      ],
     },
     {
       sectorId: 'autos_mobility',
       sectorName: 'Automobiles & EV Mobility',
       symbols: ['M&M.NS', 'MARUTI.NS', 'TATAMOTORS.NS'],
-      basicsScore: 35,
-      emotionsScore: 38,
-      policyScore: 45,
-      geoScore: 22,
+      basicsScore: 30,
+      emotionsScore: 32,
+      policyScore: 42,
+      geoScore: 20,
       basicsReason: 'Domestic SUV/tractor demand (M&M) is solid, but global luxury auto (JLR in Tata Motors) faces EU/China/US tariff headwinds.',
       emotionsReason: 'Retail remains heavily long auto stocks while institutions trim global-exposed names.',
       policyReason: 'EV FAME/PLI policy supports domestic transition, but higher fuel prices dampen two-wheeler/entry car sentiment.',
-      geoReason: `Fuel price levels and global trade tariffs create headwinds for Tata Motors (JLR).`,
+      geoReason: 'Fuel price levels and global trade tariffs create headwinds for Tata Motors (JLR).',
       dominantAgent: 'Agent Arjuna',
-      buyPicks: [],
-      avoidPicks: [
-        { sym: 'TATAMOTORS.NS', name: 'Tata Motors', reason: `${getQuote('TATAMOTORS.NS').changePct >= 0 ? 'Up +' : 'Down '}${getQuote('TATAMOTORS.NS').changePct.toFixed(2)}%; JLR exposure to US/EU tariffs & China luxury slowdown.` },
-      ],
     },
     {
       sectorId: 'metals_mining',
@@ -1116,17 +1260,13 @@ export async function computeFirstPrinciplesMarketIntelligence(forceRecalibrate 
       symbols: ['TATASTEEL.NS', 'HINDALCO.NS', 'JSWSTEEL.NS'],
       basicsScore: -35,
       emotionsScore: -30,
-      policyScore: 25,
-      geoScore: -68,
+      policyScore: 20,
+      geoScore: -65,
       basicsReason: 'LME base metal realization pressure compresses smelter spreads despite domestic infra steel demand.',
       emotionsReason: 'High-beta cyclical long unwinding whenever China/global growth data disappoints.',
       policyReason: 'Domestic safeguard duty requests provide only partial cushion against Chinese steel dumping.',
       geoReason: `Hang Seng (${hangSeng.changePct.toFixed(2)}%) and LME Copper (${copper.changePct.toFixed(2)}%) signal industrial cycle headwinds.`,
       dominantAgent: 'Agent Vidura',
-      buyPicks: [],
-      avoidPicks: [
-        { sym: 'HINDALCO.NS', name: 'Hindalco Industries', reason: `${getQuote('HINDALCO.NS').changePct >= 0 ? 'Up +' : 'Down '}${getQuote('HINDALCO.NS').changePct.toFixed(2)}%; LME copper/aluminium weakness and global cyclical pressure.` },
-      ],
     },
     {
       sectorId: 'it_exports',
@@ -1135,26 +1275,21 @@ export async function computeFirstPrinciplesMarketIntelligence(forceRecalibrate 
       basicsScore: -42,
       emotionsScore: -48,
       policyScore: -20,
-      geoScore: -75,
+      geoScore: -72,
       basicsReason: 'Delayed discretionary deal ramp-ups in US BFSI & retail clients cap near-term constant-currency revenue growth.',
       emotionsReason: 'Retail keeps buying every dip ("IT has fallen so much") while FIIs systematically sell into bounces.',
       policyReason: 'US visa/offshoring scrutiny and higher-for-longer Fed rates keep enterprise tech budgets tight.',
       geoReason: `NASDAQ (${nasdaq.changePct >= 0 ? '+' : ''}${nasdaq.changePct.toFixed(2)}%) and US 10Y yield at ${us10y.price?.toFixed(2) || '4.28'}% dictate FII ADR & cash flows in Indian IT.`,
       dominantAgent: 'Agent Vidura',
-      buyPicks: [],
-      avoidPicks: [
-        { sym: 'INFY.NS', name: 'Infosys Ltd', reason: `${getQuote('INFY.NS').changePct >= 0 ? 'Up +' : 'Down '}${getQuote('INFY.NS').changePct.toFixed(2)}%; high US discretionary BFSI sensitivity & ADR selling pressure.` },
-        { sym: 'WIPRO.NS', name: 'Wipro Ltd', reason: `Weakest revenue growth conversion during US enterprise spending slowdowns.` },
-      ],
     },
     {
       sectorId: 'paints_aviation_omc',
       sectorName: 'Paints, Aviation & Crude Importers',
       symbols: ['ASIANPAINT.NS', 'INDIGO.NS', 'BPCL.NS'],
-      basicsScore: -78,
-      emotionsScore: -65,
-      policyScore: -45,
-      geoScore: -88,
+      basicsScore: -75,
+      emotionsScore: -62,
+      policyScore: -42,
+      geoScore: -85,
       basicsReason: 'Raw-material cost dynamics: crude monomers, TiO2, and Aviation Turbine Fuel (ATF) dictate EBITDA margins.',
       emotionsReason: 'Classic retail value-trap: retail buys Asian Paints looking at past 5-year reputation while ignoring live raw material physics.',
       policyReason: 'OMCs (BPCL) face government retail fuel price freezes whenever crude trades elevated.',
@@ -1162,22 +1297,10 @@ export async function computeFirstPrinciplesMarketIntelligence(forceRecalibrate 
         brent.changePct > 0.5 ? 'acts as a direct cost shock on airline fuel & paint resins.' : 'easing provides short-term margin relief.'
       }`,
       dominantAgent: 'Agent Vidura & Agent Bhishma',
-      buyPicks: [
-        ...(getQuote('INDIGO.NS').changePct > 0.5
-          ? [{ sym: 'INDIGO.NS', name: 'InterGlobe Aviation (IndiGo)', reason: `Up +${getQuote('INDIGO.NS').changePct.toFixed(2)}%; counter-trend passenger volume surge and Brent crude pullback (${brent.changePct >= 0 ? '+' : ''}${brent.changePct.toFixed(2)}%).` }]
-          : []),
-      ],
-      avoidPicks: [
-        { sym: 'ASIANPAINT.NS', name: 'Asian Paints', reason: `${getQuote('ASIANPAINT.NS').changePct >= 0 ? 'Up +' : 'Down '}${getQuote('ASIANPAINT.NS').changePct.toFixed(2)}%; ~55% of raw materials are crude derivatives — margin squeeze.` },
-        ...(getQuote('INDIGO.NS').changePct <= 0.5
-          ? [{ sym: 'INDIGO.NS', name: 'InterGlobe Aviation (IndiGo)', reason: `Down ${getQuote('INDIGO.NS').changePct.toFixed(2)}%; elevated ATF jet fuel costs & USD lease liability pressures.` }]
-          : []),
-        { sym: 'BPCL.NS', name: 'Bharat Petroleum (BPCL)', reason: `${getQuote('BPCL.NS').changePct >= 0 ? 'Up +' : 'Down '}${getQuote('BPCL.NS').changePct.toFixed(2)}%; marketing margins pressured by baseline international crude price levels.` },
-      ],
     },
   ];
 
-  // Weight scores using the self-learned agent weights
+  // Weight scores using the self-learned agent weights + real-time price momentum
   const wVidura = (selfLearning.agents.find((a) => a.agentId === 'vidura')?.learnedTrustWeightPct || 25) / 100;
   const wChanakya = (selfLearning.agents.find((a) => a.agentId === 'chanakya')?.learnedTrustWeightPct || 25) / 100;
   const wBhishma = (selfLearning.agents.find((a) => a.agentId === 'bhishma')?.learnedTrustWeightPct || 25) / 100;
@@ -1189,7 +1312,16 @@ export async function computeFirstPrinciplesMarketIntelligence(forceRecalibrate 
     const avgChange =
       quotesInSec.reduce((acc, q) => acc + q.changePct, 0) / Math.max(1, quotesInSec.length);
 
-    const weightedNet = Math.round(
+    // Partition sector constituents strictly by live direction (Zero overlap between Buy and Avoid!)
+    const gainingSymbolsInSec = sec.symbols
+      .filter((sym) => isStockGainingLive(sym))
+      .sort((a, b) => getQuote(b).changePct - getQuote(a).changePct);
+
+    const losingSymbolsInSec = sec.symbols
+      .filter((sym) => !isStockGainingLive(sym))
+      .sort((a, b) => getQuote(a).changePct - getQuote(b).changePct);
+
+    const structuralNet = Math.round(
       (sec.basicsScore * wBhishma +
         sec.emotionsScore * wArjuna +
         sec.policyScore * wChanakya +
@@ -1197,10 +1329,21 @@ export async function computeFirstPrinciplesMarketIntelligence(forceRecalibrate 
         Math.max(0.01, wSum),
     );
 
+    // Blend structural score with live intraday sector return & breadth so score reflects real-time reality
+    const liveReturnContribution = Math.max(-45, Math.min(45, Math.round(avgChange * 28)));
+    let weightedNet = Math.max(-98, Math.min(98, Math.round(structuralNet * 0.65 + liveReturnContribution)));
+
+    // If every constituent stock in this sector is falling today, it cannot be classified as a Gaining Sector today
+    if (gainingSymbolsInSec.length === 0 && avgChange < 0) {
+      weightedNet = Math.min(-22, weightedNet);
+    } else if (losingSymbolsInSec.length === 0 && avgChange > 0) {
+      weightedNet = Math.max(25, weightedNet);
+    }
+
     const verdict: SectorGainLossItem['verdict'] =
       weightedNet >= 60 ? 'STRONG_GAIN' :
-      weightedNet >= 25 ? 'MODERATE_GAIN' :
-      weightedNet >= -15 ? 'NEUTRAL_CHOP' :
+      weightedNet >= 20 ? 'MODERATE_GAIN' :
+      weightedNet >= -19 ? 'NEUTRAL_CHOP' :
       weightedNet >= -50 ? 'MODERATE_LOSS' :
       'STRONG_LOSS';
 
@@ -1224,8 +1367,8 @@ export async function computeFirstPrinciplesMarketIntelligence(forceRecalibrate 
       },
       DominantAgentName: sec.dominantAgent,
       dominantAgentWeightPct: Number((Math.max(wVidura, wChanakya, wBhishma) * 100).toFixed(1)),
-      stocksToBuy: sec.buyPicks.map((p) => buildStockPick(p.sym, p.name, true, p.reason)),
-      stocksToAvoidOrShort: sec.avoidPicks.map((p) => buildStockPick(p.sym, p.name, false, p.reason)),
+      stocksToBuy: gainingSymbolsInSec.map((sym) => buildStockPick(sym, true)),
+      stocksToAvoidOrShort: losingSymbolsInSec.map((sym) => buildStockPick(sym, false)),
     };
   }).sort((a, b) => b.netScore - a.netScore);
 
@@ -1374,3 +1517,323 @@ export async function computeFirstPrinciplesMarketIntelligence(forceRecalibrate 
     globalImpact,
   };
 }
+
+// ============================================================================
+// DETERMINISTIC INSTITUTIONAL TRADE SETUP & 2026 STATUTORY TAX BLUEPRINT ENGINE
+// ============================================================================
+
+export type SetupInstrumentMode = 'CASH_CNC' | 'INTRADAY_MIS' | 'NSE_FUTURES' | 'NSE_OPTION';
+
+export interface StatutoryTaxBreakdown2026 {
+  brokerage: number;
+  stt: number;
+  exchangeAndIpft: number;
+  sebiFee: number;
+  stampDuty: number;
+  gst18: number;
+  totalFriction: number;
+  grossWinAtTarget2: number;
+  netWinAfterTax: number;
+  grossRiskAtStop: number;
+  netLossAtStopAfterTax: number;
+  grossWinToFrictionRatio: number;
+  netExpectancyR: number;
+  isVetoed: boolean;
+  vetoReason: string | null;
+}
+
+export interface InstitutionalStockSetupBlueprint {
+  symbol: string;
+  baseTicker: string;
+  name: string;
+  sector: string;
+  direction: 'RISE' | 'FALL';
+  instrumentMode: SetupInstrumentMode;
+  instrumentLabel: string;
+  contractSymbol: string;
+  side: 'BUY' | 'SELL';
+  lotSize: number;
+  lotsCount: number;
+  quantity: number;
+  spotEntryPrice: number;
+  instrumentEntryPrice: number;
+  target1Price: number;
+  target2Price: number;
+  stopLossPrice: number;
+  instrumentTarget1: number;
+  instrumentTarget2: number;
+  instrumentStopLoss: number;
+  rewardToRiskRatio: number;
+  capitalBase: number;
+  cppiFloor92: number;
+  cppiRiskCushion8: number;
+  onePctRiskRupees: number;
+  quarterKellyFractionPct: number;
+  quarterKellyRiskRupees: number;
+  marginRequired: number;
+  taxAudit: StatutoryTaxBreakdown2026;
+}
+
+const NSE_FNO_LOT_SIZES: Record<string, number> = {
+  ULTRACEMCO: 50,
+  LT: 150,
+  INDIACEM: 1900,
+  ADANIPORTS: 400,
+  CIPLA: 650,
+  SUNPHARMA: 350,
+  DRREDDY: 625,
+  APOLLOHOSP: 125,
+  ICICIBANK: 700,
+  SBIN: 750,
+  AXISBANK: 625,
+  KOTAKBANK: 400,
+  HDFCBANK: 550,
+  NTPC: 1500,
+  POWERGRID: 1800,
+  ONGC: 1925,
+  RELIANCE: 500,
+  ITC: 1600,
+  HINDUNILVR: 300,
+  TITAN: 175,
+  'M&M': 175,
+  MARUTI: 50,
+  TATAMOTORS: 550,
+  TATASTEEL: 5500,
+  HINDALCO: 1400,
+  JSWSTEEL: 675,
+  INFY: 400,
+  TCS: 175,
+  WIPRO: 1500,
+  ASIANPAINT: 200,
+  INDIGO: 150,
+  BPCL: 1800,
+};
+
+export function computeInstitutionalStockSetupBlueprint(params: {
+  symbol: string;
+  name: string;
+  sector: string;
+  direction: 'RISE' | 'FALL';
+  livePrice: number;
+  targetPrice: number;
+  stopLossPrice: number;
+  capitalBase: number;
+  instrumentMode: SetupInstrumentMode;
+  sizingMethod: 'ONE_PCT_RISK' | 'QUARTER_KELLY';
+}): InstitutionalStockSetupBlueprint {
+  const {
+    symbol,
+    name,
+    sector,
+    direction,
+    livePrice,
+    targetPrice,
+    stopLossPrice,
+    capitalBase,
+    instrumentMode,
+    sizingMethod,
+  } = params;
+
+  const baseTicker = symbol.replace('.NS', '');
+  const spotEntry = Number(Math.max(1, livePrice).toFixed(2));
+  const rawStopDist = Math.max(spotEntry * 0.008, Math.abs(spotEntry - stopLossPrice));
+  const rawTargetDist = Math.max(rawStopDist * 1.6, Math.abs(targetPrice - spotEntry));
+
+  const spotStopLoss = Number(
+    (direction === 'RISE' ? spotEntry - rawStopDist : spotEntry + rawStopDist).toFixed(2),
+  );
+  const spotTarget1 = Number(
+    (direction === 'RISE' ? spotEntry + rawStopDist * 1.5 : spotEntry - rawStopDist * 1.5).toFixed(2),
+  );
+  const spotTarget2 = Number(
+    (direction === 'RISE' ? spotEntry + rawTargetDist : spotEntry - rawTargetDist).toFixed(2),
+  );
+
+  const rewardToRiskRatio = Number((rawTargetDist / rawStopDist).toFixed(2));
+
+  // CPPI (92% Floor, 8% Cushion) + Quarter-Kelly
+  const cppiFloor92 = Math.round(capitalBase * 0.92);
+  const cppiRiskCushion8 = Math.max(0, capitalBase - cppiFloor92);
+  const onePctRiskRupees = Math.round(capitalBase * 0.01);
+
+  const winProb = 0.58;
+  const lossProb = 1 - winProb;
+  const fullKelly = Math.max(0.04, (rewardToRiskRatio * winProb - lossProb) / Math.max(0.5, rewardToRiskRatio));
+  const quarterKelly = Number((0.25 * fullKelly).toFixed(4));
+  const quarterKellyRiskRupees = Math.max(250, Math.round(cppiRiskCushion8 * quarterKelly));
+
+  const activeRiskBudget = sizingMethod === 'QUARTER_KELLY' ? quarterKellyRiskRupees : onePctRiskRupees;
+
+  const standardLot = NSE_FNO_LOT_SIZES[baseTicker] || Math.max(50, Math.round(500000 / spotEntry / 25) * 25);
+
+  let lotSize = 1;
+  let lotsCount = 1;
+  let quantity = 1;
+  let instrumentEntryPrice = spotEntry;
+  let instrumentTarget1 = spotTarget1;
+  let instrumentTarget2 = spotTarget2;
+  let instrumentStopLoss = spotStopLoss;
+  let marginRequired = 0;
+  let contractSymbol = baseTicker;
+  let instrumentLabel = 'NSE Cash Delivery (CNC)';
+  let side: 'BUY' | 'SELL' = direction === 'RISE' ? 'BUY' : 'SELL';
+
+  if (instrumentMode === 'CASH_CNC') {
+    lotSize = 1;
+    quantity = Math.max(1, Math.floor(activeRiskBudget / rawStopDist));
+    // Cap total delivery outlay at 40% of capitalBase so single position doesn't exceed cash
+    const maxCashQty = Math.max(1, Math.floor((capitalBase * 0.4) / spotEntry));
+    quantity = Math.min(quantity, maxCashQty);
+    lotsCount = quantity;
+    marginRequired = Math.round(quantity * spotEntry);
+    contractSymbol = `${baseTicker} (CNC)`;
+    instrumentLabel = direction === 'RISE' ? 'NSE Cash Delivery (CNC 1x)' : 'NSE Cash Exit / Intraday Short';
+  } else if (instrumentMode === 'INTRADAY_MIS') {
+    lotSize = 1;
+    quantity = Math.max(1, Math.floor(activeRiskBudget / rawStopDist));
+    const maxMisQty = Math.max(1, Math.floor((capitalBase * 1.5) / spotEntry));
+    quantity = Math.min(quantity, maxMisQty);
+    lotsCount = quantity;
+    marginRequired = Math.round((quantity * spotEntry) / 5); // 5x MIS leverage (20% margin)
+    contractSymbol = `${baseTicker} (MIS 5x)`;
+    instrumentLabel = 'NSE Intraday Margin (MIS 20% Margin)';
+  } else if (instrumentMode === 'NSE_FUTURES') {
+    lotSize = standardLot;
+    const idealQty = Math.max(lotSize, Math.floor(activeRiskBudget / rawStopDist));
+    lotsCount = Math.max(1, Math.round(idealQty / lotSize));
+    quantity = lotsCount * lotSize;
+    marginRequired = Math.round(quantity * spotEntry * 0.22); // ~22% SPAN + Exposure
+    contractSymbol = `${baseTicker} FUT`;
+    instrumentLabel = `NSE Equity Futures (Lot: ${lotSize})`;
+  } else {
+    // NSE_OPTION (ATM Call for RISE, ATM Put for FALL — always BUY defined-risk option)
+    lotSize = standardLot;
+    side = 'BUY';
+    const step = spotEntry > 2500 ? 50 : spotEntry > 1000 ? 20 : spotEntry > 400 ? 10 : 5;
+    const atmStrike = Math.round(spotEntry / step) * step;
+    const optType = direction === 'RISE' ? 'CE' : 'PE';
+    const approxAtmPremium = Number(Math.max(4, spotEntry * 0.024).toFixed(2));
+    const delta = 0.52;
+    const optStopDist = Number(Math.max(1.5, rawStopDist * delta).toFixed(2));
+    const optTarget1Dist = Number((rawStopDist * 1.5 * delta).toFixed(2));
+    const optTarget2Dist = Number((rawTargetDist * delta).toFixed(2));
+
+    instrumentEntryPrice = approxAtmPremium;
+    instrumentStopLoss = Number(Math.max(0.5, approxAtmPremium - optStopDist).toFixed(2));
+    instrumentTarget1 = Number((approxAtmPremium + optTarget1Dist).toFixed(2));
+    instrumentTarget2 = Number((approxAtmPremium + optTarget2Dist).toFixed(2));
+
+    const riskPerLot = optStopDist * lotSize;
+    lotsCount = Math.max(1, Math.floor(activeRiskBudget / Math.max(1, riskPerLot)));
+    quantity = lotsCount * lotSize;
+    marginRequired = Math.round(quantity * instrumentEntryPrice);
+    contractSymbol = `${baseTicker} ${atmStrike} ${optType}`;
+    instrumentLabel = `NSE ATM ${optType} Option (Lot: ${lotSize})`;
+  }
+
+  // 2026 Indian Statutory Tax & Brokerage Calculation
+  const buyPrice = side === 'BUY' ? instrumentEntryPrice : instrumentTarget2;
+  const sellPrice = side === 'BUY' ? instrumentTarget2 : instrumentEntryPrice;
+  const buyTurnover = buyPrice * quantity;
+  const sellTurnover = sellPrice * quantity;
+  const totalTurnover = buyTurnover + sellTurnover;
+
+  const brokerage = 40; // ₹20 flat per executed order * 2 legs
+  let stt = 0;
+  let exchangeAndIpft = 0;
+  let stampDuty = 0;
+
+  if (instrumentMode === 'CASH_CNC') {
+    stt = totalTurnover * 0.001; // 0.1% on both buy and sell for delivery
+    exchangeAndIpft = totalTurnover * 0.0000322;
+    stampDuty = buyTurnover * 0.00015; // 0.015% on delivery buy
+  } else if (instrumentMode === 'INTRADAY_MIS') {
+    stt = sellTurnover * 0.00025; // 0.025% on sell leg
+    exchangeAndIpft = totalTurnover * 0.0000322;
+    stampDuty = buyTurnover * 0.00003; // 0.003% on intraday buy
+  } else if (instrumentMode === 'NSE_FUTURES') {
+    stt = sellTurnover * 0.0005; // 2026 NSE Equity Futures STT: 0.05% on sell
+    exchangeAndIpft = totalTurnover * 0.0000183; // 0.00183%
+    stampDuty = buyTurnover * 0.00002; // 0.002% on buy
+  } else {
+    // NSE Equity Options (on premium turnover)
+    stt = sellTurnover * 0.0015; // 2026 NSE Equity Options STT: 0.15% on sell premium
+    exchangeAndIpft = totalTurnover * 0.0003553; // 0.03553%
+    stampDuty = buyTurnover * 0.00003; // 0.003% on buy premium
+  }
+
+  const sebiFee = totalTurnover * 0.000001; // ₹10 per Crore
+  const gst18 = 0.18 * (brokerage + exchangeAndIpft + sebiFee);
+  const totalFriction = Number((brokerage + stt + exchangeAndIpft + sebiFee + stampDuty + gst18).toFixed(2));
+
+  const perUnitWin = Math.abs(instrumentTarget2 - instrumentEntryPrice);
+  const perUnitRisk = Math.max(0.05, Math.abs(instrumentEntryPrice - instrumentStopLoss));
+  const grossWinAtTarget2 = Number((perUnitWin * quantity).toFixed(2));
+  const grossRiskAtStop = Number((perUnitRisk * quantity).toFixed(2));
+  const netWinAfterTax = Number((grossWinAtTarget2 - totalFriction).toFixed(2));
+  const netLossAtStopAfterTax = Number((grossRiskAtStop + totalFriction).toFixed(2));
+
+  const grossWinToFrictionRatio = Number(
+    (grossWinAtTarget2 / Math.max(1, totalFriction)).toFixed(2),
+  );
+
+  // Net Expectancy in R: (p * netWin - q * netLoss) / grossRisk
+  const expectedNetRupees = winProb * netWinAfterTax - lossProb * netLossAtStopAfterTax;
+  const netExpectancyR = Number((expectedNetRupees / Math.max(1, grossRiskAtStop)).toFixed(2));
+
+  const isVetoed = grossWinToFrictionRatio < 3.0 || netExpectancyR < 0.15;
+  const vetoReason = isVetoed
+    ? grossWinToFrictionRatio < 3.0
+      ? `Statutory Friction Veto: Gross Win / Friction is ${grossWinToFrictionRatio}x (Minimum required: 3.0x). Increase capital/quantity or switch instrument.`
+      : `Expectancy Veto: Net-of-Tax Expectancy is ${netExpectancyR}R (Minimum required: +0.15R).`
+    : null;
+
+  return {
+    symbol,
+    baseTicker,
+    name,
+    sector,
+    direction,
+    instrumentMode,
+    instrumentLabel,
+    contractSymbol,
+    side,
+    lotSize,
+    lotsCount,
+    quantity,
+    spotEntryPrice: spotEntry,
+    instrumentEntryPrice,
+    target1Price: spotTarget1,
+    target2Price: spotTarget2,
+    stopLossPrice: spotStopLoss,
+    instrumentTarget1,
+    instrumentTarget2,
+    instrumentStopLoss,
+    rewardToRiskRatio,
+    capitalBase,
+    cppiFloor92,
+    cppiRiskCushion8,
+    onePctRiskRupees,
+    quarterKellyFractionPct: Number((quarterKelly * 100).toFixed(2)),
+    quarterKellyRiskRupees,
+    marginRequired,
+    taxAudit: {
+      brokerage: Number(brokerage.toFixed(2)),
+      stt: Number(stt.toFixed(2)),
+      exchangeAndIpft: Number(exchangeAndIpft.toFixed(2)),
+      sebiFee: Number(sebiFee.toFixed(2)),
+      stampDuty: Number(stampDuty.toFixed(2)),
+      gst18: Number(gst18.toFixed(2)),
+      totalFriction,
+      grossWinAtTarget2,
+      netWinAfterTax,
+      grossRiskAtStop,
+      netLossAtStopAfterTax,
+      grossWinToFrictionRatio,
+      netExpectancyR,
+      isVetoed,
+      vetoReason,
+    },
+  };
+}
+

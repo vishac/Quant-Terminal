@@ -171,6 +171,15 @@ export interface AutonomousAgent {
   decisionScripts?: AgentDecisionScript[];
 }
 
+export type TslStage =
+  | 'INITIAL_RISK_STOP'
+  | 'BREAKEVEN_ARMED'
+  | 'PROFIT_LOCK_50PCT'
+  | 'PROFIT_LOCK_75PCT'
+  | 'TRAILING_STOP_HIT'
+  | 'TARGET_HIT'
+  | 'STOP_HIT';
+
 export interface PaperTradeOrder {
   id: string;
   agentId: string;
@@ -188,14 +197,21 @@ export interface PaperTradeOrder {
     exitPrice?: number;
   }[];
   totalInvestmentINR: number;
-  maxDefinedLossINR: number; // Strictly capped
+  maxDefinedLossINR: number; // Strictly capped <= ₹400 per trade (1R)
   targetProfitINR: number;
   riskRewardRatio: string;
   timestamp: string;
   orderDate?: string; // dd-mmm-yyyy (e.g. 29-Oct-2026)
   orderTime?: string; // [hh]:mm:ss (no AM/PM, e.g. [14]:32:15)
-  status: 'OPEN' | 'SQUARED_OFF' | 'TARGET_HIT' | 'STOP_HIT';
+  status: 'OPEN' | 'SQUARED_OFF' | 'TARGET_HIT' | 'STOP_HIT' | 'TRAILING_STOP_HIT';
   pnlINR: number;
+  peakPnlINR?: number; // High-Water-Mark unrealized P&L in ₹
+  trailingStopPnlINR?: number; // Dynamic locked P&L floor in ₹ (-1R -> +₹15 -> 50% Peak -> 75% Peak)
+  trailingStopPrice?: number; // Live trailing stop price level
+  initialStopLossPrice?: number;
+  targetPriceLevel?: number;
+  tslStage?: TslStage;
+  exitReason?: string;
   entryPrice?: number;
   exitPrice?: number;
   side?: 'BUY' | 'SELL';

@@ -1,4 +1,4 @@
-import { PaperTradeOrder } from '../types/quant';
+import { PaperTradeOrder, TslStage } from '../types/quant';
 import { MarketQuote } from './liveMarketService';
 import { formatOrderDate, formatOrderTime } from '../utils/orderFormatters';
 import { generateLiveMarketOrder } from './agentQuantEngine';
@@ -13,12 +13,19 @@ export interface ExecutedTradeRecord {
   qty: number;
   entryPrice: number;
   exitPrice: number;
+  priceDeltaPerUnit: number;
   isOpen: boolean;
   pnl: number;
+  peakPnlINR: number;
+  trailingStopPnlINR: number;
+  trailingStopPrice: number;
+  maxDefinedLossINR: number;
+  tslStage: TslStage;
+  exitReason?: string;
   dateStr: string; // Strictly dd-mmm-yyyy
   timeStr: string; // Strictly [hh]:mm:ss
   segment: 'NSE_FNO' | 'NSE_CASH' | 'BSE_CASH' | 'MCX_FUTURES' | 'MCX_OPTIONS';
-  status: 'OPEN' | 'SQUARED_OFF' | 'TARGET_HIT' | 'STOP_HIT';
+  status: 'OPEN' | 'SQUARED_OFF' | 'TARGET_HIT' | 'STOP_HIT' | 'TRAILING_STOP_HIT';
   strategyName: string;
 }
 
@@ -33,8 +40,10 @@ const LEGACY_STATIC_IDS = new Set([
 ]);
 
 /**
- * Guarantees every PaperTradeOrder in an array has a strictly unique ID
- * and strips any legacy static seed IDs.
+ * Guarantees every PaperTradeOrder in an array has a strictly unique ID,
+ * strips any legacy static seed IDs, consolidates legacy multi-leg spreads into a unified
+ * net-premium position, and enforces the strict mathematical invariant:
+ * P&L === (ExitPrice - EntryPrice) * Qty * Direction.
  */
 export function sanitizeAndDedupeOrders(trades: PaperTradeOrder[]): { cleaned: PaperTradeOrder[]; mutated: boolean } {
   if (!Array.isArray(trades)) return { cleaned: [], mutated: false };
@@ -43,18 +52,124 @@ export function sanitizeAndDedupeOrders(trades: PaperTradeOrder[]): { cleaned: P
   let mutated = filtered.length !== trades.length;
 
   const cleaned = filtered.map((o: PaperTradeOrder, idx: number) => {
-    if (seenIds.has(o.id)) {
+    let updated = o;
+    if (seenIds.has(updated.id)) {
       mutated = true;
-      const tag = (o.agentId || 'AGT').replace('agent_', '').slice(0, 3).toUpperCase();
-      let uniqueId = `${o.id}-${tag}-${idx + 1}`;
+      const tag = (updated.agentId || 'AGT').replace('agent_', '').slice(0, 3).toUpperCase();
+      let uniqueId = `${updated.id}-${tag}-${idx + 1}`;
       while (seenIds.has(uniqueId)) {
         uniqueId = `${uniqueId}-${Math.floor(Math.random() * 1000)}`;
       }
       seenIds.add(uniqueId);
-      return { ...o, id: uniqueId };
+      updated = { ...updated, id: uniqueId };
+    } else {
+      seenIds.add(updated.id);
     }
-    seenIds.add(o.id);
-    return o;
+
+    const isBreakerTest = updated.id.startsWith('BREACH-SIM-');
+    const cappedMaxLoss = isBreakerTest
+      ? updated.maxDefinedLossINR
+      : Math.min(400, Math.max(200, updated.maxDefinedLossINR || 380));
+
+    const firstLeg = updated.legs?.[0];
+    const side: 'BUY' | 'SELL' = (updated.side ?? firstLeg?.action ?? 'BUY') === 'SELL' ? 'SELL' : 'BUY';
+    const qty = Math.max(1, updated.qty ?? firstLeg?.qty ?? 1);
+    const entryPrice = Number((updated.entryPrice ?? firstLeg?.price ?? 100).toFixed(2));
+
+    // Resolve exitPrice and reconcile P&L so P&L === (Exit - Entry) * Qty * Direction
+    let exitPrice = updated.exitPrice ?? firstLeg?.exitPrice;
+    const rawPnl = Number((updated.pnlINR ?? 0).toFixed(2));
+
+    if (exitPrice == null || !Number.isFinite(exitPrice) || exitPrice <= 0) {
+      if (Math.abs(rawPnl) > 0.01) {
+        exitPrice = Number(
+          Math.max(0.05, side === 'BUY' ? entryPrice + rawPnl / qty : entryPrice - rawPnl / qty).toFixed(2)
+        );
+      } else {
+        exitPrice = entryPrice;
+      }
+    } else {
+      exitPrice = Number(exitPrice.toFixed(2));
+      // If exitPrice equals entryPrice while rawPnl is non-zero, derive exitPrice from rawPnl
+      if (Math.abs(exitPrice - entryPrice) < 0.01 && Math.abs(rawPnl) > 0.01) {
+        exitPrice = Number(
+          Math.max(0.05, side === 'BUY' ? entryPrice + rawPnl / qty : entryPrice - rawPnl / qty).toFixed(2)
+        );
+      }
+    }
+
+    // Also guard against legacy corrupt option orders where exitPrice was < ₹10 on a ₹42 entry creating > ₹800 profit
+    const reconciledPnl = Number(
+      ((side === 'BUY' ? exitPrice - entryPrice : entryPrice - exitPrice) * qty).toFixed(2)
+    );
+
+    const rawFloor = updated.trailingStopPnlINR ?? -cappedMaxLoss;
+    const trailingStopPrice = Number(
+      Math.max(
+        0.05,
+        side === 'BUY' ? entryPrice + rawFloor / qty : entryPrice - rawFloor / qty
+      ).toFixed(2)
+    );
+    const trailingStopPnlINR = Number(
+      ((side === 'BUY' ? trailingStopPrice - entryPrice : entryPrice - trailingStopPrice) * qty).toFixed(2)
+    );
+
+    const initialStopLossPrice =
+      updated.initialStopLossPrice ??
+      Number(Math.max(0.05, side === 'BUY' ? entryPrice - cappedMaxLoss / qty : entryPrice + cappedMaxLoss / qty).toFixed(2));
+
+    const unifiedLeg = {
+      instrument: updated.legs && updated.legs.length > 1 ? updated.symbol : (firstLeg?.instrument || updated.symbol),
+      action: side,
+      qty,
+      price: entryPrice,
+      exitPrice,
+      strike: firstLeg?.strike,
+      optionType: firstLeg?.optionType,
+    };
+
+    const nextStage: TslStage =
+      updated.tslStage ??
+      (updated.status === 'TRAILING_STOP_HIT'
+        ? 'TRAILING_STOP_HIT'
+        : updated.status === 'TARGET_HIT'
+          ? 'TARGET_HIT'
+          : updated.status === 'STOP_HIT'
+            ? 'STOP_HIT'
+            : 'INITIAL_RISK_STOP');
+
+    const peakPnlINR = Number(
+      Math.max(0, updated.peakPnlINR ?? 0, reconciledPnl).toFixed(2)
+    );
+
+    if (
+      cappedMaxLoss !== updated.maxDefinedLossINR ||
+      updated.tslStage == null ||
+      (updated.legs && updated.legs.length > 1) ||
+      updated.entryPrice !== entryPrice ||
+      updated.exitPrice !== exitPrice ||
+      updated.pnlINR !== reconciledPnl ||
+      updated.trailingStopPrice !== trailingStopPrice
+    ) {
+      mutated = true;
+      updated = {
+        ...updated,
+        side,
+        qty,
+        entryPrice,
+        exitPrice,
+        pnlINR: reconciledPnl,
+        peakPnlINR,
+        trailingStopPnlINR: updated.status === 'TRAILING_STOP_HIT' || updated.status === 'TARGET_HIT' ? reconciledPnl : trailingStopPnlINR,
+        trailingStopPrice: updated.status === 'TRAILING_STOP_HIT' || updated.status === 'TARGET_HIT' ? exitPrice : trailingStopPrice,
+        initialStopLossPrice,
+        maxDefinedLossINR: cappedMaxLoss,
+        tslStage: nextStage,
+        legs: [unifiedLeg],
+      };
+    }
+
+    return updated;
   });
 
   return { cleaned, mutated };
@@ -133,8 +248,10 @@ export function runAutonomousAgentCycleIfArmed(
 }
 
 /**
- * Flatten orders and their executed legs into uniform trade records
- * formatted for the dedicated table view.
+ * Flatten orders into uniform trade records for the dedicated table view.
+ * Enforces 100% mathematical consistency:
+ * P&L === (ExitPrice - EntryPrice) * Qty (for BUY)
+ * P&L === (EntryPrice - ExitPrice) * Qty (for SELL)
  */
 export function flattenOrdersToTrades(
   orders: PaperTradeOrder[],
@@ -147,104 +264,113 @@ export function flattenOrdersToTrades(
     const dateStr = order.orderDate || formatOrderDate(order.timestamp);
     const timeStr = order.orderTime || formatOrderTime(order.timestamp);
     const isOpen = order.status === 'OPEN';
+    const oneR = Math.min(400, Math.max(150, order.maxDefinedLossINR || 380));
 
-    if (order.legs && order.legs.length > 0) {
-      // If order has multiple legs, generate a trade record per leg
-      order.legs.forEach((leg, idx) => {
-        const legQty = leg.qty || order.qty || 1;
-        const entryPrice = leg.price || order.entryPrice || 100;
-        
-        let exitPrice = leg.exitPrice ?? order.exitPrice;
-        let legPnl = 0;
+    const firstLeg = order.legs?.[0];
+    const side: 'BUY' | 'SELL' = (order.side ?? firstLeg?.action ?? 'BUY') === 'SELL' ? 'SELL' : 'BUY';
+    const qty = Math.max(1, order.qty ?? firstLeg?.qty ?? 1);
+    const entryPrice = Number((order.entryPrice ?? firstLeg?.price ?? 100).toFixed(2));
 
-        if (isOpen) {
-          // For open trades, derive live exit price from quotes or current order MTM
-          const firstToken = order.symbol.split(' ')[0];
-          const quoteKey = Object.keys(quotes).find(k => k.replace('.NS', '') === firstToken);
-          const livePrice = quoteKey && quotes[quoteKey]?.price ? quotes[quoteKey].price! : entryPrice;
-          exitPrice = livePrice;
-          if (order.pnlINR !== 0 && order.legs.length === 1) {
-            legPnl = order.pnlINR;
-            const pnlPerUnit = legPnl / Math.max(1, legQty);
-            exitPrice = leg.action === 'BUY' ? entryPrice + pnlPerUnit : entryPrice - pnlPerUnit;
-          } else {
-            legPnl = leg.action === 'BUY' 
-              ? (livePrice - entryPrice) * legQty 
-              : (entryPrice - livePrice) * legQty;
+    // Resolve live or closed exitPrice
+    let exitPrice = order.exitPrice ?? firstLeg?.exitPrice;
+
+    if (isOpen) {
+      if (exitPrice == null || Math.abs(exitPrice - entryPrice) < 0.005) {
+        if (order.segment === 'NSE_CASH' || order.segment === 'BSE_CASH') {
+          const baseTicker = (firstLeg?.instrument || order.symbol).split(' ')[0].replace(/[^A-Z0-9]/gi, '');
+          const quote = quotes[`${baseTicker}.NS`] || quotes[`${baseTicker}.BO`];
+          if (quote?.price != null && quote.price > 0) {
+            exitPrice = Number(quote.price.toFixed(2));
           }
+        }
+      }
+      if (exitPrice == null || !Number.isFinite(exitPrice) || exitPrice <= 0) {
+        if (Math.abs(order.pnlINR || 0) > 0.01) {
+          exitPrice = Number(
+            Math.max(0.05, side === 'BUY' ? entryPrice + order.pnlINR / qty : entryPrice - order.pnlINR / qty).toFixed(2)
+          );
         } else {
-          if (exitPrice == null) {
-            const pnlPerUnit = order.pnlINR / Math.max(1, legQty);
-            exitPrice = leg.action === 'BUY' ? entryPrice + pnlPerUnit : entryPrice - pnlPerUnit;
-          }
-          legPnl = order.legs.length === 1 
-            ? order.pnlINR 
-            : Math.round(order.pnlINR / order.legs.length);
+          exitPrice = entryPrice;
         }
-
-        let candidateId = `${order.id}-leg-${idx}`;
-        if (usedRecordIds.has(candidateId)) {
-          candidateId = `${order.id}-ord${orderIdx}-leg-${idx}`;
-        }
-        usedRecordIds.add(candidateId);
-
-        records.push({
-          id: candidateId,
-          orderId: order.id,
-          agentId: order.agentId,
-          agentName: order.agentName,
-          instrument: leg.instrument || order.symbol,
-          side: leg.action || order.side || 'BUY',
-          qty: legQty,
-          entryPrice: Number(entryPrice.toFixed(2)),
-          exitPrice: Number(Number(exitPrice).toFixed(2)),
-          isOpen,
-          pnl: Number(legPnl.toFixed(2)),
-          dateStr,
-          timeStr,
-          segment: order.segment,
-          status: order.status,
-          strategyName: order.strategyName
-        });
-      });
+      }
     } else {
-      // Single top-level order without legs
-      const qty = order.qty || 1;
-      const entryPrice = order.entryPrice || 100;
-      let exitPrice = order.exitPrice;
-
-      if (isOpen) {
-        exitPrice = entryPrice;
-      } else if (exitPrice == null) {
-        const pnlPerUnit = order.pnlINR / Math.max(1, qty);
-        exitPrice = (order.side || 'BUY') === 'BUY' ? entryPrice + pnlPerUnit : entryPrice - pnlPerUnit;
+      if (exitPrice == null || !Number.isFinite(exitPrice) || exitPrice <= 0) {
+        if (Math.abs(order.pnlINR || 0) > 0.01) {
+          exitPrice = Number(
+            Math.max(0.05, side === 'BUY' ? entryPrice + order.pnlINR / qty : entryPrice - order.pnlINR / qty).toFixed(2)
+          );
+        } else {
+          exitPrice = entryPrice;
+        }
       }
-
-      let candidateId = order.id;
-      if (usedRecordIds.has(candidateId)) {
-        candidateId = `${order.id}-ord${orderIdx}`;
-      }
-      usedRecordIds.add(candidateId);
-
-      records.push({
-        id: candidateId,
-        orderId: order.id,
-        agentId: order.agentId,
-        agentName: order.agentName,
-        instrument: order.symbol,
-        side: order.side || 'BUY',
-        qty,
-        entryPrice: Number(entryPrice.toFixed(2)),
-        exitPrice: Number(Number(exitPrice).toFixed(2)),
-        isOpen,
-        pnl: Number(order.pnlINR.toFixed(2)),
-        dateStr,
-        timeStr,
-        segment: order.segment,
-        status: order.status,
-        strategyName: order.strategyName
-      });
     }
+
+    const cleanExitPrice = Number(Number(exitPrice).toFixed(2));
+    const priceDeltaPerUnit = Number(
+      (side === 'BUY' ? cleanExitPrice - entryPrice : entryPrice - cleanExitPrice).toFixed(2)
+    );
+    const exactPnl = Number((priceDeltaPerUnit * qty).toFixed(2));
+
+    const rawFloor = order.trailingStopPnlINR ?? -oneR;
+    const trailingStopPrice =
+      order.trailingStopPrice != null && Number.isFinite(order.trailingStopPrice)
+        ? Number(order.trailingStopPrice.toFixed(2))
+        : Number(
+            Math.max(
+              0.05,
+              side === 'BUY' ? entryPrice + rawFloor / qty : entryPrice - rawFloor / qty
+            ).toFixed(2)
+          );
+
+    const trailingStopPnlINR = Number(
+      ((side === 'BUY' ? trailingStopPrice - entryPrice : entryPrice - trailingStopPrice) * qty).toFixed(2)
+    );
+
+    const peakPnl = Number(
+      Math.max(0, order.peakPnlINR ?? 0, exactPnl).toFixed(2)
+    );
+
+    const tslStage: TslStage =
+      order.tslStage ??
+      (order.status === 'TRAILING_STOP_HIT'
+        ? 'TRAILING_STOP_HIT'
+        : order.status === 'TARGET_HIT'
+          ? 'TARGET_HIT'
+          : order.status === 'STOP_HIT'
+            ? 'STOP_HIT'
+            : 'INITIAL_RISK_STOP');
+
+    let candidateId = order.id;
+    if (usedRecordIds.has(candidateId)) {
+      candidateId = `${order.id}-ord${orderIdx}`;
+    }
+    usedRecordIds.add(candidateId);
+
+    records.push({
+      id: candidateId,
+      orderId: order.id,
+      agentId: order.agentId,
+      agentName: order.agentName,
+      instrument: firstLeg?.instrument && order.legs?.length === 1 ? firstLeg.instrument : order.symbol,
+      side,
+      qty,
+      entryPrice,
+      exitPrice: cleanExitPrice,
+      priceDeltaPerUnit,
+      isOpen,
+      pnl: exactPnl,
+      peakPnlINR: peakPnl,
+      trailingStopPnlINR,
+      trailingStopPrice,
+      maxDefinedLossINR: oneR,
+      tslStage,
+      exitReason: order.exitReason,
+      dateStr,
+      timeStr,
+      segment: order.segment,
+      status: order.status,
+      strategyName: order.strategyName,
+    });
   });
 
   return records;

@@ -1,6 +1,7 @@
 import React from 'react';
 import { ActiveTab } from '../types/quant';
-import { PanelLeftClose } from 'lucide-react';
+import { PanelLeftClose, Sun, Moon } from 'lucide-react';
+import { useTheme } from '../context/ThemeContext';
 
 interface SidebarProps {
   activeTab: ActiveTab;
@@ -14,65 +15,41 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setActiveTab,
   onToggle 
 }) => {
+  const { theme, setTheme } = useTheme();
   const navItems: { id: ActiveTab; label: string; icon: React.ReactNode }[] = [
     { 
-      id: 'multi_user_desk', 
-      label: '20-Seat Desk', 
-      icon: <span className="material-symbols-outlined text-[18px]">badge</span> 
-    },
-    { 
-      id: 'voice_hud', 
-      label: 'Voice HUD', 
-      icon: <span className="material-symbols-outlined text-[18px]">graphic_eq</span> 
-    },
-    { 
       id: 'quant_bot', 
-      label: 'Quant Bot', 
+      label: '01. Market & Quant Bot', 
       icon: <span className="material-symbols-outlined text-[18px]">smart_toy</span> 
     },
     { 
+      id: 'equity_radar', 
+      label: '02. Screener & Thesis', 
+      icon: <span className="material-symbols-outlined text-[18px]">candlestick_chart</span> 
+    },
+    { 
       id: 'autonomous_agents', 
-      label: '5-Agent Desk', 
+      label: '03. 5-Agent Desk', 
       icon: <span className="material-symbols-outlined text-[18px]">group_work</span> 
     },
     { 
       id: 'trade_history', 
-      label: 'Trade History', 
+      label: '04. OMS & "Why?" Audit', 
       icon: <span className="material-symbols-outlined text-[18px]">receipt_long</span> 
     },
     { 
-      id: 'equity_radar', 
-      label: 'Equity Radar', 
-      icon: <span className="material-symbols-outlined text-[18px]">candlestick_chart</span> 
-    },
-    { 
-      id: 'deep_thesis', 
-      label: 'Deep Thesis', 
-      icon: <span className="material-symbols-outlined text-[18px]">analytics</span> 
-    },
-    { 
-      id: 'sync_hub', 
-      label: 'Sync Hub', 
-      icon: <span className="material-symbols-outlined text-[18px]">hub</span> 
-    },
-    { 
       id: 'risk_engine', 
-      label: 'Risk Engine', 
+      label: '05. Risk Engine', 
       icon: <span className="material-symbols-outlined text-[18px]">security</span> 
     },
     { 
-      id: 'risk_guard', 
-      label: 'Guarded Risk', 
-      icon: <span className="material-symbols-outlined text-[18px]">gpp_maybe</span> 
-    },
-    { 
       id: 'backtest_lab', 
-      label: 'Backtest Lab', 
+      label: '06. Backtest Lab', 
       icon: <span className="material-symbols-outlined text-[18px]">query_stats</span> 
     },
     { 
       id: 'settings', 
-      label: 'Settings', 
+      label: '07. Control Tower', 
       icon: <span className="material-symbols-outlined text-[18px]">settings</span> 
     },
   ];
@@ -143,13 +120,42 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </nav>
       </div>
 
-      {/* Footer shortcut helper */}
-      <div className="p-3 border-t border-cyan-500/10 flex items-center justify-between text-[10px] text-slate-500 font-mono">
-        <span className="flex items-center gap-1.5">
-          <kbd className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 font-bold">C</kbd>
-          <span>TOGGLE PANEL</span>
-        </span>
-        <span className="text-slate-600">v8.4-PRO</span>
+      {/* Theme Switcher & Footer Shortcut Helper */}
+      <div className="p-3 border-t border-cyan-500/10 flex flex-col gap-2.5 font-mono">
+        <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-slate-950/80 border border-slate-800">
+          <button
+            onClick={() => setTheme('light')}
+            className={`flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[10px] font-bold uppercase transition cursor-pointer ${
+              theme === 'light'
+                ? 'bg-cyan-500 text-slate-950 shadow-xs'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Sun className="w-3.5 h-3.5" />
+            <span>Lighter</span>
+          </button>
+          <button
+            onClick={() => setTheme('dark')}
+            className={`flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[10px] font-bold uppercase transition cursor-pointer ${
+              theme === 'dark'
+                ? 'bg-cyan-500 text-slate-950 shadow-xs'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Moon className="w-3.5 h-3.5" />
+            <span>Dark</span>
+          </button>
+        </div>
+
+        <div className="flex items-center justify-between text-[10px] text-slate-400">
+          <span className="flex items-center gap-1.5">
+            <kbd className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300 font-bold">C</kbd>
+            <span>PANEL</span>
+            <kbd className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300 font-bold ml-1">T</kbd>
+            <span>THEME</span>
+          </span>
+          <span className="text-slate-400">v8.4-PRO</span>
+        </div>
       </div>
     </aside>
   );

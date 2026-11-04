@@ -223,15 +223,25 @@ export async function fetchUpstoxBatchQuotes(): Promise<boolean> {
         const ltp = Number(qData.last_price);
         if (!isNaN(ltp) && ltp > 0) {
           const ohlc = qData.ohlc || {};
-          const netChange = Number(qData.net_change ?? 0);
-          const closePrice = Number(ohlc.close) > 0 ? Number(ohlc.close) : ltp - netChange;
-          const change = ltp - closePrice;
-          const changePct = closePrice > 0 ? (change / closePrice) * 100 : 0;
+          const hasNetChange = qData.net_change !== null && qData.net_change !== undefined && !isNaN(Number(qData.net_change));
+          const netChange = hasNetChange ? Number(qData.net_change) : 0;
+
+          // Upstox v2 API sets ohlc.close equal to last_price tick during live market hours.
+          // Therefore, the authentic previous close must be derived from net_change: prevClose = ltp - net_change.
+          let prevClose = ltp - netChange;
+          if (!hasNetChange && Number(ohlc.close) > 0 && Math.abs(Number(ohlc.close) - ltp) > 0.0001) {
+            prevClose = Number(ohlc.close);
+          } else if (prevClose <= 0) {
+            prevClose = Number(ohlc.close) > 0 ? Number(ohlc.close) : ltp;
+          }
+
+          const change = hasNetChange ? netChange : (ltp - prevClose);
+          const changePct = prevClose > 0 ? (change / prevClose) * 100 : 0;
 
           quotesCache[trackedSym] = {
             ...quotesCache[trackedSym],
             price: Math.round(ltp * 100) / 100,
-            prevClose: Math.round(closePrice * 100) / 100,
+            prevClose: Math.round(prevClose * 100) / 100,
             change: Math.round(change * 100) / 100,
             changePct: Math.round(changePct * 100) / 100,
             high: ohlc.high != null ? Math.round(Number(ohlc.high) * 100) / 100 : quotesCache[trackedSym].high,

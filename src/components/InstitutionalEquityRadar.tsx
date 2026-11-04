@@ -5,6 +5,7 @@ import {
   QUANTITATIVE_STRATEGY_FRAMEWORK_WEIGHTS,
 } from '../data/institutionalEquityData';
 import { useLiveMarketData } from '../services/liveMarketService';
+import { MacroPolicyThesis } from './MacroPolicyThesis';
 import {
   TrendingUp,
   TrendingDown,
@@ -73,6 +74,7 @@ export const InstitutionalEquityRadar: React.FC = () => {
 
   // View Mode
   const [viewMode, setViewMode] = useState<ViewMode>('TABLE_MATRIX');
+  const [radarWorkspaceTab, setRadarWorkspaceTab] = useState<'FACTOR_SCREENER' | 'MACRO_THESIS'>('FACTOR_SCREENER');
 
   // Filters & Sorting (100% Live & Verifiable)
   const [horizonFilter, setHorizonFilter] = useState<'ALL' | 'SHORT_TERM' | 'LONG_TERM'>('ALL');
@@ -285,6 +287,39 @@ export const InstitutionalEquityRadar: React.FC = () => {
 
   return (
     <div className="flex flex-col gap-6 w-full font-mono text-slate-100">
+      {/* Unified Screener & Macro Thesis Sub-Tab Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 p-2 rounded-2xl bg-slate-900/70 border border-slate-800">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <button
+            onClick={() => setRadarWorkspaceTab('FACTOR_SCREENER')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+              radarWorkspaceTab === 'FACTOR_SCREENER'
+                ? 'bg-cyan-500 text-slate-950 shadow-[0_0_12px_rgba(0,240,255,0.3)]'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            01. Live Universe &amp; Factor Screener
+          </button>
+          <button
+            onClick={() => setRadarWorkspaceTab('MACRO_THESIS')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+              radarWorkspaceTab === 'MACRO_THESIS'
+                ? 'bg-cyan-500 text-slate-950 shadow-[0_0_12px_rgba(0,240,255,0.3)]'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            02. Macro Policy &amp; Sovereign Capex Thesis
+          </button>
+        </div>
+        <span className="text-[11px] text-slate-400 px-2">
+          Survivorship-Bias-Free Universe · Close &gt; 200 SMA + Volume Expansion
+        </span>
+      </div>
+
+      {radarWorkspaceTab === 'MACRO_THESIS' ? (
+        <MacroPolicyThesis />
+      ) : (
+        <>
       {/* Top Banner: Institutional Equity Screener Header (Focus Mode Target) */}
       <div className="relative w-full bg-gradient-to-br from-[#080e22]/95 via-[#060a18]/95 to-[#030610]/98 rounded-2xl p-6 sm:p-7 border border-cyan-500/35 shadow-[0_0_45px_rgba(6,182,212,0.18)] backdrop-blur-2xl overflow-hidden ring-1 ring-cyan-500/20">
         {/* Cyber-Optic Glowing Radial Mesh Backdrop */}
@@ -295,7 +330,7 @@ export const InstitutionalEquityRadar: React.FC = () => {
             <div className="flex items-center gap-2 mb-2 flex-wrap">
               <span className="px-2.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/40 text-amber-300 text-[10px] font-bold tracking-widest uppercase flex items-center gap-1.5 shadow-[0_0_10px_rgba(251,191,36,0.2)]">
                 <Zap className="w-3 h-3 text-amber-400" />
-                LIVE_TECHNICAL_BREAKOUT_RADAR // ZERO_STATIC_DATA
+                LIVE TECHNICAL BREAKOUT RADAR
               </span>
               <span className="px-2.5 py-0.5 rounded bg-emerald-950/70 border border-emerald-500/50 text-emerald-300 text-[10px] font-bold flex items-center gap-1.5 shadow-[0_0_12px_rgba(16,185,129,0.25)]">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
@@ -1975,6 +2010,8 @@ export const InstitutionalEquityRadar: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   );

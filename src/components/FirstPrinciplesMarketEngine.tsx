@@ -20,16 +20,44 @@ import {
   Award,
   Activity,
   Clock,
+  ShieldCheck,
+  Zap,
+  Sliders,
+  X,
 } from 'lucide-react';
-import type { MarketQuote } from '../types/quant';
+import type { MarketQuote, PaperTradeOrder } from '../types/quant';
 import type {
   FirstPrinciplesMarketPayload,
   SectorGainLossItem,
   SelfLearningAgentProfile,
   PredictionAuditRecord,
 } from '../server/firstPrinciplesEngine';
+import {
+  computeInstitutionalStockSetupBlueprint,
+  type SetupInstrumentMode,
+  type InstitutionalStockSetupBlueprint,
+} from '../utils/institutionalSetupBlueprint';
 import type { ActionableStockImpact } from '../server/globalMarketImpactEngine';
+import { getStoredPaperTrades, persistPaperTrades } from '../services/paperTradeService';
+import { formatOrderDate, formatOrderTime } from '../utils/orderFormatters';
 import { AutonomousSchedulerHub } from './AutonomousSchedulerHub';
+
+interface SetupModalContext {
+  symbol: string;
+  name: string;
+  sector: string;
+  direction: 'RISE' | 'FALL';
+  entryPrice: number;
+  targetPrice: number;
+  stopLoss: number;
+  leadPillar: string;
+  causalSummary: {
+    globalOrGeoReason: string;
+    basicsAndPolicyReason: string;
+    emotionsOrFlowReason: string;
+    catalystHeadline: string;
+  };
+}
 
 interface TrackedPosition {
   id: string;
@@ -49,11 +77,13 @@ interface TrackedPosition {
 interface FirstPrinciplesMarketEngineProps {
   quotes: Record<string, MarketQuote>;
   onOpenBacktest?: () => void;
+  onNavigateToAgents?: () => void;
 }
 
 export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEngineProps> = ({
   quotes,
   onOpenBacktest,
+  onNavigateToAgents,
 }) => {
   const [payload, setPayload] = useState<FirstPrinciplesMarketPayload | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -94,6 +124,23 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
   });
 
   const [feedbackNotice, setFeedbackNotice] = useState<string | null>(null);
+
+  // Interactive Institutional Trade Setup & 2026 Tax/Risk Blueprint Modal state
+  const [activeSetupContext, setActiveSetupContext] = useState<SetupModalContext | null>(null);
+  const [setupInstrumentMode, setSetupInstrumentMode] = useState<SetupInstrumentMode>('CASH_CNC');
+  const [setupSizingMethod, setSetupSizingMethod] = useState<'ONE_PCT_RISK' | 'QUARTER_KELLY'>('ONE_PCT_RISK');
+  const [setupTslEnabled, setSetupTslEnabled] = useState<boolean>(true);
+  const [sessionOrders, setSessionOrders] = useState<PaperTradeOrder[]>(() => getStoredPaperTrades());
+
+  useEffect(() => {
+    const syncOrders = () => setSessionOrders(getStoredPaperTrades());
+    window.addEventListener('jarvis:orders-updated', syncOrders);
+    window.addEventListener('storage', syncOrders);
+    return () => {
+      window.removeEventListener('jarvis:orders-updated', syncOrders);
+      window.removeEventListener('storage', syncOrders);
+    };
+  }, []);
 
   const fetchIntelligence = useCallback(async (recalibrate = false) => {
     try {
@@ -138,11 +185,13 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
     targetPrice: number,
     stopLoss: number,
     leadPillar: string,
+    customQty?: number,
+    customCapitalAllocated?: number,
   ) => {
     const livePrice = quotes[symbol]?.price ?? entryPrice;
     const riskPerShare = Math.max(1, Math.abs(livePrice - stopLoss));
     const maxRiskRupees = capitalBase * 0.01; // 1% max risk rule
-    const qty = Math.max(1, Math.floor(maxRiskRupees / riskPerShare));
+    const qty = customQty ?? Math.max(1, Math.floor(maxRiskRupees / riskPerShare));
 
     const newPos: TrackedPosition = {
       id: `${symbol}-${direction}-${Date.now()}`,
@@ -154,7 +203,7 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
       targetPrice,
       stopLoss,
       quantity: qty,
-      capitalAllocated: Math.round(qty * livePrice),
+      capitalAllocated: customCapitalAllocated ?? Math.round(qty * livePrice),
       addedAt: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
       leadPillar,
     };
@@ -164,6 +213,111 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
     try {
       localStorage.setItem('jarvis_fp_tracked_positions', JSON.stringify(next));
     } catch { /* ignore */ }
+    setFeedbackNotice(
+      `Tracked ${symbol.replace('.NS', '')} (${direction === 'RISE' ? 'LONG BUY' : 'SHORT / AVOID'}) in Live ROI Decision Ledger — Qty: ${qty} @ ₹${livePrice.toLocaleString('en-IN')}.`,
+    );
+    setTimeout(() => setFeedbackNotice(null), 5000);
+  };
+
+  const handleOpenSetupBlueprintModal = (ctx: SetupModalContext) => {
+    setSetupInstrumentMode(ctx.direction === 'FALL' ? 'INTRADAY_MIS' : 'CASH_CNC');
+    setActiveSetupContext(ctx);
+  };
+
+  const activeBlueprint: InstitutionalStockSetupBlueprint | null = useMemo(() => {
+    if (!activeSetupContext) return null;
+    const livePrice = quotes[activeSetupContext.symbol]?.price ?? activeSetupContext.entryPrice;
+    return computeInstitutionalStockSetupBlueprint({
+      symbol: activeSetupContext.symbol,
+      name: activeSetupContext.name,
+      sector: activeSetupContext.sector,
+      direction: activeSetupContext.direction,
+      livePrice,
+      targetPrice: activeSetupContext.targetPrice,
+      stopLossPrice: activeSetupContext.stopLoss,
+      capitalBase,
+      instrumentMode: setupInstrumentMode,
+      sizingMethod: setupSizingMethod,
+    });
+  }, [activeSetupContext, quotes, capitalBase, setupInstrumentMode, setupSizingMethod]);
+
+  const handleDeployBlueprintToOrderBook = (bp: InstitutionalStockSetupBlueprint) => {
+    if (!activeSetupContext) return;
+    // 1. Track in ROI Decision Ledger
+    handleTrackStockSetup(
+      bp.symbol,
+      bp.name,
+      bp.sector,
+      bp.direction,
+      bp.spotEntryPrice,
+      bp.target2Price,
+      bp.stopLossPrice,
+      activeSetupContext.leadPillar,
+      bp.quantity,
+      bp.marginRequired,
+    );
+
+    // 2. Dispatch verified PaperTradeOrder into Live Session Order Book
+    const now = new Date();
+    const agentId =
+      activeSetupContext.leadPillar.toLowerCase().includes('vidura') || activeSetupContext.leadPillar.toLowerCase().includes('geo')
+        ? 'agent_vidura'
+        : activeSetupContext.leadPillar.toLowerCase().includes('chanakya') || activeSetupContext.leadPillar.toLowerCase().includes('policy')
+          ? 'agent_chanakya'
+          : activeSetupContext.leadPillar.toLowerCase().includes('arjuna') || activeSetupContext.leadPillar.toLowerCase().includes('emotion')
+            ? 'agent_arjuna'
+            : 'agent_bhishma';
+
+    const segment: PaperTradeOrder['segment'] =
+      bp.instrumentMode === 'NSE_FUTURES' || bp.instrumentMode === 'NSE_OPTION' ? 'NSE_FNO' : 'NSE_CASH';
+
+    const newOrder: PaperTradeOrder = {
+      id: `ORD-FP-${bp.baseTicker}-${Date.now().toString().slice(-5)}`,
+      agentId,
+      agentName: activeSetupContext.leadPillar,
+      symbol: bp.symbol,
+      segment,
+      strategyName: `${bp.instrumentLabel} · ${bp.direction === 'RISE' ? 'Long Accumulation' : 'Short / Tactical Hedge'}${setupTslEnabled ? ' [TSL ARMED]' : ''}`,
+      legs: [
+        {
+          instrument: bp.contractSymbol,
+          action: bp.side,
+          qty: bp.quantity,
+          price: bp.instrumentEntryPrice,
+          exitPrice: bp.instrumentEntryPrice,
+        },
+      ],
+      totalInvestmentINR: bp.marginRequired,
+      maxDefinedLossINR: Math.min(400, Math.max(200, Math.round(bp.taxAudit.grossRiskAtStop))),
+      targetProfitINR: Math.round(bp.taxAudit.netWinAfterTax),
+      riskRewardRatio: `1 : ${bp.rewardToRiskRatio}`,
+      timestamp: now.toLocaleTimeString('en-IN', { hour12: false }),
+      orderDate: formatOrderDate(now),
+      orderTime: formatOrderTime(now),
+      status: 'OPEN',
+      pnlINR: 0,
+      peakPnlINR: 0,
+      trailingStopPnlINR: -Math.min(400, Math.max(200, Math.round(bp.taxAudit.grossRiskAtStop))),
+      trailingStopPrice: bp.instrumentStopLoss,
+      initialStopLossPrice: bp.instrumentStopLoss,
+      targetPriceLevel: bp.instrumentTarget2,
+      tslStage: setupTslEnabled ? 'BREAKEVEN_ARMED' : 'INITIAL_RISK_STOP',
+      entryPrice: bp.instrumentEntryPrice,
+      exitPrice: bp.instrumentEntryPrice,
+      side: bp.side,
+      qty: bp.quantity,
+      sebiComplianceVerified: !bp.taxAudit.isVetoed,
+    };
+
+    const existing = getStoredPaperTrades();
+    const updatedOrders = [newOrder, ...existing];
+    persistPaperTrades(updatedOrders);
+    setSessionOrders(updatedOrders);
+    setActiveSetupContext(null);
+    setFeedbackNotice(
+      `⚡ Deployed ${bp.contractSymbol} (${bp.side} Qty ${bp.quantity} @ ₹${bp.instrumentEntryPrice.toLocaleString('en-IN')}) to Live Session Order Book & ROI Ledger.`,
+    );
+    setTimeout(() => setFeedbackNotice(null), 6000);
   };
 
   const handleRemovePosition = (id: string) => {
@@ -243,6 +397,123 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
     };
   }, [trackedPositions, quotes, capitalBase]);
 
+  const liveReconciled = useMemo(() => {
+    if (!payload) return null;
+
+    const rawRising = payload.globalImpact.risingStocks || [];
+    const rawFalling = payload.globalImpact.fallingStocks || [];
+
+    const liveRisingMap = new Map<string, ActionableStockImpact>();
+    const liveFallingMap = new Map<string, ActionableStockImpact>();
+
+    const allEvaluated = [...rawRising, ...rawFalling];
+    for (const st of allEvaluated) {
+      const livePrice = quotes[st.symbol]?.price ?? st.livePrice;
+      const livePct = quotes[st.symbol]?.changePct ?? st.changePct;
+      const updatedStock: ActionableStockImpact = {
+        ...st,
+        livePrice: Number(livePrice.toFixed(2)),
+        changePct: Number(livePct.toFixed(2)),
+      };
+
+      const isCurrentlyRising =
+        livePct >= 0.05 || (livePct >= -0.05 && st.direction === 'RISING');
+
+      if (isCurrentlyRising) {
+        if (!liveFallingMap.has(st.symbol)) {
+          liveRisingMap.set(st.symbol, { ...updatedStock, direction: 'RISING' });
+        }
+      } else {
+        liveRisingMap.delete(st.symbol);
+        liveFallingMap.set(st.symbol, { ...updatedStock, direction: 'FALLING' });
+      }
+    }
+
+    const risingSymbols = new Set(liveRisingMap.keys());
+    const fallingSymbols = new Set(liveFallingMap.keys());
+
+    // Reconcile sectorRotationMatrix with live quotes and strictly disjoint Buy/Avoid sets
+    const reconciledSectors = payload.sectorRotationMatrix.map((sec) => {
+      const allSectorStocksMap = new Map<string, typeof sec.stocksToBuy[number]>();
+      for (const s of [...sec.stocksToBuy, ...sec.stocksToAvoidOrShort]) {
+        const lp = quotes[s.symbol]?.price ?? s.price;
+        const lpct = quotes[s.symbol]?.changePct ?? s.changePct;
+        allSectorStocksMap.set(s.symbol, {
+          ...s,
+          price: Number(lp.toFixed(2)),
+          changePct: Number(lpct.toFixed(2)),
+        });
+      }
+
+      const nextBuy: typeof sec.stocksToBuy = [];
+      const nextAvoid: typeof sec.stocksToAvoidOrShort = [];
+
+      for (const s of allSectorStocksMap.values()) {
+        const inFalling = fallingSymbols.has(s.symbol);
+        const inRising = risingSymbols.has(s.symbol);
+        const isLiveGain =
+          !inFalling && (inRising || s.changePct >= 0.05 || (s.changePct >= -0.05 && sec.stocksToBuy.some((b) => b.symbol === s.symbol)));
+
+        if (isLiveGain) {
+          const targetPrice = s.targetPrice > s.price ? s.targetPrice : Number((s.price * 1.035).toFixed(2));
+          const stopLoss = s.stopLoss < s.price ? s.stopLoss : Number((s.price * 0.983).toFixed(2));
+          nextBuy.push({
+            ...s,
+            entryPrice: s.price,
+            targetPrice,
+            stopLoss,
+          });
+        } else {
+          const targetPrice = s.targetPrice < s.price ? s.targetPrice : Number((s.price * 0.966).toFixed(2));
+          const stopLoss = s.stopLoss > s.price ? s.stopLoss : Number((s.price * 1.017).toFixed(2));
+          nextAvoid.push({
+            ...s,
+            entryPrice: s.price,
+            targetPrice,
+            stopLoss,
+            reason:
+              s.changePct < 0
+                ? `Live intraday supply (${s.changePct.toFixed(2)}%) — avoid long accumulation until relative strength recovers.`
+                : s.reason,
+          });
+        }
+      }
+
+      nextBuy.sort((a, b) => b.changePct - a.changePct);
+      nextAvoid.sort((a, b) => a.changePct - b.changePct);
+
+      const allVals = Array.from(allSectorStocksMap.values());
+      const liveAvgPct =
+        allVals.length > 0
+          ? Number((allVals.reduce((acc, item) => acc + item.changePct, 0) / allVals.length).toFixed(2))
+          : sec.avgChangePctToday;
+
+      let adjustedScore = sec.netScore;
+      if (nextBuy.length === 0 && liveAvgPct < 0) {
+        adjustedScore = Math.min(-22, adjustedScore);
+      } else if (nextAvoid.length === 0 && liveAvgPct > 0.25) {
+        adjustedScore = Math.max(22, adjustedScore);
+      }
+
+      return {
+        ...sec,
+        avgChangePctToday: liveAvgPct,
+        netScore: adjustedScore,
+        stocksToBuy: nextBuy,
+        stocksToAvoidOrShort: nextAvoid,
+      };
+    });
+
+    return {
+      sectorRotationMatrix: reconciledSectors,
+      globalImpact: {
+        ...payload.globalImpact,
+        risingStocks: Array.from(liveRisingMap.values()).sort((a, b) => b.convictionScore - a.convictionScore),
+        fallingStocks: Array.from(liveFallingMap.values()).sort((a, b) => b.convictionScore - a.convictionScore),
+      },
+    };
+  }, [payload, quotes]);
+
   if (loading && !payload) {
     return (
       <div className="p-8 bg-slate-900/70 border border-slate-800 rounded-xl text-slate-300 flex items-center justify-between">
@@ -275,20 +546,24 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
     );
   }
 
-  if (!payload) return null;
+  if (!payload || !liveReconciled) return null;
 
   const {
     pillars,
     crowdPsychology,
     policyAndFlows,
     geopolitics,
-    sectorRotationMatrix,
     selfLearning,
-    globalImpact,
   } = payload;
 
-  const gainingSectors = sectorRotationMatrix.filter((s) => s.netScore >= 20);
-  const losingSectors = sectorRotationMatrix.filter((s) => s.netScore <= -20);
+  const { sectorRotationMatrix, globalImpact } = liveReconciled;
+
+  const gainingSectors = sectorRotationMatrix.filter(
+    (s) => s.netScore >= 20 && s.stocksToBuy.length > 0,
+  );
+  const losingSectors = sectorRotationMatrix.filter(
+    (s) => s.netScore <= -20 && s.stocksToAvoidOrShort.length > 0,
+  );
   const selectedSector =
     sectorRotationMatrix.find((s) => s.sectorId === selectedSectorId) || sectorRotationMatrix[0];
 
@@ -430,24 +705,24 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
             </button>
             <button
               onClick={() => setActiveView('SELF_LEARNING_AGENTS')}
-              className={`px-3.5 py-2 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
+              className={`px-3.5 py-2 rounded-md text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                 activeView === 'SELF_LEARNING_AGENTS'
                   ? 'bg-cyan-500 text-slate-950'
                   : 'text-slate-300 hover:text-white'
               }`}
             >
-              4. Self-Learning 5 Agents
+              4. Prediction Audit &amp; Calibration
             </button>
             <button
               onClick={() => setActiveView('AUTONOMOUS_SCHEDULER')}
-              className={`px-3.5 py-2 rounded-md text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${
+              className={`px-3.5 py-2 rounded-md text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
                 activeView === 'AUTONOMOUS_SCHEDULER'
                   ? 'bg-cyan-500 text-slate-950 font-bold'
                   : 'text-slate-300 hover:text-white'
               }`}
             >
               <Clock className="w-3.5 h-3.5" />
-              <span>5. Autonomous Scheduler & Permanent Ledger</span>
+              <span>5. Autonomous Scheduler &amp; Ledger</span>
             </button>
           </div>
 
@@ -570,7 +845,7 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-white">{sec.sectorName}</span>
                       <span className="text-xs font-mono font-bold text-emerald-400">
-                        Score +{sec.netScore}/100 · Avg {sec.avgChangePctToday >= 0 ? '+' : ''}{sec.avgChangePctToday}%
+                        Score +{sec.netScore}/100 · Avg {sec.avgChangePctToday >= 0 ? '+' : ''}{sec.avgChangePctToday.toFixed(2)}%
                       </span>
                     </div>
                     <p className="text-xs text-slate-300 mt-1">
@@ -609,7 +884,7 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-white">{sec.sectorName}</span>
                       <span className="text-xs font-mono font-bold text-rose-400">
-                        Score {sec.netScore}/100 · Avg {sec.avgChangePctToday >= 0 ? '+' : ''}{sec.avgChangePctToday}%
+                        Score {sec.netScore}/100 · Avg {sec.avgChangePctToday >= 0 ? '+' : ''}{sec.avgChangePctToday.toFixed(2)}%
                       </span>
                     </div>
                     <p className="text-xs text-slate-300 mt-1">
@@ -714,24 +989,30 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
                       </span>
                       <button
                         onClick={() =>
-                          handleTrackStockSetup(
-                            stock.symbol,
-                            stock.name,
-                            stock.sector,
-                            'RISE',
-                            livePrice,
-                            stock.tradeSetup.target1,
-                            stock.tradeSetup.stopLoss,
-                            'Chanakya & Bhishma',
-                          )
+                          handleOpenSetupBlueprintModal({
+                            symbol: stock.symbol,
+                            name: stock.name,
+                            sector: stock.sector,
+                            direction: 'RISE',
+                            entryPrice: livePrice,
+                            targetPrice: stock.tradeSetup.target1,
+                            stopLoss: stock.tradeSetup.stopLoss,
+                            leadPillar: 'Chanakya & Bhishma',
+                            causalSummary: {
+                              globalOrGeoReason: stock.primaryGlobalDriver,
+                              basicsAndPolicyReason: stock.fundamentalTransmissionReason,
+                              emotionsOrFlowReason: 'Institutional accumulation & positive relative strength vs index.',
+                              catalystHeadline: stock.matchedNewsHeadline,
+                            },
+                          })
                         }
                         className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
                           isTracked
-                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30'
                             : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950'
                         }`}
                       >
-                        {isTracked ? 'Tracking in ROI Ledger' : 'Track Long Setup'}
+                        {isTracked ? '✓ Tracked · View / Deploy Setup' : 'Track Long Setup'}
                       </button>
                     </div>
                   </div>
@@ -827,24 +1108,30 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
                       </span>
                       <button
                         onClick={() =>
-                          handleTrackStockSetup(
-                            stock.symbol,
-                            stock.name,
-                            stock.sector,
-                            'FALL',
-                            livePrice,
-                            stock.tradeSetup.target1,
-                            stock.tradeSetup.stopLoss,
-                            'Vidura (Geopolitics/Crude)',
-                          )
+                          handleOpenSetupBlueprintModal({
+                            symbol: stock.symbol,
+                            name: stock.name,
+                            sector: stock.sector,
+                            direction: 'FALL',
+                            entryPrice: livePrice,
+                            targetPrice: stock.tradeSetup.target1,
+                            stopLoss: stock.tradeSetup.stopLoss,
+                            leadPillar: 'Vidura (Geopolitics/Crude)',
+                            causalSummary: {
+                              globalOrGeoReason: stock.primaryGlobalDriver,
+                              basicsAndPolicyReason: stock.fundamentalTransmissionReason,
+                              emotionsOrFlowReason: 'Institutional distribution & retail dip-buying trap warning.',
+                              catalystHeadline: stock.matchedNewsHeadline,
+                            },
+                          })
                         }
                         className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
                           isTracked
-                            ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                            ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 hover:bg-rose-500/30'
                             : 'bg-rose-500 hover:bg-rose-400 text-slate-950'
                         }`}
                       >
-                        {isTracked ? 'Tracking Short Setup' : 'Track Short / Avoid'}
+                        {isTracked ? '✓ Tracked · View / Deploy Setup' : 'Track Short / Avoid'}
                       </button>
                     </div>
                   </div>
@@ -884,7 +1171,7 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
                     <div>
                       <div className="text-sm font-bold text-white">{sec.sectorName}</div>
                       <div className="text-[11px] text-slate-400 mt-0.5">
-                        Lead Specialist: {sec.DominantAgentName} · Today Avg: {sec.avgChangePctToday >= 0 ? '+' : ''}{sec.avgChangePctToday}%
+                        Lead Specialist: {sec.DominantAgentName} · Today Avg: {sec.avgChangePctToday >= 0 ? '+' : ''}{sec.avgChangePctToday.toFixed(2)}%
                       </div>
                     </div>
                     <div className="text-right font-mono">
@@ -991,36 +1278,69 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
                     Stocks to BUY / ACCUMULATE in {selectedSector.sectorName}
                   </h3>
                   <div className="space-y-2">
-                    {selectedSector.stocksToBuy.map((st) => (
-                      <div key={st.symbol} className="p-3 rounded-lg bg-slate-950 border border-emerald-500/30 flex flex-col md:flex-row md:items-center justify-between gap-3">
-                        <div>
-                          <div className="text-xs font-bold text-white">
-                            {st.name} ({st.symbol.replace('.NS', '')}) · ₹{st.price.toLocaleString('en-IN')} ({st.changePct >= 0 ? '+' : ''}{st.changePct}%)
+                    {selectedSector.stocksToBuy.map((st) => {
+                      const isTracked = trackedPositions.some((p) => p.symbol === st.symbol);
+                      const isDeployed = sessionOrders.some((o) => o.symbol === st.symbol && o.status === 'OPEN');
+                      const livePrice = quotes[st.symbol]?.price ?? st.price;
+                      const riskPerShare = Math.max(1, Math.abs(livePrice - st.stopLoss));
+                      const recShares = Math.max(1, Math.floor((capitalBase * 0.01) / riskPerShare));
+                      const rr = Number((Math.abs(st.targetPrice - livePrice) / riskPerShare).toFixed(2));
+
+                      return (
+                        <div key={st.symbol} className="p-3 rounded-lg bg-slate-950 border border-emerald-500/30 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-xs font-bold text-white">
+                                {st.name} ({st.symbol.replace('.NS', '')}) · ₹{livePrice.toLocaleString('en-IN')} ({st.changePct >= 0 ? '+' : ''}{st.changePct}%)
+                              </span>
+                              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                                R:R 1:{rr} · 1% Risk Qty: {recShares} shs
+                              </span>
+                              {isDeployed && (
+                                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                                  ⚡ Live in Order Book
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-slate-300 mt-0.5">{st.reason}</div>
+                            <div className="text-[11px] font-mono text-slate-400 mt-1">
+                              Entry: ₹{livePrice} · Target: ₹{st.targetPrice} · Stop-Loss: ₹{st.stopLoss}
+                            </div>
                           </div>
-                          <div className="text-xs text-slate-300 mt-0.5">{st.reason}</div>
-                          <div className="text-[11px] font-mono text-slate-400 mt-1">
-                            Entry: ₹{st.entryPrice} · Target: ₹{st.targetPrice} · Stop-Loss: ₹{st.stopLoss}
-                          </div>
+                          <button
+                            onClick={() =>
+                              handleOpenSetupBlueprintModal({
+                                symbol: st.symbol,
+                                name: st.name,
+                                sector: selectedSector.sectorName,
+                                direction: 'RISE',
+                                entryPrice: livePrice,
+                                targetPrice: st.targetPrice,
+                                stopLoss: st.stopLoss,
+                                leadPillar: selectedSector.DominantAgentName,
+                                causalSummary: {
+                                  globalOrGeoReason: selectedSector.whyGainingOrLosing.geopoliticsReason,
+                                  basicsAndPolicyReason: `${selectedSector.whyGainingOrLosing.policyReason} ${selectedSector.whyGainingOrLosing.marketBasicsReason}`,
+                                  emotionsOrFlowReason: selectedSector.whyGainingOrLosing.emotionsReason,
+                                  catalystHeadline: st.reason,
+                                },
+                              })
+                            }
+                            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold shrink-0 cursor-pointer transition-colors ${
+                              isTracked || isDeployed
+                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30'
+                                : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950'
+                            }`}
+                          >
+                            {isDeployed
+                              ? '⚡ Deployed · View Setup'
+                              : isTracked
+                                ? '✓ Tracked · View / Deploy'
+                                : 'Track Buy Setup'}
+                          </button>
                         </div>
-                        <button
-                          onClick={() =>
-                            handleTrackStockSetup(
-                              st.symbol,
-                              st.name,
-                              selectedSector.sectorName,
-                              'RISE',
-                              st.price,
-                              st.targetPrice,
-                              st.stopLoss,
-                              selectedSector.DominantAgentName,
-                            )
-                          }
-                          className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-semibold shrink-0 cursor-pointer"
-                        >
-                          Track Buy Setup
-                        </button>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -1031,36 +1351,69 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
                     Stocks to AVOID / SHORT in {selectedSector.sectorName}
                   </h3>
                   <div className="space-y-2">
-                    {selectedSector.stocksToAvoidOrShort.map((st) => (
-                      <div key={st.symbol} className="p-3 rounded-lg bg-slate-950 border border-rose-500/30 flex flex-col md:flex-row md:items-center justify-between gap-3">
-                        <div>
-                          <div className="text-xs font-bold text-white">
-                            {st.name} ({st.symbol.replace('.NS', '')}) · ₹{st.price.toLocaleString('en-IN')} ({st.changePct >= 0 ? '+' : ''}{st.changePct}%)
+                    {selectedSector.stocksToAvoidOrShort.map((st) => {
+                      const isTracked = trackedPositions.some((p) => p.symbol === st.symbol);
+                      const isDeployed = sessionOrders.some((o) => o.symbol === st.symbol && o.status === 'OPEN');
+                      const livePrice = quotes[st.symbol]?.price ?? st.price;
+                      const riskPerShare = Math.max(1, Math.abs(livePrice - st.stopLoss));
+                      const recShares = Math.max(1, Math.floor((capitalBase * 0.01) / riskPerShare));
+                      const rr = Number((Math.abs(st.targetPrice - livePrice) / riskPerShare).toFixed(2));
+
+                      return (
+                        <div key={st.symbol} className="p-3 rounded-lg bg-slate-950 border border-rose-500/30 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-xs font-bold text-white">
+                                {st.name} ({st.symbol.replace('.NS', '')}) · ₹{livePrice.toLocaleString('en-IN')} ({st.changePct >= 0 ? '+' : ''}{st.changePct}%)
+                              </span>
+                              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-300 border border-rose-500/30">
+                                R:R 1:{rr} · 1% Risk Qty: {recShares} shs
+                              </span>
+                              {isDeployed && (
+                                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                                  ⚡ Live in Order Book
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-slate-300 mt-0.5">{st.reason}</div>
+                            <div className="text-[11px] font-mono text-slate-400 mt-1">
+                              Short/Exit: ₹{livePrice} · Downside Target: ₹{st.targetPrice} · Stop: ₹{st.stopLoss}
+                            </div>
                           </div>
-                          <div className="text-xs text-slate-300 mt-0.5">{st.reason}</div>
-                          <div className="text-[11px] font-mono text-slate-400 mt-1">
-                            Short/Exit: ₹{st.entryPrice} · Downside Target: ₹{st.targetPrice} · Stop: ₹{st.stopLoss}
-                          </div>
+                          <button
+                            onClick={() =>
+                              handleOpenSetupBlueprintModal({
+                                symbol: st.symbol,
+                                name: st.name,
+                                sector: selectedSector.sectorName,
+                                direction: 'FALL',
+                                entryPrice: livePrice,
+                                targetPrice: st.targetPrice,
+                                stopLoss: st.stopLoss,
+                                leadPillar: selectedSector.DominantAgentName,
+                                causalSummary: {
+                                  globalOrGeoReason: selectedSector.whyGainingOrLosing.geopoliticsReason,
+                                  basicsAndPolicyReason: `${selectedSector.whyGainingOrLosing.policyReason} ${selectedSector.whyGainingOrLosing.marketBasicsReason}`,
+                                  emotionsOrFlowReason: selectedSector.whyGainingOrLosing.emotionsReason,
+                                  catalystHeadline: st.reason,
+                                },
+                              })
+                            }
+                            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold shrink-0 cursor-pointer transition-colors ${
+                              isTracked || isDeployed
+                                ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 hover:bg-rose-500/30'
+                                : 'bg-rose-500 hover:bg-rose-400 text-slate-950'
+                            }`}
+                          >
+                            {isDeployed
+                              ? '⚡ Deployed · View Setup'
+                              : isTracked
+                                ? '✓ Tracked · View / Deploy'
+                                : 'Track Short / Avoid'}
+                          </button>
                         </div>
-                        <button
-                          onClick={() =>
-                            handleTrackStockSetup(
-                              st.symbol,
-                              st.name,
-                              selectedSector.sectorName,
-                              'FALL',
-                              st.price,
-                              st.targetPrice,
-                              st.stopLoss,
-                              selectedSector.DominantAgentName,
-                            )
-                          }
-                          className="px-3 py-1.5 rounded-lg bg-rose-500 hover:bg-rose-400 text-slate-950 text-xs font-semibold shrink-0 cursor-pointer"
-                        >
-                          Track Short / Avoid
-                        </button>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -1219,11 +1572,11 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
       )}
 
       {/* ==================================================================== */}
-      {/* VIEW 4: SELF-LEARNING 5 AGENTS & DAILY EVOLUTION LEDGER              */}
+      {/* VIEW 4: VERIFIED PREDICTION AUDIT & WALK-FORWARD CALIBRATION LEDGER  */}
       {/* ==================================================================== */}
       {activeView === 'SELF_LEARNING_AGENTS' && (
         <div className="space-y-6">
-          {/* Self-Learning Summary Banner */}
+          {/* Self-Learning Summary Banner & Canonical 5-Agent Desk Gateway */}
           <div className="bg-slate-900/90 border border-cyan-500/30 rounded-xl p-5 space-y-3">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
               <div>
@@ -1231,62 +1584,48 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
                   Bayesian Multiplicative Weights · Generation #{selfLearning.generationNumber} · Last Calibrated {selfLearning.lastCalibratedAt}
                 </div>
                 <h2 className="text-base font-bold text-white mt-0.5">
-                  How the 5 Agents Self-Learn & Improve Every Day
+                  Walk-Forward Calibration &amp; Verified Prediction Audit
                 </h2>
               </div>
-              <button
-                onClick={handleRunSelfLearningCycle}
-                disabled={calibrating}
-                className="px-4 py-2 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 cursor-pointer shrink-0"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${calibrating ? 'animate-spin' : ''}`} />
-                <span>{calibrating ? 'Running Walk-Forward Calibration...' : 'Recalibrate Agents Against Live NSE Data'}</span>
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={handleRunSelfLearningCycle}
+                  disabled={calibrating}
+                  className="px-4 py-2 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 cursor-pointer shrink-0 whitespace-nowrap"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${calibrating ? 'animate-spin' : ''}`} />
+                  <span>{calibrating ? 'Running Walk-Forward Calibration...' : 'Recalibrate Weights Against Live NSE Data'}</span>
+                </button>
+                {onNavigateToAgents && (
+                  <button
+                    onClick={onNavigateToAgents}
+                    className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-cyan-500/40 text-cyan-300 text-xs font-bold flex items-center gap-1.5 cursor-pointer shrink-0 whitespace-nowrap"
+                  >
+                    <span>Open 5-Agent Execution Desk →</span>
+                  </button>
+                )}
+              </div>
             </div>
             <p className="text-xs text-slate-300 leading-relaxed">
               {selfLearning.dailyAdaptationSummary}
             </p>
-          </div>
-
-          {/* 5 Self-Learning Agent Cards with Learned Weights & Lessons */}
-          <div className="grid grid-cols-1 lg:grid-cols-5 gap-3.5">
-            {selfLearning.agents.map((ag: SelfLearningAgentProfile) => {
-              const userBoost = userAgentFeedbackBoost[ag.agentId] || 0;
-              const effectiveWeight = Number((ag.learnedTrustWeightPct + userBoost).toFixed(1));
-              const weightDelta = Number((effectiveWeight - ag.baseInitialWeightPct).toFixed(1));
-
-              return (
-                <div
-                  key={ag.agentId}
-                  className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-col justify-between gap-3"
-                >
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-bold text-white">{ag.name}</span>
-                      <span className="text-xs font-mono font-bold text-cyan-400">
-                        Weight: {effectiveWeight}%
-                      </span>
-                    </div>
-                    <div className="text-[11px] text-slate-400 font-mono">
-                      Base: 20.0% → Learned: {weightDelta >= 0 ? '+' : ''}{weightDelta}% · Win Rate: <strong className="text-emerald-400">{ag.rollingWinRatePct}%</strong> ({ag.profitablePredictionsCount}/{ag.verifiedPredictionsCount})
-                    </div>
-                    <div className="text-xs font-semibold text-amber-300">
-                      {ag.pillarSpecialty}
-                    </div>
-                    <p className="text-xs text-slate-300 leading-relaxed">
-                      <strong className="text-white">Live Call:</strong> {ag.currentLiveVerdict}
-                    </p>
-                  </div>
-
-                  <div className="pt-2.5 border-t border-slate-800 space-y-1.5 text-xs">
-                    <div className="text-emerald-400 font-medium">What {ag.name} Learned Recently:</div>
-                    <p className="text-slate-400 text-[11px] leading-relaxed">
-                      {ag.whatAgentLearnedRecently}
-                    </p>
-                  </div>
-                </div>
-              );
-            })}
+            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-800/80 text-xs font-mono">
+              <span className="text-slate-400">Learned Trust Weights:</span>
+              {selfLearning.agents.map((ag: SelfLearningAgentProfile) => {
+                const userBoost = userAgentFeedbackBoost[ag.agentId] || 0;
+                const effectiveWeight = Number((ag.learnedTrustWeightPct + userBoost).toFixed(1));
+                return (
+                  <span
+                    key={ag.agentId}
+                    className="px-2.5 py-1 rounded-md bg-slate-950 border border-slate-800 text-slate-200"
+                  >
+                    <strong className="text-white">{ag.name}:</strong>{' '}
+                    <span className="text-cyan-400 font-bold">{effectiveWeight}%</span>{' '}
+                    <span className="text-emerald-400">({ag.rollingWinRatePct}% Win)</span>
+                  </span>
+                );
+              })}
+            </div>
           </div>
 
           {/* Verified Prediction Audit & Post-Mortem Learning Log */}
@@ -1355,6 +1694,359 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
       {/* ==================================================================== */}
       {activeView === 'AUTONOMOUS_SCHEDULER' && (
         <AutonomousSchedulerHub onRecalibrateRequested={() => fetchIntelligence(true)} />
+      )}
+
+      {/* ==================================================================== */}
+      {/* INTERACTIVE INSTITUTIONAL TRADE SETUP & 2026 TAX/RISK BLUEPRINT MODAL */}
+      {/* ==================================================================== */}
+      {activeSetupContext && activeBlueprint && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 overflow-y-auto"
+          onClick={() => setActiveSetupContext(null)}
+        >
+          <div
+            className="w-full max-w-4xl bg-[#070d1a] border border-cyan-500/40 rounded-xl p-4 sm:p-6 space-y-5 shadow-2xl my-auto max-h-[92vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-start justify-between gap-4 border-b border-slate-800 pb-4">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span
+                    className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold ${
+                      activeBlueprint.direction === 'RISE'
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                        : 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                    }`}
+                  >
+                    {activeBlueprint.direction === 'RISE' ? 'INSTITUTIONAL LONG / ACCUMULATE' : 'INSTITUTIONAL SHORT / TACTICAL HEDGE'}
+                  </span>
+                  <span className="text-xs text-cyan-400 font-medium">
+                    {activeBlueprint.sector} · Lead Specialist: {activeSetupContext.leadPillar}
+                  </span>
+                </div>
+                <h2 className="text-lg sm:text-xl font-bold text-white mt-1">
+                  {activeBlueprint.name} ({activeBlueprint.baseTicker}) — Trade Setup &amp; 2026 Tax/Risk Blueprint
+                </h2>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="text-right font-mono">
+                  <div className="text-[11px] text-slate-400">Live NSE Spot</div>
+                  <div className="text-lg font-bold text-white tabular-nums">
+                    ₹{activeBlueprint.spotEntryPrice.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                  </div>
+                </div>
+                <button
+                  onClick={() => setActiveSetupContext(null)}
+                  className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-400 hover:text-white cursor-pointer"
+                  title="Close Setup Blueprint"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Control Row: Instrument Selector & Sizing Method */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 p-3.5 rounded-xl bg-slate-950 border border-slate-800">
+              <div className="lg:col-span-7 space-y-1.5">
+                <div className="text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
+                  <Sliders className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>1. Select Execution Instrument (Auto-Recalculates Lot Size, Margin &amp; 2026 Statutory Taxes)</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                  {(
+                    [
+                      { id: 'CASH_CNC', label: 'Cash (CNC 1x)', sub: 'Delivery' },
+                      { id: 'INTRADAY_MIS', label: 'Intraday (MIS 5x)', sub: '20% Margin' },
+                      { id: 'NSE_FUTURES', label: 'NSE Futures', sub: `Lot: ${activeBlueprint.lotSize > 1 ? activeBlueprint.lotSize : 'F&O'}` },
+                      { id: 'NSE_OPTION', label: activeBlueprint.direction === 'RISE' ? 'ATM Call (CE)' : 'ATM Put (PE)', sub: 'Defined Risk' },
+                    ] as const
+                  ).map((opt) => (
+                    <button
+                      key={opt.id}
+                      onClick={() => setSetupInstrumentMode(opt.id)}
+                      className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
+                        setupInstrumentMode === opt.id
+                          ? 'bg-cyan-500/20 border-cyan-400 text-white'
+                          : 'bg-slate-900/90 border-slate-800 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <div className="text-xs font-bold">{opt.label}</div>
+                      <div className="text-[10px] font-mono text-slate-400">{opt.sub}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="lg:col-span-5 space-y-1.5">
+                <div className="text-[11px] font-semibold text-slate-300 flex items-center justify-between">
+                  <span>2. Position Sizing Engine (Capital: ₹{capitalBase.toLocaleString('en-IN')})</span>
+                  <span className="text-[10px] font-mono text-cyan-400">CPPI Floor: ₹{activeBlueprint.cppiFloor92.toLocaleString('en-IN')}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <button
+                    onClick={() => setSetupSizingMethod('ONE_PCT_RISK')}
+                    className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
+                      setupSizingMethod === 'ONE_PCT_RISK'
+                        ? 'bg-emerald-500/20 border-emerald-400 text-white'
+                        : 'bg-slate-900/90 border-slate-800 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <div className="text-xs font-bold">1% Max Equity Risk</div>
+                    <div className="text-[10px] font-mono text-emerald-300">
+                      Risk Budget: ₹{activeBlueprint.onePctRiskRupees.toLocaleString('en-IN')}
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => setSetupSizingMethod('QUARTER_KELLY')}
+                    className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
+                      setupSizingMethod === 'QUARTER_KELLY'
+                        ? 'bg-emerald-500/20 border-emerald-400 text-white'
+                        : 'bg-slate-900/90 border-slate-800 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <div className="text-xs font-bold">Quarter-Kelly (0.25f*)</div>
+                    <div className="text-[10px] font-mono text-cyan-300">
+                      {activeBlueprint.quarterKellyFractionPct}% of ₹{activeBlueprint.cppiRiskCushion8.toLocaleString('en-IN')} Cushion
+                    </div>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Key Execution Levels & Sizing Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-6 gap-2.5 font-mono">
+              <div className="p-3 rounded-lg bg-slate-950 border border-slate-800">
+                <div className="text-[10px] text-slate-400">Contract &amp; Side</div>
+                <div className="text-xs font-bold text-white mt-0.5">
+                  {activeBlueprint.side} {activeBlueprint.contractSymbol}
+                </div>
+                <div className="text-[10px] text-cyan-400">
+                  Qty: {activeBlueprint.quantity} ({activeBlueprint.lotsCount} {activeBlueprint.lotSize > 1 ? 'Lot' : 'Shs'})
+                </div>
+              </div>
+
+              <div className="p-3 rounded-lg bg-slate-950 border border-slate-800">
+                <div className="text-[10px] text-slate-400">Entry Price</div>
+                <div className="text-sm font-bold text-white mt-0.5 tabular-nums">
+                  ₹{activeBlueprint.instrumentEntryPrice.toLocaleString('en-IN')}
+                </div>
+                <div className="text-[10px] text-slate-400">
+                  Spot: ₹{activeBlueprint.spotEntryPrice.toLocaleString('en-IN')}
+                </div>
+              </div>
+
+              <div className="p-3 rounded-lg bg-slate-950 border border-emerald-500/30">
+                <div className="text-[10px] text-emerald-400">Target 1 (1.5R Lock)</div>
+                <div className="text-sm font-bold text-emerald-300 mt-0.5 tabular-nums">
+                  ₹{activeBlueprint.instrumentTarget1.toLocaleString('en-IN')}
+                </div>
+                <div className="text-[10px] text-slate-400">
+                  Spot T1: ₹{activeBlueprint.target1Price.toLocaleString('en-IN')}
+                </div>
+              </div>
+
+              <div className="p-3 rounded-lg bg-slate-950 border border-emerald-500/40">
+                <div className="text-[10px] text-emerald-400">Target 2 (Full)</div>
+                <div className="text-sm font-bold text-emerald-400 mt-0.5 tabular-nums">
+                  ₹{activeBlueprint.instrumentTarget2.toLocaleString('en-IN')}
+                </div>
+                <div className="text-[10px] text-emerald-300">
+                  +₹{activeBlueprint.taxAudit.grossWinAtTarget2.toLocaleString('en-IN')} Gross
+                </div>
+              </div>
+
+              <div className="p-3 rounded-lg bg-slate-950 border border-rose-500/30">
+                <div className="text-[10px] text-rose-400">Hard Stop-Loss</div>
+                <div className="text-sm font-bold text-rose-400 mt-0.5 tabular-nums">
+                  ₹{activeBlueprint.instrumentStopLoss.toLocaleString('en-IN')}
+                </div>
+                <div className="text-[10px] text-rose-300">
+                  -₹{activeBlueprint.taxAudit.grossRiskAtStop.toLocaleString('en-IN')} Risk
+                </div>
+              </div>
+
+              <div className="p-3 rounded-lg bg-slate-950 border border-cyan-500/30">
+                <div className="text-[10px] text-cyan-400">Margin &amp; R:R</div>
+                <div className="text-sm font-bold text-cyan-300 mt-0.5 tabular-nums">
+                  ₹{activeBlueprint.marginRequired.toLocaleString('en-IN')}
+                </div>
+                <div className="text-[10px] text-white">
+                  R:R 1 : {activeBlueprint.rewardToRiskRatio}
+                </div>
+              </div>
+            </div>
+
+            {/* Two-Column: 2026 Indian Statutory Tax Audit + 4-Pillar Causal Thesis & TSL Toggle */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+              {/* Left: 2026 Indian Statutory Tax & Friction Breakdown */}
+              <div className="lg:col-span-6 p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-xs font-bold text-white">
+                      2026 Indian Statutory Tax &amp; Friction Audit (Round-Trip)
+                    </div>
+                    <div className="text-[11px] text-slate-400">
+                       Veto Gate: Gross Win / Friction ≥ 3.0x &amp; Net Expectancy ≥ +0.15R
+                    </div>
+                  </div>
+                  <span
+                    className={`px-2.5 py-1 rounded text-[11px] font-mono font-bold ${
+                      activeBlueprint.taxAudit.isVetoed
+                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                        : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                    }`}
+                  >
+                    {activeBlueprint.taxAudit.isVetoed ? 'FRICTION VETO WARNING' : 'STATUTORY CLEARANCE ✓'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 font-mono text-xs pt-1">
+                  <div className="p-2 rounded bg-slate-900/90 border border-slate-800/80">
+                    <div className="text-[10px] text-slate-400">Brokerage (2 Legs)</div>
+                    <div className="font-bold text-white">₹{activeBlueprint.taxAudit.brokerage.toFixed(2)}</div>
+                  </div>
+                  <div className="p-2 rounded bg-slate-900/90 border border-slate-800/80">
+                    <div className="text-[10px] text-slate-400">STT (2026 Rate)</div>
+                    <div className="font-bold text-white">₹{activeBlueprint.taxAudit.stt.toFixed(2)}</div>
+                  </div>
+                  <div className="p-2 rounded bg-slate-900/90 border border-slate-800/80">
+                    <div className="text-[10px] text-slate-400">NSE Exch + IPFT</div>
+                    <div className="font-bold text-white">₹{activeBlueprint.taxAudit.exchangeAndIpft.toFixed(2)}</div>
+                  </div>
+                  <div className="p-2 rounded bg-slate-900/90 border border-slate-800/80">
+                    <div className="text-[10px] text-slate-400">SEBI + Stamp Duty</div>
+                    <div className="font-bold text-white">
+                      ₹{(activeBlueprint.taxAudit.sebiFee + activeBlueprint.taxAudit.stampDuty).toFixed(2)}
+                    </div>
+                  </div>
+                  <div className="p-2 rounded bg-slate-900/90 border border-slate-800/80">
+                    <div className="text-[10px] text-slate-400">18% GST</div>
+                    <div className="font-bold text-white">₹{activeBlueprint.taxAudit.gst18.toFixed(2)}</div>
+                  </div>
+                  <div className="p-2 rounded bg-slate-900/90 border border-amber-500/30">
+                    <div className="text-[10px] text-amber-300">Total Friction</div>
+                    <div className="font-bold text-amber-300">₹{activeBlueprint.taxAudit.totalFriction.toFixed(2)}</div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-800 font-mono text-xs">
+                  <div>
+                    <div className="text-[10px] text-slate-400">Net Profit (After Tax)</div>
+                    <div className="font-bold text-emerald-400">
+                      +₹{activeBlueprint.taxAudit.netWinAfterTax.toLocaleString('en-IN')}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-slate-400">Win / Friction Ratio</div>
+                    <div className={`font-bold ${activeBlueprint.taxAudit.grossWinToFrictionRatio >= 3 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                      {activeBlueprint.taxAudit.grossWinToFrictionRatio}x (Min 3.0x)
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-slate-400">Net Expectancy</div>
+                    <div className={`font-bold ${activeBlueprint.taxAudit.netExpectancyR >= 0.15 ? 'text-cyan-400' : 'text-amber-400'}`}>
+                      +{activeBlueprint.taxAudit.netExpectancyR}R (Min 0.15R)
+                    </div>
+                  </div>
+                </div>
+
+                {activeBlueprint.taxAudit.vetoReason && (
+                  <div className="p-2.5 rounded-lg bg-amber-950/40 border border-amber-500/40 text-[11px] text-amber-200">
+                    {activeBlueprint.taxAudit.vetoReason}
+                  </div>
+                )}
+              </div>
+
+              {/* Right: 4-Pillar Causal Thesis & Autonomous TSL Activation */}
+              <div className="lg:col-span-6 p-4 rounded-xl bg-slate-950 border border-slate-800 flex flex-col justify-between space-y-3">
+                <div className="space-y-2 text-xs">
+                  <div className="font-bold text-white">
+                    4-Pillar Causal Thesis ({activeBlueprint.baseTicker})
+                  </div>
+                  <p className="text-slate-300 leading-relaxed">
+                    <strong className="text-cyan-400">1. Catalyst &amp; Business Moat:</strong>{' '}
+                    {activeSetupContext.causalSummary.catalystHeadline}
+                  </p>
+                  <p className="text-slate-300 leading-relaxed">
+                    <strong className="text-emerald-400">2. Policy &amp; Fundamental Transmission:</strong>{' '}
+                    {activeSetupContext.causalSummary.basicsAndPolicyReason}
+                  </p>
+                  <p className="text-slate-300 leading-relaxed">
+                    <strong className="text-amber-300">3. Geopolitics &amp; Crowd Positioning:</strong>{' '}
+                    {activeSetupContext.causalSummary.globalOrGeoReason}
+                  </p>
+                </div>
+
+                {/* Live Trailing Stop-Loss (TSL) Toggle */}
+                <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-cyan-400" />
+                      <span>Autonomous Step-Ladder Trailing Stop-Loss (TSL)</span>
+                    </div>
+                    <div className="text-[11px] text-slate-400 mt-0.5">
+                      Shifts SL to Breakeven at +1.0R (₹{activeBlueprint.instrumentTarget1.toLocaleString('en-IN')}) and locks 50% profit at +1.5R
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setSetupTslEnabled((prev) => !prev)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold cursor-pointer shrink-0 transition-colors ${
+                      setupTslEnabled
+                        ? 'bg-cyan-500 text-slate-950'
+                        : 'bg-slate-800 text-slate-400 border border-slate-700'
+                    }`}
+                  >
+                    {setupTslEnabled ? 'TSL ARMED ✓' : 'FIXED STOP'}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer Action Bar: Track in ROI Ledger vs 1-Click Deploy to Live Session Order Book */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-slate-800">
+              <div className="text-xs text-slate-400">
+                Choose <strong className="text-white">Track in ROI Ledger</strong> to monitor &amp; grade this call, or{' '}
+                <strong className="text-cyan-300">1-Click Deploy to Session Order Book</strong> for live OMS execution.
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2.5">
+                <button
+                  onClick={() => {
+                    handleTrackStockSetup(
+                      activeBlueprint.symbol,
+                      activeBlueprint.name,
+                      activeBlueprint.sector,
+                      activeBlueprint.direction,
+                      activeBlueprint.spotEntryPrice,
+                      activeBlueprint.target2Price,
+                      activeBlueprint.stopLossPrice,
+                      activeSetupContext.leadPillar,
+                      activeBlueprint.quantity,
+                      activeBlueprint.marginRequired,
+                    );
+                    setActiveSetupContext(null);
+                  }}
+                  className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Track in ROI Decision Ledger</span>
+                </button>
+
+                <button
+                  onClick={() => handleDeployBlueprintToOrderBook(activeBlueprint)}
+                  className="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-lg"
+                >
+                  <Zap className="w-4 h-4" />
+                  <span>
+                    1-Click Deploy to Session Order Book ({activeBlueprint.side} {activeBlueprint.quantity} Qty)
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

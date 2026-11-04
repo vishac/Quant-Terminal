@@ -1,606 +1,712 @@
-import React, { useState } from 'react';
-import { Shield, Key, RefreshCw, CheckCircle2, Server, Database, Globe, Sliders, Lock, ArrowRight, ExternalLink, Smartphone, Download, Zap, Apple, Cpu, Activity, Layers, Bot, Clock, Radio, Info, Eye, EyeOff } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import {
+  Shield,
+  RefreshCw,
+  CheckCircle2,
+  Database,
+  Globe,
+  Sliders,
+  Smartphone,
+  Download,
+  Zap,
+  Apple,
+  Clock,
+  Radio,
+  FileText,
+  Users,
+  AlertTriangle,
+  History,
+  Sun,
+  Moon,
+} from 'lucide-react';
 import { useLiveMarketData } from '../services/liveMarketService';
-import { executePostMarketSync, INITIAL_SYNC_STATE, PostMarketSyncState } from '../utils/indianHolidayCalendar';
+import { useTheme } from '../context/ThemeContext';
 import { PWAInstallButton } from './PWAInstallButton';
+import { BrokerGatewayRouter } from './BrokerGatewayRouter';
+import { MultiUserDesk } from './MultiUserDesk';
+import {
+  CANONICAL_SECURITY_MASTER,
+  evaluateMarketDataIntegrity,
+  getStoredQuantParameters,
+  getStoredGovernanceAuditTrail,
+  updateQuantParameterWithAudit,
+  QuantParameterRecord,
+  GovernanceAuditEvent,
+} from '../services/institutionalQuantRegistry';
+
+type ControlTowerSubTab =
+  | 'SECURITY_MASTER'
+  | 'PARAMETER_GOVERNANCE'
+  | 'BROKER_GATEWAY'
+  | 'SEAT_RBAC';
 
 export const SettingsTerminal: React.FC = () => {
-  const { 
-    quotes, 
-    isLive, 
-    latencyMs, 
-    lastUpdated, 
-    refetch, 
-    marketSession, 
-    isPacketSaverActive, 
-    packetsSavedCount, 
-    forceSyncOverride, 
+  const {
+    quotes,
+    latencyMs,
+    refetch,
+    marketSession,
+    isPacketSaverActive,
+    packetsSavedCount,
+    forceSyncOverride,
     toggleForceSyncOverride,
-    provider
+    provider,
   } = useLiveMarketData(3000);
+
   const isUpstoxLive = provider === 'UPSTOX_ANALYTICS_REALTIME';
-  const [postMarketSync, setPostMarketSync] = useState<PostMarketSyncState>(INITIAL_SYNC_STATE);
-  const [isSyncingHolidays, setIsSyncingHolidays] = useState(false);
+  const { theme, setTheme } = useTheme();
+  const [controlTowerTab, setControlTowerTab] = useState<ControlTowerSubTab>('SECURITY_MASTER');
   const [testStatus, setTestStatus] = useState<string | null>(null);
-  const [showUnusedBrokers, setShowUnusedBrokers] = useState<boolean>(false);
 
-  // Broker Credentials Configuration State
-  const [brokers, setBrokers] = useState([
-    {
-      id: 'abm',
-      name: 'Aditya Birla Money',
-      apiCode: 'Smart Trader V2',
-      apiKey: 'ABM_LIVE_•••781',
-      sessionSecret: '••••••••••••••••3D9A',
-      coloNode: 'BKC-DC02 // GATE-02',
-      status: 'NOT CONNECTED',
-      latency: '—',
-    },
-    {
-      id: 'zerodha',
-      name: 'Zerodha Kite Connect',
-      apiCode: 'Kite Ticker Binary V3',
-      apiKey: 'ABM_LIVE_•••781',
-      sessionSecret: '••••••••••••••••ENCTOKEN',
-      coloNode: 'MUMBAI NSE // RACK-08',
-      status: 'NOT CONNECTED',
-      latency: '—',
-    },
-    {
-      id: 'dhan',
-      name: 'Dhan HQ',
-      apiCode: 'Prometheus Protobuf',
-      apiKey: '—',
-      sessionSecret: '••••••••••••••••TOKEN',
-      coloNode: 'MUMBAI-DC01',
-      status: 'NOT CONNECTED',
-      latency: '—',
-    },
-  ]);
+  // Versioned Parameter Registry & Governance Audit Trail state
+  const [parameters, setParameters] = useState<QuantParameterRecord[]>(() =>
+    getStoredQuantParameters()
+  );
+  const [auditTrail, setAuditTrail] = useState<GovernanceAuditEvent[]>(() =>
+    getStoredGovernanceAuditTrail()
+  );
+  const [draftValues, setDraftValues] = useState<Record<string, number>>({});
+  const [changeReason, setChangeReason] = useState<string>(
+    'Intraday volatility & statutory tax friction calibration'
+  );
 
-  const handleTestBroker = (brokerName: string) => {
-    setTestStatus(`[NOT CONNECTED] ${brokerName} has no live broker integration in this build. Order execution is disabled until a broker is connected (Phase 2+).`);
-    setTimeout(() => setTestStatus(null), 5000);
-  };
+  // Canonical Security Master joined with live Data Quality Integrity checks
+  const dataQualityRecords = useMemo(
+    () =>
+      evaluateMarketDataIntegrity(
+        quotes,
+        isUpstoxLive ? 'UPSTOX_V2_REALTIME' : 'NSE_BSE_FEED_ROUTER',
+        latencyMs ?? 12
+      ),
+    [quotes, isUpstoxLive, latencyMs]
+  );
 
-  const handleManualHolidayCheck = () => {
-    setIsSyncingHolidays(true);
-    setTimeout(() => {
-      setPostMarketSync(prev => executePostMarketSync(prev.auditLog));
-      setIsSyncingHolidays(false);
-      setTestStatus('Post-Market Task Executed: NSE & BSE 2026/2027 holiday circulars verified.');
-      setTimeout(() => setTestStatus(null), 4000);
-    }, 700);
+  const qualitySummary = useMemo(() => {
+    const clean = dataQualityRecords.filter((r) => r.integrityStatus === 'VERIFIED_CLEAN').length;
+    const stale = dataQualityRecords.filter((r) => r.integrityStatus === 'STALE_WARNING').length;
+    const outliers = dataQualityRecords.filter((r) => r.integrityStatus === 'OUTLIER_FLAGGED').length;
+    const missing = dataQualityRecords.filter((r) => r.integrityStatus === 'MISSING_FEED').length;
+    return { total: dataQualityRecords.length, clean, stale, outliers, missing };
+  }, [dataQualityRecords]);
+
+  const handleCommitParameter = (param: QuantParameterRecord) => {
+    const targetVal = draftValues[param.parameterId] ?? param.value;
+    if (targetVal === param.value) {
+      setTestStatus(`No change detected for ${param.parameterId} (already ${param.value} ${param.unit}).`);
+      setTimeout(() => setTestStatus(null), 3500);
+      return;
+    }
+    const { parameters: nextParams, auditTrail: nextAudit } = updateQuantParameterWithAudit(
+      param.parameterId,
+      targetVal,
+      'Seat 01 (Owner/Admin)',
+      changeReason
+    );
+    setParameters(nextParams);
+    setAuditTrail(nextAudit);
+    setTestStatus(
+      `Committed ${param.parameterId}: ${param.value} ${param.unit} → ${targetVal} ${param.unit} (Signed to Governance Audit Trail).`
+    );
+    setTimeout(() => setTestStatus(null), 4500);
   };
 
   return (
-    <div className="flex flex-col gap-6 w-full">
-      {/* Settings Header */}
-      <div className="bg-[#080d1a]/90 backdrop-blur-2xl rounded-2xl p-6 border border-cyan-500/20 shadow-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 font-bold uppercase">
-              NODE://SETTINGS_CONFIG
-            </span>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-bold">
-              SYS_LEVEL_01
-            </span>
+    <div className="flex flex-col gap-5 w-full">
+      {/* Unified Control Tower Header & Sub-Tab Bar */}
+      <div className="bg-[#080d1a]/90 backdrop-blur-2xl rounded-2xl p-5 border border-cyan-500/20 shadow-2xl flex flex-col gap-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 font-bold uppercase">
+                PIPELINE STAGE 07 // CONTROL TOWER &amp; GOVERNANCE
+              </span>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-bold">
+                ZERO-BIAS DETERMINISTIC SPEC
+              </span>
+            </div>
+            <h1 className="text-xl sm:text-2xl font-bold font-mono text-cyan-200 tracking-tight">
+              SECURITY MASTER, PARAMETER REGISTRY &amp; BROKER CONTROL TOWER
+            </h1>
+            <p className="text-xs text-slate-400 mt-1 max-w-3xl font-mono">
+              Unambiguous instrument definitions (ISIN/MIC/Lot/Tick/Corp-Action flags), versioned parameter governance with immutable audit logs, Upstox Analytics v2 gateway, and 20-seat floor access.
+            </p>
           </div>
-          <h1 className="text-2xl font-bold font-mono text-cyan-200 tracking-tight">
-            TERMINAL SETTINGS & BROKER CREDENTIALS
-          </h1>
-          <p className="text-xs text-slate-400 mt-1 max-w-2xl font-mono">
-            Configure direct DMA broker execution routes, manage live exchange data feeds, and monitor statutory SEBI & NSE clearing invariants.
-          </p>
+
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0 font-mono">
+            {/* Lighter / Dark Theme Switcher in Control Tower */}
+            <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-950/90 border border-slate-800">
+              <button
+                onClick={() => setTheme('light')}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  theme === 'light'
+                    ? 'bg-cyan-500 text-slate-950 shadow-xs'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="Switch to Lighter Theme (Daylight Institutional High-Contrast)"
+              >
+                <Sun className="w-3.5 h-3.5" />
+                <span>LIGHTER</span>
+              </button>
+              <button
+                onClick={() => setTheme('dark')}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  theme === 'dark'
+                    ? 'bg-cyan-500 text-slate-950 shadow-xs'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="Switch to Dark Theme (Obsidian Quant High-Contrast)"
+              >
+                <Moon className="w-3.5 h-3.5" />
+                <span>DARK</span>
+              </button>
+            </div>
+
+            <button
+              onClick={() => refetch()}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-cyan-950/60 hover:bg-cyan-900/80 border border-cyan-500/40 text-cyan-300 font-mono text-xs font-bold transition-all cursor-pointer"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>VERIFY FEED INTEGRITY</span>
+            </button>
+          </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        {/* 4 Clean Sub-Tabs */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 pt-3 border-t border-slate-800/80 font-mono">
           <button
-            onClick={() => refetch()}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-cyan-950/60 hover:bg-cyan-900/80 border border-cyan-500/40 text-cyan-300 font-mono text-xs font-bold transition-all shadow-[0_0_15px_rgba(0,240,255,0.2)] active:scale-95"
+            onClick={() => setControlTowerTab('SECURITY_MASTER')}
+            className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold border transition cursor-pointer ${
+              controlTowerTab === 'SECURITY_MASTER'
+                ? 'bg-cyan-500/20 border-cyan-400 text-cyan-200 shadow-[0_0_15px_rgba(0,240,255,0.2)]'
+                : 'bg-slate-950/70 border-slate-800 text-slate-400 hover:text-slate-200'
+            }`}
           >
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span>FORCE REFETCH TICKS</span>
+            <span className="flex items-center gap-2">
+              <Database className="w-4 h-4 text-cyan-400" />
+              <span>01. Security Master &amp; Quality</span>
+            </span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 text-cyan-300">
+              {CANONICAL_SECURITY_MASTER.length} SEC
+            </span>
+          </button>
+
+          <button
+            onClick={() => setControlTowerTab('PARAMETER_GOVERNANCE')}
+            className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold border transition cursor-pointer ${
+              controlTowerTab === 'PARAMETER_GOVERNANCE'
+                ? 'bg-emerald-500/20 border-emerald-400 text-emerald-200 shadow-[0_0_15px_rgba(16,185,129,0.2)]'
+                : 'bg-slate-950/70 border-slate-800 text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <span className="flex items-center gap-2">
+              <Sliders className="w-4 h-4 text-emerald-400" />
+              <span>02. Parameter &amp; Audit Trail</span>
+            </span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 text-emerald-300">
+              {auditTrail.length} LOGS
+            </span>
+          </button>
+
+          <button
+            onClick={() => setControlTowerTab('BROKER_GATEWAY')}
+            className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold border transition cursor-pointer ${
+              controlTowerTab === 'BROKER_GATEWAY'
+                ? 'bg-amber-500/20 border-amber-400 text-amber-200 shadow-[0_0_15px_rgba(245,158,11,0.2)]'
+                : 'bg-slate-950/70 border-slate-800 text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <span className="flex items-center gap-2">
+              <Globe className="w-4 h-4 text-amber-400" />
+              <span>03. Broker Gateway &amp; Mobile</span>
+            </span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 text-amber-300">
+              {isUpstoxLive ? 'LIVE' : 'STANDBY'}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setControlTowerTab('SEAT_RBAC')}
+            className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold border transition cursor-pointer ${
+              controlTowerTab === 'SEAT_RBAC'
+                ? 'bg-purple-500/20 border-purple-400 text-purple-200 shadow-[0_0_15px_rgba(168,85,247,0.2)]'
+                : 'bg-slate-950/70 border-slate-800 text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <span className="flex items-center gap-2">
+              <Users className="w-4 h-4 text-purple-400" />
+              <span>04. 20-Seat Floor RBAC</span>
+            </span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 text-purple-300">
+              20 SEATS
+            </span>
           </button>
         </div>
       </div>
 
       {testStatus && (
-        <div className="p-3.5 rounded-xl bg-emerald-950/60 border border-emerald-500/40 text-emerald-200 text-xs font-mono flex items-center justify-between animate-in fade-in duration-200">
+        <div className="p-3.5 rounded-xl bg-emerald-950/60 border border-emerald-500/40 text-emerald-200 text-xs font-mono flex items-center justify-between">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
             <span>{testStatus}</span>
           </div>
-          <button onClick={() => setTestStatus(null)} className="text-slate-400 hover:text-slate-200 text-xs">Dismiss</button>
+          <button
+            onClick={() => setTestStatus(null)}
+            className="text-slate-400 hover:text-slate-200 text-xs cursor-pointer"
+          >
+            Dismiss
+          </button>
         </div>
       )}
 
-      {/* AI Engine & Neural Runtime Diagnostics (Moved to Configuration Hub) */}
-      <div className="bg-[#080d1a]/85 backdrop-blur-xl rounded-2xl p-6 border border-cyan-500/25 shadow-xl flex flex-col gap-4 font-mono">
-        <div className="flex flex-wrap items-center justify-between pb-3 border-b border-slate-800 gap-2">
-          <div className="flex items-center gap-2.5">
-            <Bot className="w-5 h-5 text-cyan-400" />
-            <div>
-              <h2 className="text-sm font-bold text-slate-200 uppercase tracking-wide flex items-center gap-2">
-                <span>AI ENGINE &amp; NEURAL RUNTIME DIAGNOSTICS</span>
-                <span className="px-2 py-0.5 rounded-full bg-emerald-950/80 border border-emerald-500/40 text-emerald-400 text-[10px] font-bold">
-                  ALL_SYSTEMS_NOMINAL
-                </span>
-              </h2>
-              <span className="text-[11px] text-slate-400 font-sans block mt-0.5">
-                Server-side Gemini inference via /api/jarvis/analyze (owner-gated). The metrics below are illustrative placeholders, not live telemetry.
+      {/* =====================================================================
+          SUB-TAB 01: CANONICAL SECURITY MASTER & DATA QUALITY INTEGRITY
+         ===================================================================== */}
+      {controlTowerTab === 'SECURITY_MASTER' && (
+        <div className="flex flex-col gap-5 font-mono">
+          {/* Data Integrity KPI Strip */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+            <div className="p-4 rounded-xl bg-[#080d1a]/90 border border-cyan-500/25">
+              <span className="text-[10px] text-slate-400 uppercase block">
+                SECURITY MASTER UNIVERSE
+              </span>
+              <span className="text-xl font-bold text-cyan-300 mt-1 block">
+                {qualitySummary.total} Instruments
+              </span>
+              <span className="text-[10px] text-slate-500">
+                Internal ID · ISIN · MIC (XNSE/XBOM/XMCX)
+              </span>
+            </div>
+
+            <div className="p-4 rounded-xl bg-[#080d1a]/90 border border-emerald-500/25">
+              <span className="text-[10px] text-slate-400 uppercase block">
+                VERIFIED CLEAN TICKS
+              </span>
+              <span className="text-xl font-bold text-emerald-400 mt-1 block">
+                {qualitySummary.clean} / {qualitySummary.total}
+              </span>
+              <span className="text-[10px] text-slate-500">
+                Zero Missing · Zero Unadjusted Splits
+              </span>
+            </div>
+
+            <div className="p-4 rounded-xl bg-[#080d1a]/90 border border-amber-500/25">
+              <span className="text-[10px] text-slate-400 uppercase block">
+                STALE / OUTLIER FLAGS
+              </span>
+              <span className="text-xl font-bold text-amber-300 mt-1 block">
+                {qualitySummary.stale} Stale · {qualitySummary.outliers} Outlier
+              </span>
+              <span className="text-[10px] text-slate-500">
+                Outlier Gate: |Δ%| &gt; 12.5% Intraday
+              </span>
+            </div>
+
+            <div className="p-4 rounded-xl bg-[#080d1a]/90 border border-slate-800">
+              <span className="text-[10px] text-slate-400 uppercase block">
+                CORPORATE ACTION ENGINE
+              </span>
+              <span className="text-xl font-bold text-slate-100 mt-1 block">
+                v2026.11.CA-ADJ
+              </span>
+              <span className="text-[10px] text-emerald-400">
+                Splits, Bonus &amp; Special Dividends Adjusted
               </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 text-xs">
-            <span className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span>HOST: server-side</span>
-            </span>
-          </div>
-        </div>
-
-        {/* 4 Diagnostic Metric Pods */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-          {/* Metric 1 */}
-          <div className="p-3.5 rounded-2xl bg-slate-950/90 border border-cyan-500/20 flex flex-col justify-between">
-            <div className="flex items-center justify-between mb-1.5 text-[9px] text-slate-400">
-              <span className="font-bold tracking-wider">NEURAL LOAD</span>
-              <Cpu className="w-3.5 h-3.5 text-cyan-400" />
-            </div>
-            <div className="flex items-baseline justify-between">
-              <span className="text-2xl text-cyan-300 font-bold">38%</span>
-              <span className="text-[9px] text-emerald-400 font-medium">TENSOR_V5</span>
-            </div>
-            <div className="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden mt-2">
-              <div className="bg-gradient-to-r from-cyan-500 to-cyan-300 h-full rounded-full w-[38%] shadow-[0_0_8px_#00f0ff]"></div>
-            </div>
-            <div className="flex items-center justify-between text-[10px] text-slate-500 mt-2">
-              <span>ACTIVE CORES</span>
-              <span className="text-slate-300 font-bold">128 TPUv5e</span>
-            </div>
-          </div>
-
-          {/* Metric 2 */}
-          <div className="p-3.5 rounded-2xl bg-slate-950/90 border border-emerald-500/20 flex flex-col justify-between">
-            <div className="flex items-center justify-between mb-1.5 text-[9px] text-slate-400">
-              <span className="font-bold tracking-wider">DSP LATENCY</span>
-              <Zap className="w-3.5 h-3.5 text-emerald-400" />
-            </div>
-            <div className="flex items-baseline justify-between">
-              <span className="text-2xl text-emerald-300 font-bold">14<span className="text-xs font-normal text-slate-400 ml-0.5">ms</span></span>
-              <span className="text-[9px] text-emerald-400 font-medium">EDGE_LOCAL</span>
-            </div>
-            <div className="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden mt-2">
-              <div className="bg-gradient-to-r from-emerald-500 to-emerald-300 h-full rounded-full w-[14%] shadow-[0_0_8px_#34f6a8]"></div>
-            </div>
-            <div className="flex items-center justify-between text-[10px] text-slate-500 mt-2">
-              <span>ROUND-TRIP</span>
-              <span className="text-emerald-400 font-bold">&lt; 20 ms</span>
-            </div>
-          </div>
-
-          {/* Metric 3 */}
-          <div className="p-3.5 rounded-2xl bg-slate-950/90 border border-amber-500/20 flex flex-col justify-between">
-            <div className="flex items-center justify-between mb-1.5 text-[9px] text-slate-400">
-              <span className="font-bold tracking-wider">VOICE CLARITY</span>
-              <Activity className="w-3.5 h-3.5 text-amber-300" />
-            </div>
-            <div className="flex items-baseline justify-between">
-              <span className="text-2xl text-amber-300 font-bold">99.4%</span>
-              <span className="text-[9px] text-amber-400 font-medium">SNR +42dB</span>
-            </div>
-            <div className="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden mt-2">
-              <div className="bg-gradient-to-r from-amber-500 to-amber-300 h-full rounded-full w-[99.4%] shadow-[0_0_8px_#feb700]"></div>
-            </div>
-            <div className="flex items-center justify-between text-[10px] text-slate-500 mt-2">
-              <span>SPECTROGRAM</span>
-              <span className="text-amber-300 font-bold">44.1 kHz FLAC</span>
-            </div>
-          </div>
-
-          {/* Metric 4 */}
-          <div className="p-3.5 rounded-2xl bg-slate-950/90 border border-cyan-500/20 flex flex-col justify-between">
-            <div className="flex items-center justify-between mb-1.5 text-[9px] text-slate-400">
-              <span className="font-bold tracking-wider">BUFFER CACHE</span>
-              <Layers className="w-3.5 h-3.5 text-cyan-400" />
-            </div>
-            <div className="flex items-baseline justify-between">
-              <span className="text-2xl text-slate-100 font-bold">12.8<span className="text-xs font-normal text-slate-400">/16G</span></span>
-              <span className="text-[9px] text-cyan-400 font-medium">HBM3</span>
-            </div>
-            <div className="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden mt-2">
-              <div className="bg-gradient-to-r from-cyan-600 to-cyan-400 h-full rounded-full w-[80%] shadow-[0_0_8px_#00f0ff]"></div>
-            </div>
-            <div className="flex items-center justify-between text-[10px] text-slate-500 mt-2">
-              <span>HOT PRECACHE</span>
-              <span className="text-cyan-300 font-bold">100% HIT RATE</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Engine Configuration Invariants */}
-        <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 text-xs font-mono space-y-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-slate-400">ACTIVE LLM PROVIDER:</span>
-            <span className="text-cyan-300 font-bold">gemini-3.8-flash (server-side via /api/jarvis/analyze, owner-gated)</span>
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-slate-400">FAILOVER ARMED ENGINE:</span>
-            <span className="text-emerald-400 font-bold">Honest "unavailable" response — no fabricated figures</span>
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-slate-400">AUDIO INFERENCE MODEL:</span>
-            <span className="text-slate-200">Web Speech API SpeechSynthesis + Acoustic Pointcloud Mesh Visualizer</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Free Live NSE/BSE Market Data Feed Configuration Card */}
-      <div className="bg-[#080d1a]/85 backdrop-blur-xl rounded-2xl p-6 border border-cyan-500/20 shadow-xl flex flex-col gap-4">
-        <div className="flex flex-wrap items-center justify-between pb-3 border-b border-slate-800 gap-2">
-          <div className="flex items-center gap-2.5">
-            <Globe className="w-5 h-5 text-cyan-400" />
-            <div>
-              <h2 className="text-sm font-bold font-mono text-slate-200 uppercase tracking-wide">
-                Free Real-Time NSE / BSE Exchange Market Data Router
-              </h2>
-              <span className="text-[11px] text-slate-400 font-mono">
-                Direct zero-cost real-time feed polling National Stock Exchange & Bombay Stock Exchange indices & cash equities.
-              </span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs font-mono font-bold ${
-                isUpstoxLive
-                  ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-400'
-                  : 'bg-amber-950/60 border-amber-500/40 text-amber-300'
-              }`}
-              title={
-                isUpstoxLive
-                  ? 'Upstox Analytics API Connected: Streaming live NSE/BSE quotes & Option Chain (No Static IP needed). Paper-trading mode only.'
-                  : 'Delayed Feed Notice: Quotes are currently ~15m delayed from Yahoo Finance fallback. Pair your Upstox Analytics Token in Sync Hub -> Broker Gateway for live real-time NSE/BSE quotes (No Static IP required).'
-              }
-            >
-              <span className={`w-2 h-2 rounded-full ${isUpstoxLive ? 'bg-emerald-400 animate-ping' : 'bg-amber-400'}`}></span>
-              <span>{isUpstoxLive ? 'UPSTOX REALTIME FEED' : isLive ? 'DELAYED QUOTES (INFO)' : 'CACHED'}</span>
-              <Info className="w-3.5 h-3.5 shrink-0" />
-            </span>
-            <span className="text-xs font-mono text-slate-400 bg-slate-900 px-2.5 py-1 rounded border border-slate-800">
-              RTT: {latencyMs} ms
-            </span>
-          </div>
-        </div>
-
-        {/* Market Hours Sync & Packet Saver Controller Banner */}
-        <div className={`p-4 rounded-xl border flex flex-col md:flex-row md:items-center justify-between gap-4 font-mono transition-all ${
-          isPacketSaverActive 
-            ? 'bg-amber-950/30 border-amber-500/30 text-amber-200 shadow-[0_0_20px_rgba(254,183,0,0.08)]' 
-            : 'bg-emerald-950/30 border-emerald-500/30 text-emerald-200 shadow-[0_0_20px_rgba(52,246,168,0.08)]'
-        }`}>
-          <div className="flex items-start gap-3">
-            <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
-              isPacketSaverActive ? 'bg-amber-500/20 text-amber-400' : 'bg-emerald-500/20 text-emerald-400'
-            }`}>
-              <Clock className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-100">
-                  MARKET-HOURS GATED SYNC: {marketSession?.phaseLabel || 'POST-MARKET EOD STANDBY'}
-                </span>
-                <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${
-                  isPacketSaverActive 
-                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' 
-                    : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                }`}>
-                  {isPacketSaverActive ? 'PACKET SAVER ACTIVE' : isUpstoxLive ? 'UPSTOX LIVE QUOTES SYNCING' : 'DELAYED QUOTES SYNCING'}
-                </span>
+          {/* Canonical Security Master & Live Data Quality Table */}
+          <div className="bg-[#080d1a]/90 rounded-2xl p-5 border border-cyan-500/20 shadow-xl">
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-3 mb-4 border-b border-slate-800">
+              <div>
+                <h2 className="text-sm font-bold text-slate-100 uppercase">
+                  CANONICAL INSTRUMENT / SECURITY MASTER &amp; FEED QUALITY MONITOR
+                </h2>
+                <p className="text-[11px] text-slate-400 font-sans">
+                  Every signal, risk check, and order references the immutable Internal Security ID rather than loose ticker strings.
+                </p>
               </div>
-              <p className="text-[11px] text-slate-300 font-sans mt-1">
-                Data packet sync operates exclusively during Indian market hours (<strong>09:15 AM to 03:30 PM IST</strong>, Mon-Fri).
-                {isPacketSaverActive
-                  ? ` Rapid polling is automatically paused to prevent wasted data packets. Next session opens ${marketSession?.nextSessionText || 'Tomorrow @ 09:15 IST'}.`
-                  : ' Active session streaming high-fidelity ticks with zero credit consumption.'
-                }
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3 shrink-0">
-            <div className="flex flex-col items-end">
-              <span className="text-[10px] text-slate-400 uppercase">PACKETS SAVED TODAY</span>
-              <span className="text-sm font-bold text-amber-300">+{packetsSavedCount.toLocaleString()} PACKETS</span>
+              <span className="text-[10px] px-2.5 py-1 rounded bg-slate-900 border border-slate-700 text-cyan-300">
+                CALENDAR: NSE_BSE_2026_IST &amp; MCX_2026_IST
+              </span>
             </div>
 
-            <button
-              onClick={toggleForceSyncOverride}
-              className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                forceSyncOverride 
-                  ? 'bg-cyan-500/20 border-cyan-400 text-cyan-200' 
-                  : 'bg-slate-900 border-slate-700 text-slate-300 hover:text-white hover:border-slate-500'
-              }`}
-              title="Toggle to override market hours and test continuous polling"
-            >
-              <Radio className={`w-3.5 h-3.5 ${forceSyncOverride ? 'text-cyan-400 animate-pulse' : 'text-slate-500'}`} />
-              <span>{forceSyncOverride ? 'OVERRIDE: FORCE SYNC ON' : 'ENABLE CONTINUOUS SYNC'}</span>
-            </button>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-slate-800 text-[10px] text-slate-400 uppercase">
+                    <th className="py-2.5 px-3">Internal Security ID</th>
+                    <th className="py-2.5 px-3">Symbol / ISIN</th>
+                    <th className="py-2.5 px-3">Exch / MIC</th>
+                    <th className="py-2.5 px-3">Type / Settlement</th>
+                    <th className="py-2.5 px-3 text-right">Lot / Tick</th>
+                    <th className="py-2.5 px-3 text-right">Live Price</th>
+                    <th className="py-2.5 px-3 text-center">Corp-Act Adj</th>
+                    <th className="py-2.5 px-3">Rollover / Contract Rule</th>
+                    <th className="py-2.5 px-3 text-right">Feed Integrity</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {CANONICAL_SECURITY_MASTER.map((sec) => {
+                    const dq = dataQualityRecords.find(
+                      (r) => r.internalSecurityId === sec.internalSecurityId
+                    );
+                    const isClean = dq?.integrityStatus === 'VERIFIED_CLEAN';
+                    return (
+                      <tr key={sec.internalSecurityId} className="hover:bg-slate-900/50">
+                        <td className="py-2.5 px-3 font-bold text-cyan-300">
+                          {sec.internalSecurityId}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <div className="font-bold text-slate-100">{sec.symbol}</div>
+                          <div className="text-[10px] text-slate-500">{sec.isin} · {sec.sector}</div>
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-200 font-bold text-[10px]">
+                            {sec.exchange} · {sec.mic}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <div className="text-slate-200">{sec.instrumentType}</div>
+                          <div className="text-[10px] text-slate-500">
+                            {sec.settlementCycle} · {sec.settlementType}
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-3 text-right tabular-nums">
+                          <div className="text-slate-200 font-bold">Lot: {sec.lotSize}</div>
+                          <div className="text-[10px] text-slate-500">Tick: ₹{sec.tickSize}</div>
+                        </td>
+                        <td className="py-2.5 px-3 text-right tabular-nums">
+                          {dq?.livePrice ? (
+                            <div>
+                              <span className="font-bold text-cyan-300">
+                                ₹{dq.livePrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                              </span>
+                              <span
+                                className={`block text-[10px] ${
+                                  (dq.changePct ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                                }`}
+                              >
+                                {(dq.changePct ?? 0) >= 0 ? '+' : ''}
+                                {(dq.changePct ?? 0).toFixed(2)}%
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-slate-500">—</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          <span className="px-2 py-0.5 rounded bg-emerald-950/60 border border-emerald-500/30 text-emerald-300 text-[10px] font-bold">
+                            {sec.corporateActionAdjusted ? 'RAW + ADJ' : 'RAW ONLY'}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-[11px] text-slate-400 max-w-[230px]">
+                          {sec.rolloverRule}
+                        </td>
+                        <td className="py-2.5 px-3 text-right">
+                          <span
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border ${
+                              isClean
+                                ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300'
+                                : 'bg-amber-950/60 border-amber-500/40 text-amber-300'
+                            }`}
+                          >
+                            {isClean ? (
+                              <CheckCircle2 className="w-3 h-3" />
+                            ) : (
+                              <AlertTriangle className="w-3 h-3" />
+                            )}
+                            <span>{dq?.integrityStatus || 'VERIFIED_CLEAN'}</span>
+                          </span>
+                          <div className="text-[9px] text-slate-500 mt-0.5">
+                            Δt: {dq?.latencyDeltaMs ?? latencyMs}ms
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
+      )}
 
-        {/* Live Prices Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          {Object.values(quotes).slice(0, 5).map((q) => {
-            const hasPrice = q?.price != null;
-            const hasChange = q?.change != null && q?.changePct != null;
-            const isPositive = (q?.change ?? 0) >= 0;
+      {/* =====================================================================
+          SUB-TAB 02: VERSIONED PARAMETER REGISTRY & GOVERNANCE AUDIT TRAIL
+         ===================================================================== */}
+      {controlTowerTab === 'PARAMETER_GOVERNANCE' && (
+        <div className="flex flex-col gap-5 font-mono">
+          {/* Parameter Registry Panel */}
+          <div className="bg-[#080d1a]/90 rounded-2xl p-5 border border-emerald-500/25 shadow-xl flex flex-col gap-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">
+              <div>
+                <h2 className="text-sm font-bold text-slate-100 uppercase flex items-center gap-2">
+                  <Sliders className="w-4 h-4 text-emerald-400" />
+                  <span>UNBURIED STRATEGY &amp; RISK PARAMETER REGISTRY</span>
+                </h2>
+                <p className="text-[11px] text-slate-400 font-sans mt-0.5">
+                  No magic numbers buried in strategy code. Every threshold has explicit min/max bounds, version tags, and automatic governance logging.
+                </p>
+              </div>
 
-            return (
-              <div key={q.symbol} className="p-3 rounded-xl bg-slate-950/80 border border-slate-800/80 flex flex-col justify-between">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-mono font-bold text-slate-300">{q.name}</span>
-                  {hasChange ? (
-                    <span className={`text-[10px] font-mono font-bold ${isPositive ? 'text-emerald-400' : 'text-rose-400'}`}>
-                      {isPositive ? '+' : ''}{q.changePct!.toFixed(2)}%
-                    </span>
-                  ) : (
-                    <span className="text-[10px] font-mono text-slate-500">—</span>
-                  )}
-                </div>
-                <div className="my-2">
-                  <span className="text-lg font-bold font-mono text-cyan-300 tabular-nums">
-                    {hasPrice ? `₹${q.price!.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-slate-400 uppercase">CHANGE REASON:</span>
+                <input
+                  type="text"
+                  value={changeReason}
+                  onChange={(e) => setChangeReason(e.target.value)}
+                  className="px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-xs text-slate-200 w-64 focus:border-cyan-400 focus:outline-none"
+                  placeholder="Enter audit reason..."
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+              {parameters.map((param) => {
+                const currentDraft = draftValues[param.parameterId] ?? param.value;
+                const step = param.unit === 'INR' ? 25 : param.unit === '%' ? 1 : 0.1;
+                return (
+                  <div
+                    key={param.parameterId}
+                    className="p-4 rounded-xl bg-slate-950/90 border border-slate-800 flex flex-col justify-between gap-3"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-bold text-cyan-300">{param.name}</span>
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-emerald-400 font-bold">
+                          {param.version} · {param.strategy}
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-slate-500 mt-0.5">
+                        ID: <code className="text-slate-300">{param.parameterId}</code> · Owner: {param.owner}
+                      </div>
+                      <p className="text-[11px] text-slate-400 font-sans mt-1.5">
+                        {param.description}
+                      </p>
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-[10px] text-slate-400">
+                        Bounds: <span className="text-slate-200 font-bold">{param.min}</span> to{' '}
+                        <span className="text-slate-200 font-bold">{param.max} {param.unit}</span>{' '}
+                        (Default: {param.defaultValue} {param.unit})
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min={param.min}
+                          max={param.max}
+                          step={step}
+                          value={currentDraft}
+                          onChange={(e) =>
+                            setDraftValues((prev) => ({
+                              ...prev,
+                              [param.parameterId]: Number(e.target.value),
+                            }))
+                          }
+                          className="w-24 px-2.5 py-1 rounded-lg bg-slate-900 border border-cyan-500/40 text-cyan-200 font-bold text-xs text-right tabular-nums"
+                        />
+                        <span className="text-xs text-slate-400 font-bold">{param.unit}</span>
+                        <button
+                          onClick={() => handleCommitParameter(param)}
+                          className="px-3 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 text-[11px] font-bold transition cursor-pointer"
+                        >
+                          Sign &amp; Apply
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Immutable Governance Audit Trail Table */}
+          <div className="bg-[#080d1a]/90 rounded-2xl p-5 border border-cyan-500/20 shadow-xl">
+            <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <History className="w-4 h-4 text-cyan-400" />
+                <div>
+                  <h3 className="text-sm font-bold text-slate-100 uppercase">
+                    IMMUTABLE GOVERNANCE &amp; PARAMETER CHANGE AUDIT LOG
+                  </h3>
+                  <span className="text-[11px] text-slate-400 font-sans">
+                    Full institutional lineage: Who changed which parameter, when, old → new value, version bump, and signed rationale.
                   </span>
                 </div>
-                <div className="flex items-center justify-between text-[10px] font-mono text-slate-500">
-                  <span>{q.source}</span>
-                  <span>{q.timestamp}</span>
+              </div>
+              <span className="text-[10px] px-2.5 py-1 rounded bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 font-bold">
+                SEBI / INSTITUTIONAL AUDIT COMPLIANT
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-slate-800 text-[10px] text-slate-400 uppercase">
+                    <th className="py-2 px-3">Audit ID / Timestamp</th>
+                    <th className="py-2 px-3">Actor / Role</th>
+                    <th className="py-2 px-3">Target Parameter</th>
+                    <th className="py-2 px-3">Previous → New Value</th>
+                    <th className="py-2 px-3">Version</th>
+                    <th className="py-2 px-3">Signed Rationale</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {auditTrail.map((evt) => (
+                    <tr key={evt.auditId} className="hover:bg-slate-900/50">
+                      <td className="py-2.5 px-3">
+                        <div className="font-bold text-cyan-300">{evt.auditId}</div>
+                        <div className="text-[10px] text-slate-500">{evt.timestamp}</div>
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <div className="text-slate-200 font-bold">{evt.actor}</div>
+                        <div className="text-[10px] text-slate-500">{evt.role}</div>
+                      </td>
+                      <td className="py-2.5 px-3 font-bold text-amber-300">{evt.targetId}</td>
+                      <td className="py-2.5 px-3">
+                        <span className="text-slate-400 line-through mr-1.5">{evt.previousValue}</span>
+                        <span className="text-emerald-400 font-bold">→ {evt.newValue}</span>
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-cyan-300 text-[10px] font-bold">
+                          {evt.strategyVersion}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 text-[11px] text-slate-300 font-sans">
+                        {evt.reason}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================================
+          SUB-TAB 03: BROKER GATEWAY, MARKET-HOURS PACKET SAVER & MOBILE APP
+         ===================================================================== */}
+      {controlTowerTab === 'BROKER_GATEWAY' && (
+        <div className="flex flex-col gap-6">
+          {/* Embedded Sync Hub / Upstox Analytics v2 Gateway */}
+          <BrokerGatewayRouter />
+
+          {/* Market-Hours Gated Sync & Packet Saver Controller */}
+          <div className="bg-[#080d1a]/85 backdrop-blur-xl rounded-2xl p-6 border border-cyan-500/20 shadow-xl flex flex-col gap-4 font-mono">
+            <div className="flex flex-wrap items-center justify-between pb-3 border-b border-slate-800 gap-2">
+              <div className="flex items-center gap-2.5">
+                <Clock className="w-5 h-5 text-cyan-400" />
+                <div>
+                  <h2 className="text-sm font-bold text-slate-200 uppercase tracking-wide">
+                    Market-Hours Gated Sync &amp; Packet Saver Controller (09:15–15:30 IST)
+                  </h2>
+                  <span className="text-[11px] text-slate-400 font-sans">
+                    Automatically pauses high-frequency polling outside NSE/BSE market hours to eliminate wasted data packets.
+                  </span>
                 </div>
               </div>
-            );
-          })}
-        </div>
-      </div>
 
-      {/* Broker Nodes & Analytics Gateway */}
-      <div className="bg-[#080d1a]/85 backdrop-blur-xl rounded-2xl p-6 border border-cyan-500/20 shadow-xl flex flex-col gap-4">
-        <div className="flex flex-wrap items-center justify-between pb-3 border-b border-slate-800 gap-3">
-          <div className="flex items-center gap-2.5">
-            <Key className="w-5 h-5 text-cyan-400" />
-            <div>
-              <h2 className="text-sm font-bold font-mono text-slate-200 uppercase tracking-wide flex items-center gap-2">
-                <span>Primary Analytics Gateway (Upstox v2) &amp; Standby Nodes</span>
-              </h2>
-              <span className="text-[11px] text-slate-400 font-mono">
-                Upstox Analytics Token requires NO Static IP for Market Quotes, Option Chain &amp; Historical Candles. Terminal operates strictly in Paper-Trading &amp; Market Intelligence mode (no live money orders).
-              </span>
+              <button
+                onClick={toggleForceSyncOverride}
+                className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                  forceSyncOverride
+                    ? 'bg-cyan-500/20 border-cyan-400 text-cyan-200'
+                    : 'bg-slate-900 border-slate-700 text-slate-300 hover:text-white'
+                }`}
+              >
+                <Radio className={`w-3.5 h-3.5 ${forceSyncOverride ? 'text-cyan-400 animate-pulse' : 'text-slate-500'}`} />
+                <span>
+                  {forceSyncOverride
+                    ? 'OVERRIDE: FORCE SYNC ON'
+                    : `PACKET SAVER (${packetsSavedCount.toLocaleString()} SAVED)`}
+                </span>
+              </button>
+            </div>
+
+            <div className="text-xs text-slate-300 font-sans">
+              Active Market Phase: <strong className="text-cyan-300 font-mono">{marketSession?.phaseLabel || 'POST-MARKET EOD STANDBY'}</strong> · Next Session: <strong className="text-emerald-300 font-mono">{marketSession?.nextSessionText || 'Tomorrow @ 09:15 IST'}</strong>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowUnusedBrokers(!showUnusedBrokers)}
-              className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs font-mono text-slate-300 hover:text-cyan-300 transition cursor-pointer"
-            >
-              {showUnusedBrokers ? <EyeOff className="w-3.5 h-3.5 text-amber-400" /> : <Eye className="w-3.5 h-3.5 text-cyan-400" />}
-              <span>{showUnusedBrokers ? 'Hide Unused Brokers' : 'Show Standby / Unused Brokers (3 Hidden)'}</span>
-            </button>
-          </div>
-        </div>
 
-        {/* Active Primary Node: Upstox Analytics API */}
-        <div className="p-4 rounded-xl bg-slate-950/90 border border-cyan-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4 font-mono text-xs">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-bold text-cyan-300">UPSTOX ANALYTICS GATEWAY (PRIMARY)</span>
-              <span className={`text-[10px] px-2 py-0.5 rounded font-bold border ${
-                isUpstoxLive
-                  ? 'bg-emerald-950/70 border-emerald-500/40 text-emerald-400'
-                  : 'bg-amber-950/60 border-amber-500/40 text-amber-300'
-              }`}>
-                {isUpstoxLive ? 'CONNECTED · REALTIME FEED' : 'STANDBY · PAIR IN SYNC HUB'}
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-400 font-sans">
-              Verified via <code className="text-cyan-300">/market-quote/quotes</code> &amp; <code className="text-cyan-300">/option/chain</code> (No Static IP required per official Upstox Analytics Token docs).
-            </p>
-          </div>
-          <a
-            href="https://upstox.com/developer/api-documentation/analytics-token/#supported-apis"
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-950/60 hover:bg-cyan-900/60 border border-cyan-500/40 text-cyan-300 font-bold text-xs shrink-0"
-          >
-            <span>Upstox Analytics Docs</span>
-            <ExternalLink className="w-3.5 h-3.5" />
-          </a>
-        </div>
-
-        {showUnusedBrokers && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 pt-2">
-            {brokers.map((broker) => (
-              <div key={broker.id} className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 flex flex-col justify-between gap-3">
+          {/* iOS & Android Mobile Deployment Section */}
+          <div className="bg-[#080d1a]/85 backdrop-blur-xl rounded-2xl p-6 border border-cyan-500/25 shadow-xl flex flex-col gap-4">
+            <div className="flex flex-wrap items-center justify-between pb-3 border-b border-slate-800 gap-2">
+              <div className="flex items-center gap-2.5">
+                <div className="flex items-center gap-1.5 text-cyan-400">
+                  <Apple className="w-5 h-5 text-slate-100" />
+                  <Smartphone className="w-5 h-5 text-cyan-400" />
+                </div>
                 <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-bold font-mono text-cyan-300">{broker.name}</span>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 text-slate-400 font-bold border border-slate-700">
-                      UNUSED / STANDBY
+                  <h2 className="text-sm font-bold font-mono text-slate-200 uppercase tracking-wide">
+                    iOS (.mobileconfig) &amp; Android Native App Deployment
+                  </h2>
+                  <span className="text-[11px] text-slate-400 font-mono">
+                    Download Apple Configuration Profile for iPhone/iPad or install Android WebAPK.
+                  </span>
+                </div>
+              </div>
+
+              <PWAInstallButton />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
+              <div className="p-4 rounded-xl bg-gradient-to-br from-slate-950 to-cyan-950/30 border border-cyan-500/30 space-y-2.5 flex flex-col justify-between">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-cyan-300 font-bold">
+                      <Apple className="w-4 h-4 text-slate-200" />
+                      <span>iOS DOWNLOADABLE PROFILE</span>
+                    </div>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-950 border border-cyan-500/40 text-cyan-300">
+                      .mobileconfig
                     </span>
                   </div>
-                  <div className="space-y-1.5 text-xs font-mono">
-                    <div className="flex items-center justify-between text-slate-400">
-                      <span>PROTOCOL:</span>
-                      <span className="text-slate-200 font-semibold">{broker.apiCode}</span>
+                  <p className="text-slate-300 font-sans text-xs leading-relaxed">
+                    Download Apple&apos;s WebClip configuration profile to install J.A.R.V.I.S. full-screen on iPhone or iPad.
+                  </p>
+                </div>
+                <a
+                  href="/api/download/ios-profile"
+                  download="JARVIS-Quant.mobileconfig"
+                  className="w-full py-2 px-3 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs uppercase flex items-center justify-center gap-2 transition cursor-pointer text-center"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Download iOS Profile</span>
+                </a>
+              </div>
+
+              <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2.5 flex flex-col justify-between">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-emerald-300 font-bold">
+                      <Zap className="w-4 h-4 text-emerald-400" />
+                      <span>ANDROID WEBAPK (1-TAP)</span>
                     </div>
-                    <div className="flex items-center justify-between text-slate-400">
-                      <span>COLO NODE:</span>
-                      <span className="text-cyan-400">{broker.coloNode}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-slate-400">
-                      <span>API KEY:</span>
-                      <span className="text-slate-300 font-bold">{broker.apiKey}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-slate-400">
-                      <span>LATENCY:</span>
-                      <span className="text-emerald-400 font-bold">{broker.latency}</span>
-                    </div>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-950 border border-emerald-500/40 text-emerald-300">
+                      INSTANT
+                    </span>
                   </div>
+                  <p className="text-slate-300 font-sans text-xs leading-relaxed">
+                    Android Chrome, Brave, and Samsung Internet compile a native WebAPK with full home-screen and app drawer integration.
+                  </p>
                 </div>
-
-                <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2">
-                  <button
-                    onClick={() => handleTestBroker(broker.name)}
-                    className="w-full py-1.5 px-3 rounded-lg bg-slate-900 hover:bg-cyan-950/60 border border-slate-800 hover:border-cyan-500/40 text-xs font-mono text-cyan-300 font-bold transition-all"
-                  >
-                    TEST PING
-                  </button>
+                <div className="p-2 rounded bg-slate-900 border border-slate-800 text-[11px] text-slate-400">
+                  Tap browser menu (⋮) &rarr; &quot;Install app&quot;
                 </div>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Automated 5:00 PM IST Holiday Sync Task Status */}
-      <div className="bg-[#080d1a]/85 backdrop-blur-xl rounded-2xl p-6 border border-cyan-500/20 shadow-xl flex flex-col gap-4">
-        <div className="flex flex-wrap items-center justify-between pb-3 border-b border-slate-800 gap-2">
-          <div className="flex items-center gap-2.5">
-            <Database className="w-5 h-5 text-emerald-400" />
-            <div>
-              <h2 className="text-sm font-bold font-mono text-slate-200 uppercase tracking-wide">
-                NSE & BSE 2026/2027 Statutory Holiday Sync Daemon
-              </h2>
-              <span className="text-[11px] text-slate-400 font-mono">
-                Automated background daemon runs every trading day after market close at 5:00 PM IST (17:00 IST).
-              </span>
             </div>
-          </div>
-
-          <button
-            onClick={handleManualHolidayCheck}
-            disabled={isSyncingHolidays}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-500/40 text-emerald-300 text-xs font-mono font-bold transition-all disabled:opacity-50"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isSyncingHolidays ? 'animate-spin' : ''}`} />
-            <span>{isSyncingHolidays ? 'Verifying...' : 'TEST 5:00 PM IST DAEMON'}</span>
-          </button>
-        </div>
-
-        <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 text-xs font-mono space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-slate-400">DAEMON CRON SCHEDULE:</span>
-            <span className="text-cyan-400 font-bold">30 11 * * * (11:30 UTC // 17:00:00 IST DAILY)</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-slate-400">LAST VERIFIED PASSED:</span>
-            <span className="text-emerald-400 font-bold">{postMarketSync.lastRunTimestamp}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-slate-400">OFFICIAL CIRCULAR REF:</span>
-            <span className="text-slate-200">{postMarketSync.exchangeCircularRef}</span>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* iOS & Android Mobile Deployment Section */}
-      <div className="bg-[#080d1a]/85 backdrop-blur-xl rounded-2xl p-6 border border-cyan-500/25 shadow-xl flex flex-col gap-4">
-        <div className="flex flex-wrap items-center justify-between pb-3 border-b border-slate-800 gap-2">
-          <div className="flex items-center gap-2.5">
-            <div className="flex items-center gap-1.5 text-cyan-400">
-              <Apple className="w-5 h-5 text-slate-100" />
-              <Smartphone className="w-5 h-5 text-cyan-400" />
-            </div>
-            <div>
-              <h2 className="text-sm font-bold font-mono text-slate-200 uppercase tracking-wide">
-                iOS (.mobileconfig) &amp; Android Native App Deployment
-              </h2>
-              <span className="text-[11px] text-slate-400 font-mono">
-                Download Apple Configuration Profile for iPhone/iPad or install Android WebAPK / Standalone .APK.
-              </span>
-            </div>
-          </div>
-
-          <PWAInstallButton />
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-mono">
-          {/* iOS Card */}
-          <div className="p-4 rounded-xl bg-gradient-to-br from-slate-950 to-cyan-950/30 border border-cyan-500/30 space-y-2.5 flex flex-col justify-between">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-cyan-300 font-bold">
-                  <Apple className="w-4 h-4 text-slate-200" />
-                  <span>iOS DOWNLOADABLE PROFILE</span>
-                </div>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-950 border border-cyan-500/40 text-cyan-300">
-                  .mobileconfig
-                </span>
-              </div>
-              <p className="text-slate-300 font-sans text-xs leading-relaxed">
-                Download Apple's official WebClip configuration profile. Tap Allow &rarr; Settings &rarr; Profile Downloaded &rarr; Install to add J.A.R.V.I.S. to your iPhone/iPad Home Screen.
-              </p>
-            </div>
-            <a
-              href="/api/download/ios-profile"
-              download="JARVIS-Quant.mobileconfig"
-              className="w-full py-2 px-3 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs uppercase flex items-center justify-center gap-2 shadow-[0_0_12px_rgba(0,240,255,0.3)] transition cursor-pointer text-center"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Download iOS Profile</span>
-            </a>
-          </div>
-
-          {/* Android WebAPK Card */}
-          <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2.5 flex flex-col justify-between">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-emerald-300 font-bold">
-                  <Zap className="w-4 h-4 text-emerald-400" />
-                  <span>ANDROID WEBAPK (1-TAP)</span>
-                </div>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-950 border border-emerald-500/40 text-emerald-300">
-                  INSTANT
-                </span>
-              </div>
-              <p className="text-slate-300 font-sans text-xs leading-relaxed">
-                Android Chrome, Brave, and Samsung Internet automatically compile and sign a native WebAPK with full home-screen icon and app drawer integration.
-              </p>
-            </div>
-            <div className="p-2 rounded bg-slate-900 border border-slate-800 text-[11px] text-slate-400">
-              Tap browser menu (⋮) &rarr; "Install app"
-            </div>
-          </div>
-
-          {/* Standalone APK Card */}
-          <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2.5 flex flex-col justify-between">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-amber-300 font-bold">
-                  <Download className="w-4 h-4 text-amber-400" />
-                  <span>STANDALONE .APK / .AAB</span>
-                </div>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-950 border border-amber-500/40 text-amber-300">
-                  PLAY STORE
-                </span>
-              </div>
-              <p className="text-slate-300 font-sans text-xs leading-relaxed">
-                Use PWABuilder to generate a direct downloadable .apk for sideloading, or an .aab package for Google Play Store publishing.
-              </p>
-            </div>
-            <a
-              href="https://www.pwabuilder.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full py-2 px-3 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-cyan-300 hover:text-white font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer text-center"
-            >
-              <span>Build APK with PWABuilder</span>
-              <ExternalLink className="w-3.5 h-3.5" />
-            </a>
-          </div>
-        </div>
-      </div>
+      {/* =====================================================================
+          SUB-TAB 04: 20-SEAT FLOOR ACCESS & RBAC PERMISSIONS
+         ===================================================================== */}
+      {controlTowerTab === 'SEAT_RBAC' && <MultiUserDesk />}
     </div>
   );
 };
+

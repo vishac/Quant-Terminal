@@ -12,26 +12,29 @@ import {
   Zap, 
   Activity, 
   Lock,
-  Layers
+  Layers,
+  Sun,
+  Moon
 } from 'lucide-react';
 
 import { useDeskAuth } from '../context/DeskAuthContext';
+import { useTheme } from '../context/ThemeContext';
 
 export type UserRole = 'viewer' | 'admin';
 
 const TAB_LABELS: Record<ActiveTab, string> = {
   multi_user_desk: '20-Seat Desk',
   voice_hud: 'Voice HUD',
-  quant_bot: 'Quant Bot',
-  autonomous_agents: '5-Agent Desk',
-  trade_history: 'Trade History',
-  equity_radar: 'Equity Radar',
-  deep_thesis: 'Deep Thesis',
-  sync_hub: 'Sync Hub',
-  risk_engine: 'Risk Engine',
-  risk_guard: 'Guarded Risk',
-  backtest_lab: 'Backtest Lab',
-  settings: 'Settings',
+  quant_bot: '01. Market & Quant Bot',
+  equity_radar: '02. Screener & Thesis',
+  autonomous_agents: '03. 5-Agent Desk',
+  trade_history: '04. OMS & "Why?" Audit',
+  risk_engine: '05. Risk Engine',
+  backtest_lab: '06. Backtest Lab',
+  settings: '07. Control Tower',
+  deep_thesis: '02. Screener & Thesis',
+  sync_hub: '07. Control Tower',
+  risk_guard: '05. Risk Engine',
 };
 
 interface HeaderProps {
@@ -70,6 +73,7 @@ export const Header: React.FC<HeaderProps> = ({
   const isUpstoxLive = provider === 'UPSTOX_ANALYTICS_REALTIME';
   const [isInfoModalOpen, setIsInfoModalOpen] = useState<boolean>(false);
   const { currentSeat, setIsAuthModalOpen } = useDeskAuth();
+  const { theme, toggleTheme } = useTheme();
 
   return (
     <>
@@ -184,8 +188,30 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
 
-        {/* Right items: Top-Right Unified Role Switcher, Single Clean PWA Button & Avatar */}
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+        {/* Right items: Theme Switcher, Top-Right Unified Role Switcher, Seat Selector, PWA Button & Avatar */}
+        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+          {/* High-Contrast Lighter / Dark Theme Switcher */}
+          <button
+            onClick={toggleTheme}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 hover:border-cyan-500/40 text-xs font-mono transition-all cursor-pointer shadow-sm active:scale-95 shrink-0"
+            title={`Current Theme: ${theme === 'dark' ? 'Dark (Obsidian)' : 'Lighter (Daylight High-Contrast)'}. Click or press 'T' to switch theme.`}
+          >
+            {theme === 'dark' ? (
+              <>
+                <Sun className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span className="text-[10px] font-bold text-slate-200 hidden sm:inline">LIGHT</span>
+              </>
+            ) : (
+              <>
+                <Moon className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                <span className="text-[10px] font-bold text-slate-200 hidden sm:inline">DARK</span>
+              </>
+            )}
+            <kbd className="text-[9px] px-1 py-0.2 rounded bg-slate-800 text-slate-400 border border-slate-700 font-mono hidden md:inline">
+              T
+            </kbd>
+          </button>
+
           {/* Unified Top-Right Role Switcher: 1-Click Toggle between Viewer and Owner/Admin */}
           <button
             onClick={() => setUserRole(userRole === 'viewer' ? 'admin' : 'viewer')}

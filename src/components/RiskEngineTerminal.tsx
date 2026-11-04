@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useMarketWebSocket } from '../services/useMarketWebSocket';
 import { MacroThreatIntelligenceMatrix } from './MacroThreatIntelligenceMatrix';
+import { GuardedRiskControl } from './GuardedRiskControl';
 import { 
   ShieldAlert, 
   ShieldCheck, 
@@ -53,6 +54,7 @@ export const RiskEngineTerminal: React.FC<RiskEngineTerminalProps> = ({ onOpenCi
   const [slippageGuardArmed, setSlippageGuardArmed] = useState(true);
   const [globalKillActive, setGlobalKillActive] = useState(false);
   const [killConfirmModal, setKillConfirmModal] = useState<'GLOBAL_KILL' | 'OTM_EXPEL' | null>(null);
+  const [riskWorkspaceTab, setRiskWorkspaceTab] = useState<'LIVE_SURVEILLANCE' | 'GUARDED_LIMITS'>('LIVE_SURVEILLANCE');
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -248,13 +250,6 @@ export const RiskEngineTerminal: React.FC<RiskEngineTerminalProps> = ({ onOpenCi
 
         {/* Real-Time WebSocket Nifty / BankNifty Streaming Telemetry Ribbon */}
         <div className="flex items-center gap-2 z-10 overflow-x-auto no-scrollbar py-0.5 text-xs">
-          {/* WebSocket Status */}
-          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950/90 rounded-xl border border-cyan-500/30 shrink-0">
-            <span className={`inline-block w-2 h-2 rounded-full ${wsStatus === 'CONNECTED' ? 'bg-emerald-400 animate-ping' : 'bg-amber-400'}`}></span>
-            <span className="text-cyan-300 font-bold">WS: {wsStatus === 'CONNECTED' ? 'STREAMING' : wsStatus}</span>
-            <span className="text-[10px] text-slate-400">({latencyMs}ms)</span>
-          </div>
-
           {/* Live NIFTY 50 Pod */}
           <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-950/90 rounded-xl border border-slate-800 shrink-0">
             <span className="text-[10px] text-slate-400 font-semibold uppercase">NIFTY 50</span>
@@ -319,6 +314,39 @@ export const RiskEngineTerminal: React.FC<RiskEngineTerminalProps> = ({ onOpenCi
         </div>
       )}
 
+      {/* Unified Risk Workspace Sub-Tab Switcher */}
+      <div className="flex flex-wrap items-center justify-between gap-3 p-2 rounded-2xl bg-slate-900/70 border border-slate-800">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <button
+            onClick={() => setRiskWorkspaceTab('LIVE_SURVEILLANCE')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+              riskWorkspaceTab === 'LIVE_SURVEILLANCE'
+                ? 'bg-cyan-500 text-slate-950 shadow-[0_0_12px_rgba(0,240,255,0.3)]'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            01. Live VaR, Delta &amp; Circuit Surveillance
+          </button>
+          <button
+            onClick={() => setRiskWorkspaceTab('GUARDED_LIMITS')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+              riskWorkspaceTab === 'GUARDED_LIMITS'
+                ? 'bg-cyan-500 text-slate-950 shadow-[0_0_12px_rgba(0,240,255,0.3)]'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            02. Hard Margin, Notional &amp; Pre-Trade Evaluator
+          </button>
+        </div>
+        <span className="text-[11px] text-slate-400 px-2">
+          CPPI 92% Hard Floor · Quarter-Kelly Cushion Sizing
+        </span>
+      </div>
+
+      {riskWorkspaceTab === 'GUARDED_LIMITS' ? (
+        <GuardedRiskControl />
+      ) : (
+        <>
       {/* Main Mid Section: 2-Column Split */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left Column: 3D Geodesic Containment & Stress VaR Matrix (7/12 desktop) */}
@@ -612,6 +640,8 @@ export const RiskEngineTerminal: React.FC<RiskEngineTerminalProps> = ({ onOpenCi
           ))}
         </div>
       </div>
+        </>
+      )}
 
       {/* IN-APP RISK ENGINE KILL SWITCH CONFIRMATION MODAL */}
       {killConfirmModal && (

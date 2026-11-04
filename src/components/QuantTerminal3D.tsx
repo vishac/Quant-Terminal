@@ -178,8 +178,9 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
     return expiries;
   }, []);
 
+  const [quantWorkspaceTab, setQuantWorkspaceTab] = useState<'DERIVATIVES_BOT' | 'SECTOR_INTELLIGENCE'>('DERIVATIVES_BOT');
   const [decisionViewMode, setDecisionViewMode] = useState<'OPTION_CHAIN' | 'PAYOFF' | 'SETUPS' | 'LONG_DELIVERY'>('OPTION_CHAIN');
-  const [selectedDeliveryScript, setSelectedDeliveryScript] = useState<string>('TRENT');
+  const [selectedDeliveryScript, setSelectedDeliveryScript] = useState<string>('RELIANCE');
   const [customDeliverySearch, setCustomDeliverySearch] = useState<string>('');
   const [showDecisionInfo, setShowDecisionInfo] = useState<boolean>(false);
 
@@ -649,8 +650,11 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
                 : '—'}
             </span>
             {niftyQuote?.changePct != null && (
-              <span className={`text-[10px] font-bold flex items-center ${(niftyQuote.changePct ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                {(niftyQuote.changePct ?? 0) >= 0 ? '+' : ''}{niftyQuote.changePct.toFixed(2)}%
+              <span className={`text-[10px] font-bold flex items-center gap-1 ${(niftyQuote.changePct ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {niftyQuote.change != null && (
+                  <span>{niftyQuote.change >= 0 ? '+' : ''}{niftyQuote.change.toFixed(2)}</span>
+                )}
+                <span>({(niftyQuote.changePct ?? 0) >= 0 ? '+' : ''}{niftyQuote.changePct.toFixed(2)}%)</span>
               </span>
             )}
           </div>
@@ -664,8 +668,11 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
                 : '—'}
             </span>
             {bankNiftyQuote?.changePct != null && (
-              <span className={`text-[10px] font-bold flex items-center ${(bankNiftyQuote.changePct ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                {(bankNiftyQuote.changePct ?? 0) >= 0 ? '+' : ''}{bankNiftyQuote.changePct.toFixed(2)}%
+              <span className={`text-[10px] font-bold flex items-center gap-1 ${(bankNiftyQuote.changePct ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {bankNiftyQuote.change != null && (
+                  <span>{bankNiftyQuote.change >= 0 ? '+' : ''}{bankNiftyQuote.change.toFixed(2)}</span>
+                )}
+                <span>({(bankNiftyQuote.changePct ?? 0) >= 0 ? '+' : ''}{bankNiftyQuote.changePct.toFixed(2)}%)</span>
               </span>
             )}
           </div>
@@ -677,8 +684,11 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
               {vixQuote?.price != null ? vixQuote.price.toFixed(2) : '—'}
             </span>
             {vixQuote?.changePct != null && (
-              <span className={`text-[10px] font-bold ${(vixQuote.changePct ?? 0) <= 0 ? 'text-emerald-400' : 'text-amber-400'}`}>
-                {(vixQuote.changePct ?? 0) >= 0 ? '+' : ''}{vixQuote.changePct.toFixed(2)}%
+              <span className={`text-[10px] font-bold flex items-center gap-1 ${(vixQuote.changePct ?? 0) <= 0 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                {vixQuote.change != null && (
+                  <span>{vixQuote.change >= 0 ? '+' : ''}{vixQuote.change.toFixed(2)}</span>
+                )}
+                <span>({(vixQuote.changePct ?? 0) >= 0 ? '+' : ''}{vixQuote.changePct.toFixed(2)}%)</span>
               </span>
             )}
           </div>
@@ -692,30 +702,51 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
                 : '—'}
             </span>
             {sensexQuote?.changePct != null && (
-              <span className={`text-[10px] font-bold flex items-center ${(sensexQuote.changePct ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                {(sensexQuote.changePct ?? 0) >= 0 ? '+' : ''}{sensexQuote.changePct.toFixed(2)}%
+              <span className={`text-[10px] font-bold flex items-center gap-1 ${(sensexQuote.changePct ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {sensexQuote.change != null && (
+                  <span>{sensexQuote.change >= 0 ? '+' : ''}{sensexQuote.change.toFixed(2)}</span>
+                )}
+                <span>({(sensexQuote.changePct ?? 0) >= 0 ? '+' : ''}{sensexQuote.changePct.toFixed(2)}%)</span>
               </span>
             )}
           </div>
         </div>
 
-        {/* Status Indicators & Navigation to Autonomous Agents */}
-        <div className="flex items-center gap-4 text-xs shrink-0">
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-900/60 rounded-xl border border-slate-800 text-[11px]">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span className="text-slate-400">WS:</span>
-            <span className="text-emerald-400 font-bold">{wsStatus.toUpperCase()}</span>
-            <span className="text-slate-500">({latencyMs}ms)</span>
+        {/* Workspace Switcher & 5-Agent Desk Quick Jump */}
+        <div className="flex flex-wrap items-center gap-2 text-xs shrink-0">
+          <div className="flex items-center p-1 bg-slate-950 border border-slate-800 rounded-xl">
+            <button
+              onClick={() => setQuantWorkspaceTab('DERIVATIVES_BOT')}
+              className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
+                quantWorkspaceTab === 'DERIVATIVES_BOT'
+                  ? 'bg-cyan-500 text-slate-950 shadow-[0_0_12px_rgba(0,240,255,0.3)]'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Target className="w-3.5 h-3.5" />
+              <span>Derivatives &amp; Quant Bot</span>
+            </button>
+            <button
+              onClick={() => setQuantWorkspaceTab('SECTOR_INTELLIGENCE')}
+              className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
+                quantWorkspaceTab === 'SECTOR_INTELLIGENCE'
+                  ? 'bg-cyan-500 text-slate-950 shadow-[0_0_12px_rgba(0,240,255,0.3)]'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>Sector &amp; Stock Intelligence</span>
+            </button>
           </div>
 
           {onNavigateToAgents && (
             <button
               onClick={onNavigateToAgents}
-              className="flex items-center gap-1.5 px-3 py-1 bg-cyan-950/70 hover:bg-cyan-900/90 rounded-lg border border-cyan-500/40 text-cyan-300 font-bold transition shadow-[0_0_12px_rgba(0,240,255,0.25)] cursor-pointer"
-              title="Jump to 5 Autonomous Strategy Agents (Chanakya, Bhishma, Arjuna, Kuber, Vidura)"
+              className="flex items-center gap-1.5 px-3 py-2 bg-cyan-950/70 hover:bg-cyan-900/90 rounded-xl border border-cyan-500/40 text-cyan-300 font-bold transition cursor-pointer whitespace-nowrap shrink-0"
+              title="Open 5-Agent Autonomous Strategy & Execution Desk"
             >
               <Zap className="w-3.5 h-3.5" />
-              <span>5 AGENTS ARMED</span>
+              <span>5-Agent Desk →</span>
             </button>
           )}
         </div>
@@ -728,32 +759,34 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
         </div>
       )}
 
-      {/* FIRST-PRINCIPLES MARKET INTELLIGENCE & SELF-LEARNING 5-AGENT DECISION ENGINE */}
-      <FirstPrinciplesMarketEngine quotes={quotes} />
-
-      {/* PRIMARY QUANTITATIVE WORKSPACE */}
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 w-full items-start">
-        {/* LEFT / CENTER PRIMARY WORKSPACE (Col 1-8 / 66%) */}
-        <div className="xl:col-span-8 flex flex-col gap-6">
-          
-          {/* ANALYTICAL DECISION MAKER CONTAINER */}
-          <div className="bg-[#080d1a]/95 rounded-2xl p-5 border border-cyan-500/25 shadow-2xl backdrop-blur-2xl relative font-mono">
-            
-            {/* Header: Title & View Mode Switcher */}
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-3 border-b border-slate-800">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-cyan-950/90 border border-cyan-500/40 flex items-center justify-center text-cyan-400 shadow-[0_0_15px_rgba(0,240,255,0.2)]">
-                  <Target className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold uppercase tracking-wide text-cyan-200">
-                      DECISION_MAKER // LIVE_OPTION_CHAIN & SIGNALS
-                    </span>
-                    <span className="px-1.5 py-0.5 bg-emerald-500/20 rounded text-[9px] text-emerald-300 font-semibold tracking-widest border border-emerald-500/40 flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      LIVE OI
-                    </span>
+      {/* WORKSPACE VIEW 2: SECTOR & STOCK INTELLIGENCE (FIRST-PRINCIPLES ENGINE) */}
+      {quantWorkspaceTab === 'SECTOR_INTELLIGENCE' ? (
+        <FirstPrinciplesMarketEngine quotes={quotes} onNavigateToAgents={onNavigateToAgents} />
+      ) : (
+        <>
+          {/* WORKSPACE VIEW 1: PRIMARY DERIVATIVES & QUANT BOT WORKSPACE */}
+          <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 w-full items-start">
+            {/* LEFT / CENTER PRIMARY WORKSPACE (Col 1-8 / 66%) */}
+            <div className="xl:col-span-8 flex flex-col gap-6">
+              
+              {/* ANALYTICAL DECISION MAKER CONTAINER */}
+              <div className="bg-[#080d1a]/95 rounded-2xl p-5 border border-cyan-500/25 shadow-2xl backdrop-blur-2xl relative font-mono">
+                
+                {/* Header: Title & View Mode Switcher */}
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-3 border-b border-slate-800">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-cyan-950/90 border border-cyan-500/40 flex items-center justify-center text-cyan-400 shadow-[0_0_15px_rgba(0,240,255,0.2)]">
+                      <Target className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold uppercase tracking-wide text-cyan-200">
+                          Live Option Chain &amp; Institutional Signals
+                        </span>
+                        <span className="px-1.5 py-0.5 bg-emerald-500/20 rounded text-[9px] text-emerald-300 font-semibold tracking-widest border border-emerald-500/40 flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                          LIVE OI
+                        </span>
                     <div className="relative">
                       <button
                         onClick={() => setShowDecisionInfo(!showDecisionInfo)}
@@ -929,10 +962,10 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
                 </div>
 
                 {/* Option Chain Table Container */}
-                <div className="w-full overflow-x-auto rounded-xl border border-slate-800 bg-[#050914] shadow-inner max-h-[460px] overflow-y-auto no-scrollbar">
-                  <table className="w-full text-left border-collapse text-[11px] font-mono whitespace-nowrap">
+                <div className="option-chain-container w-full overflow-x-auto rounded-xl border border-slate-800 bg-[#050914] shadow-inner max-h-[460px] overflow-y-auto no-scrollbar">
+                  <table className="option-chain-table w-full text-left border-collapse text-[11px] font-mono whitespace-nowrap">
                     {/* Header Columns */}
-                    <thead className="bg-[#0b1325] text-[10px] text-slate-400 sticky top-0 z-20 border-b border-slate-800">
+                    <thead className="option-chain-thead bg-[#0b1325] text-[10px] text-slate-400 sticky top-0 z-20 border-b border-slate-800">
                       <tr>
                         {/* CALLS (CE) */}
                         <th colSpan={5} className="p-2 text-center text-cyan-300 font-bold tracking-wider border-r border-slate-800 bg-cyan-950/20">
@@ -976,14 +1009,14 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
                         return (
                           <tr
                             key={row.strike}
-                            className={`transition-colors hover:bg-slate-900/60 ${
+                            className={`option-chain-row transition-colors hover:bg-slate-900/60 ${
                               row.isAtm 
-                                ? 'bg-cyan-950/40 ring-1 ring-cyan-400/50' 
+                                ? 'option-row-atm bg-cyan-950/40 ring-1 ring-cyan-400/50' 
                                 : row.isItmCe 
-                                  ? 'bg-cyan-950/10' 
+                                  ? 'option-row-itm-ce bg-cyan-950/10' 
                                   : row.isItmPe 
-                                    ? 'bg-teal-950/10' 
-                                    : ''
+                                    ? 'option-row-itm-pe bg-teal-950/10' 
+                                    : 'option-row-otm'
                             }`}
                           >
                             {/* CE Action: 1-Click Buy / Sell Stage */}
@@ -1010,7 +1043,7 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
                             <td className="p-1.5 text-right relative">
                               {/* Background OI Bar */}
                               <div
-                                className="absolute top-1 bottom-1 right-0 bg-cyan-500/10 rounded-l pointer-events-none"
+                                className="option-oi-bar-ce absolute top-1 bottom-1 right-0 bg-cyan-500/15 border-l border-cyan-500/35 rounded-l pointer-events-none"
                                 style={{ width: `${ceOiBarWidth}%` }}
                               />
                               <div className="relative z-10 flex flex-col items-end">
@@ -1042,8 +1075,8 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
                             </td>
 
                             {/* CENTER STRIKE COLUMN */}
-                            <td className={`p-2 text-center font-bold font-mono border-r border-slate-800 ${
-                              row.isAtm ? 'text-cyan-300 bg-cyan-950/60' : 'text-slate-100 bg-slate-900/60'
+                            <td className={`option-strike-cell p-2 text-center font-bold font-mono border-r border-slate-800 ${
+                              row.isAtm ? 'option-strike-atm text-cyan-300 bg-cyan-950/60' : 'text-slate-100 bg-slate-900/60'
                             }`}>
                               <div className="flex items-center justify-center gap-1.5">
                                 <span className="text-xs">{row.strike}</span>
@@ -1080,7 +1113,7 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
                             <td className="p-1.5 text-left relative">
                               {/* Background OI Bar */}
                               <div
-                                className="absolute top-1 bottom-1 left-0 bg-teal-500/10 rounded-r pointer-events-none"
+                                className="option-oi-bar-pe absolute top-1 bottom-1 left-0 bg-teal-500/15 border-r border-teal-500/35 rounded-r pointer-events-none"
                                 style={{ width: `${peOiBarWidth}%` }}
                               />
                               <div className="relative z-10 flex flex-col items-start">
@@ -2256,270 +2289,278 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
           </div>
         </div>
 
-        {/* RIGHT COLUMN: INSTITUTIONAL BOT STRATEGIES & DMA QUEUE (Col 9-12 / 34%) */}
+        {/* RIGHT COLUMN: DYNAMIC INSTITUTIONAL QUANT BOT STRATEGIES (Col 9-12 / 34%) */}
         <div className="xl:col-span-4 flex flex-col gap-6 font-mono">
           
-          {/* BOT CARD 1: OPTION STRANGLE BOT */}
+          {/* DYNAMIC ALGORITHMIC SELECTION ENGINE */}
           {(() => {
-            const callStrike = atmStrike + 200;
-            const putStrike = atmStrike - 200;
-            const callPrem = Math.round(Math.max(12, (vixVal * 3.8)));
-            const putPrem = Math.round(Math.max(12, (vixVal * 3.5)));
+            // Find all valid equity quotes
+            const eqQuotes = Object.values(quotes).filter((q) => 
+              q.symbol && q.symbol.endsWith('.NS') && q.price != null && q.price > 0
+            );
+
+            // Compute Relative Alpha vs Nifty 50 for all equities
+            const niftyChg = niftyQuote?.changePct ?? 0;
+            const rankedByAlpha = [...eqQuotes].sort((a, b) => {
+              const alphaA = (a.changePct ?? 0) - niftyChg;
+              const alphaB = (b.changePct ?? 0) - niftyChg;
+              return alphaB - alphaA;
+            });
+
+            // Card 1: Top Institutional Alpha Candidate
+            const alphaCand = rankedByAlpha[0] || quotes['RELIANCE.NS'] || quotes['CIPLA.NS'];
+            const alphaTicker = alphaCand?.symbol ? alphaCand.symbol.replace('.NS', '') : 'RELIANCE';
+            const alphaPrice = alphaCand?.price ?? 1257.2;
+            const alphaChg = alphaCand?.changePct ?? 0;
+            const alphaRelative = alphaChg - niftyChg;
+            const alphaStopPts = Math.max(10, Math.round(alphaPrice * 0.018));
+            const alphaStop = Math.round(alphaPrice - alphaStopPts);
+            const alphaSlPct = ((alphaStopPts / alphaPrice) * 100).toFixed(1);
+            const alphaRR = Number((1.90 + Math.max(0, Math.min(1.4, alphaRelative * 0.25))).toFixed(2));
+            const alphaTgt1Pts = Math.round(alphaStopPts * alphaRR);
+            const alphaTgt1 = Math.round(alphaPrice + alphaTgt1Pts);
+            const alphaTgt1Pct = ((alphaTgt1Pts / alphaPrice) * 100).toFixed(1);
+            const alphaTgt2 = Math.round(alphaPrice + alphaTgt1Pts * 1.8);
+            const alphaTgt2Pct = (((alphaTgt2 - alphaPrice) / alphaPrice) * 100).toFixed(1);
+            const alphaRiskPerShare = Math.max(1, alphaPrice - alphaStop);
+            const alphaSafeShares = Math.max(1, Math.floor(400 / alphaRiskPerShare)); // Max ₹400 trade risk cap
+            const alphaSafeCap = alphaSafeShares * alphaPrice;
+
+            // Card 2: Top Momentum Breakout Candidate (second best runner or top gainer with high activity)
+            const momentumCand = rankedByAlpha.length > 1 ? rankedByAlpha[1] : (quotes['LT.NS'] || alphaCand);
+            const momTicker = momentumCand?.symbol ? momentumCand.symbol.replace('.NS', '') : 'LT';
+            const momPrice = momentumCand?.price ?? 3940.5;
+            const momChg = momentumCand?.changePct ?? 0;
+            const momHigh = momentumCand?.high ?? (momPrice * 1.018);
+            const momLow = momentumCand?.low ?? (momPrice * 0.988);
+            const momRange = Math.max(20, momHigh - momLow);
+            const momStopPts = Math.max(15, Math.round(Math.min(momPrice * 0.022, Math.max(momPrice * 0.012, momRange * 0.75))));
+            const momStop = Math.round(momPrice - momStopPts);
+            const momVelocityMult = Math.max(1.85, Math.min(3.20, Number((2.10 + (momChg * 0.35)).toFixed(2))));
+            const momTgtPts = Math.round(momStopPts * momVelocityMult);
+            const momTarget = Math.round(momPrice + momTgtPts);
+            const momTargetPct = ((momTgtPts / momPrice) * 100).toFixed(1);
+            const momDynamicRR = (momTgtPts / Math.max(1, momStopPts)).toFixed(2);
+            // Step-Ratchet TSL levels (+0.8R Breakeven lock)
+            const beTrigger = Math.round(momPrice + momStopPts * 0.8);
+            const momRiskPerShare = Math.max(1, momPrice - momStop);
+            const momShares = Math.max(1, Math.floor(400 / momRiskPerShare));
+            const momLotProfit = momTgtPts * momShares;
+
+            // Card 3: Regime-Adaptive Volatility Harvest (Derived from Live Spot and Live India VIX)
+            const wingDist = Math.max(150, Math.round((niftySpot * (vixVal / 100) * 0.08) / 50) * 50);
+            const callStrike = atmStrike + wingDist;
+            const putStrike = atmStrike - wingDist;
+            const callPrem = Math.round(Math.max(15, (vixVal * 3.6 * (200 / wingDist))));
+            const putPrem = Math.round(Math.max(15, (vixVal * 3.4 * (200 / wingDist))));
             const combinedPrem = callPrem + putPrem;
-            const hardSl = Math.round(combinedPrem * 1.42);
+            const hardSl = Math.round(combinedPrem * 1.35); // Tightened per risk mandate
             const lotHarvest = combinedPrem * 25; // 25 qty per NIFTY lot
+            const popVal = Math.round(Math.max(68, Math.min(84, 82 - (vixVal - 13) * 1.5)));
 
             return (
-              <div className="bg-[#080d1a]/90 rounded-2xl p-5 border border-cyan-500/25 shadow-xl flex flex-col justify-between gap-3">
-                <div className="flex items-start justify-between">
-                  <div className="flex flex-col">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-cyan-200 font-bold uppercase tracking-wider">NIFTY WEEKLY STRANGLE</span>
-                      <span className="px-1.5 py-0.2 bg-cyan-500/20 text-cyan-300 text-[9px] rounded uppercase border border-cyan-500/30">
-                        EXP: {selectedExpiry.split(' ')[0]}
+              <>
+                {/* BOT CARD 1: DYNAMIC INSTITUTIONAL ALPHA OPPORTUNITY */}
+                <div className="bg-[#080d1a]/90 rounded-2xl p-5 border border-cyan-500/25 shadow-xl flex flex-col justify-between gap-3">
+                  <div className="flex items-start justify-between">
+                    <div className="flex flex-col">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-cyan-200 font-bold uppercase tracking-wider">
+                          ALPHA LEADER: {alphaTicker}
+                        </span>
+                        <span className="px-1.5 py-0.2 bg-cyan-500/20 text-cyan-300 text-[9px] rounded uppercase border border-cyan-500/30">
+                          CASH / CNC
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-slate-400 mt-0.5 font-mono">
+                        LIVE ₹{alphaPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })} ({alphaChg >= 0 ? '+' : ''}{alphaChg.toFixed(2)}%) • ALPHA: {alphaRelative >= 0 ? '+' : ''}{alphaRelative.toFixed(2)}% vs NIFTY
                       </span>
                     </div>
-                    <span className="text-[10px] text-slate-400 mt-0.5">
-                      STRATEGY: VEGA HARVEST // DELTA NEUTRAL (SPOT ₹{Math.round(niftySpot).toLocaleString('en-IN')})
-                    </span>
+                    <div className="px-2 py-0.5 bg-slate-900 border border-slate-700 rounded text-cyan-300 text-[10px] font-bold flex items-center gap-1.5">
+                      <span>RANK #1</span>
+                      <span className="text-slate-600">·</span>
+                      <span className="text-emerald-400 font-mono">R:R 1:{alphaRR}</span>
+                    </div>
                   </div>
-                  <div className="px-2 py-0.5 bg-slate-900 border border-slate-700 rounded text-slate-400 text-[10px] font-bold" title="Zero closed trades — Win Rate displays -- per Zero Dummy Data Mandate">
-                    WIN RATE: <span className="text-cyan-400 font-mono">--</span> <span className="text-slate-500 font-normal">(PoP: ~76%)</span>
+
+                  <div className="bg-slate-950/80 rounded-xl p-3 border border-slate-800/80 space-y-1.5 text-xs font-mono">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400">ENTRY BAND:</span>
+                      <span className="text-cyan-300 font-bold">
+                        ₹{(alphaPrice * 0.996).toFixed(1)} - ₹{(alphaPrice * 1.004).toFixed(1)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400">TARGET 1 / 2:</span>
+                      <span className="text-emerald-400 font-bold">
+                        ₹{alphaTgt1.toLocaleString('en-IN')} (+{alphaTgt1Pct}%) / ₹{alphaTgt2.toLocaleString('en-IN')} (+{alphaTgt2Pct}%)
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400">STOP LOSS (ATR):</span>
+                      <span className="text-rose-400 font-bold">
+                        ₹{alphaStop.toLocaleString('en-IN')} (-{alphaSlPct}%)
+                      </span>
+                    </div>
                   </div>
-                </div>
 
-                {/* Strike Specifics */}
-                <div className="bg-slate-950/80 rounded-xl p-3 border border-slate-800/80 space-y-1.5 text-xs">
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-400">SELL {callStrike.toLocaleString('en-IN')} CE (OTM +200)</span>
-                    <span className="text-cyan-300 font-bold">@ ₹{callPrem.toFixed(2)}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-400">SELL {putStrike.toLocaleString('en-IN')} PE (OTM -200)</span>
-                    <span className="text-cyan-300 font-bold">@ ₹{putPrem.toFixed(2)}</span>
-                  </div>
-                  <div className="flex items-center justify-between pt-1 border-t border-slate-800 text-[10px]">
-                    <span className="text-amber-300 font-bold">COMBINED PREM: ₹{combinedPrem.toFixed(2)}</span>
-                    <span className="text-rose-400 font-bold">HARD SL: ₹{hardSl.toFixed(2)}</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between mt-1">
-                  <div>
-                    <div className="text-[9px] text-slate-400 uppercase">MAX HARVEST (1 LOT / 25 QTY)</div>
-                    <div className="text-xs text-emerald-400 font-bold">+₹{lotHarvest.toLocaleString('en-IN')}</div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => {
-                        setSelectedDeliveryScript('NIFTY');
-                        setDecisionViewMode('LONG_DELIVERY');
-                      }}
-                      className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-cyan-300 text-[10px] font-bold uppercase rounded-lg border border-cyan-500/30 transition flex items-center gap-1 cursor-pointer"
-                      title="Understand why Options/Strangles are not sustainable for long delivery"
-                    >
-                      <HelpCircle className="w-3 h-3" />
-                      <span>DELIVERY RISK?</span>
-                    </button>
-                    <button
-                      onClick={() => handleFireSignal(`NIFTY ${callStrike}/${putStrike} Strangle`)}
-                      className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-bold uppercase rounded-xl shadow-[0_0_15px_rgba(0,240,255,0.35)] transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
-                    >
-                      <Send className="w-3.5 h-3.5" />
-                      <span>DEPLOY STRANGLE</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
-
-          {/* BOT CARD 2: EQUITY SWING BOT: TRENT LTD */}
-          {(() => {
-            const p = quotes['TRENT.NS']?.price ?? 6845.0;
-            const chg = quotes['TRENT.NS']?.changePct ?? 1.25;
-            const high = quotes['TRENT.NS']?.high ?? (p * 1.018);
-            const low = quotes['TRENT.NS']?.low ?? (p * 0.985);
-            const dayRange = Math.max(35, high - low);
-            const entryLow = Math.round(p * 0.995);
-            const entryHigh = Math.round(p * 1.005);
-
-            // Dynamic volatility stop (pegged to ~2.5% to 3.2%)
-            const stopPts = Math.max(25, Math.round(Math.max(p * 0.024, dayRange * 0.82)));
-            const stopLoss = Math.round(p - stopPts);
-            const slPct = ((stopPts / p) * 100).toFixed(1);
-
-            // Dynamic asymmetric reward scaling with session momentum
-            const cashRR = Number((1.85 + Math.max(-0.3, Math.min(1.2, chg * 0.35))).toFixed(2));
-            const target1Pts = Math.round(stopPts * cashRR);
-            const target1 = Math.round(p + target1Pts);
-            const target1Pct = ((target1Pts / p) * 100).toFixed(1);
-
-            const target2Pts = Math.round(target1Pts * 1.85);
-            const target2 = Math.round(p + target2Pts);
-            const target2Pct = (((target2 - p) / p) * 100).toFixed(1);
-
-            const riskPerShare = Math.max(1, p - stopLoss);
-            const safeShares = Math.max(1, Math.floor(1000 / riskPerShare));
-            const safeCap = safeShares * p;
-
-            return (
-              <div className="bg-[#080d1a]/90 rounded-2xl p-5 border border-emerald-500/25 shadow-xl flex flex-col justify-between gap-3">
-                <div className="flex items-start justify-between">
-                  <div className="flex flex-col">
+                  <div className="flex items-center justify-between mt-1">
+                    <div>
+                      <div className="text-[9px] text-slate-400 uppercase font-mono">1R SIZING (≤₹400 RISK)</div>
+                      <div className="text-xs text-cyan-300 font-bold font-mono">
+                        ₹{alphaSafeCap.toLocaleString('en-IN')} ({alphaSafeShares} shs)
+                      </div>
+                    </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-emerald-300 font-bold uppercase tracking-wider">TRENT LTD</span>
-                      <span className="px-1.5 py-0.2 bg-emerald-500/20 text-emerald-400 text-[9px] rounded uppercase border border-emerald-500/30">CASH / CNC</span>
-                    </div>
-                    <span className="text-[10px] text-slate-400 mt-0.5 font-mono">
-                      LIVE ₹{p.toLocaleString('en-IN')} ({chg >= 0 ? '+' : ''}{chg.toFixed(2)}%) • ACCUMULATION
-                    </span>
-                  </div>
-                  <div className="px-2 py-0.5 bg-slate-900 border border-slate-800 rounded text-cyan-300 text-[10px] font-bold flex items-center gap-1.5">
-                    <span>ALPHA: 92.4</span>
-                    <span className="text-slate-600">·</span>
-                    <span className="text-emerald-400 font-mono">R:R 1:{cashRR}</span>
-                  </div>
-                </div>
-
-                <div className="bg-slate-950/80 rounded-xl p-3 border border-slate-800/80 space-y-1.5 text-xs font-mono">
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-400">ENTRY BAND:</span>
-                    <span className="text-cyan-300 font-bold">₹{entryLow.toLocaleString('en-IN')} - ₹{entryHigh.toLocaleString('en-IN')}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-400">TARGET 1 / 2:</span>
-                    <span className="text-emerald-400 font-bold">₹{target1.toLocaleString('en-IN')} (+{target1Pct}%) / ₹{target2.toLocaleString('en-IN')} (+{target2Pct}%)</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-400">STOP LOSS:</span>
-                    <span className="text-rose-400 font-bold">₹{stopLoss.toLocaleString('en-IN')} (-{slPct}%)</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between mt-1">
-                  <div>
-                    <div className="text-[9px] text-slate-400 uppercase font-mono">DYNAMIC RISK SIZING</div>
-                    <div className="text-xs text-cyan-300 font-bold font-mono">
-                      ₹{safeCap.toLocaleString('en-IN')} ({safeShares} shs)
+                      <button
+                        onClick={() => {
+                          setSelectedDeliveryScript(alphaTicker);
+                          setDecisionViewMode('LONG_DELIVERY');
+                        }}
+                        className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-cyan-300 text-[10px] font-bold uppercase rounded-lg border border-cyan-500/30 transition flex items-center gap-1 cursor-pointer"
+                        title={`Inspect ${alphaTicker} Institutional Delivery Dossier`}
+                      >
+                        <Building2 className="w-3 h-3" />
+                        <span>DELIVERY DOSSIER</span>
+                      </button>
+                      <button
+                        onClick={() => handleFireSignal(`${alphaTicker} Alpha Long`)}
+                        className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-bold uppercase rounded-xl shadow-[0_0_15px_rgba(0,240,255,0.35)] transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                      >
+                        <Zap className="w-3.5 h-3.5" />
+                        <span>STAGE ORDER</span>
+                      </button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => {
-                        setSelectedDeliveryScript('TRENT');
-                        setDecisionViewMode('LONG_DELIVERY');
-                      }}
-                      className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-emerald-400 text-[10px] font-bold uppercase rounded-lg border border-emerald-500/30 transition flex items-center gap-1 cursor-pointer"
-                      title="Inspect why Trent Ltd is sustainable for long delivery"
-                    >
-                      <Building2 className="w-3 h-3" />
-                      <span>DELIVERY DOSSIER</span>
-                    </button>
-                    <button
-                      onClick={() => handleFireSignal('TRENT LTD Cash CNC')}
-                      className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold uppercase rounded-xl shadow-[0_0_15px_rgba(52,246,168,0.35)] transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
-                    >
-                      <Zap className="w-3.5 h-3.5" />
-                      <span>FIRE ORDER</span>
-                    </button>
-                  </div>
                 </div>
-              </div>
-            );
-          })()}
 
-          {/* BOT CARD 3: F&O MOMENTUM BOT: L&T */}
-          {(() => {
-            const ltQuote = quotes['LT.NS'];
-            const p = ltQuote?.price ?? 3620.0;
-            const chg = ltQuote?.changePct ?? 0.85;
-            const high = ltQuote?.high ?? (p * 1.018);
-            const low = ltQuote?.low ?? (p * 0.988);
+                {/* BOT CARD 2: DYNAMIC MOMENTUM BREAKOUT & STEP-RATCHET TSL */}
+                <div className="bg-[#080d1a]/90 rounded-2xl p-5 border border-emerald-500/25 shadow-xl flex flex-col justify-between gap-3">
+                  <div className="flex items-start justify-between">
+                    <div className="flex flex-col">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-emerald-300 font-bold uppercase tracking-wider">
+                          MOMENTUM RUNNER: {momTicker}
+                        </span>
+                        <span className="px-1.5 py-0.2 bg-emerald-500/20 text-emerald-400 text-[9px] rounded uppercase border border-emerald-500/30">
+                          BREAKOUT
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-slate-400 mt-0.5 font-mono">
+                        LIVE ₹{momPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })} ({momChg >= 0 ? '+' : ''}{momChg.toFixed(2)}%) • STEP-RATCHET TSL ACTIVE
+                      </span>
+                    </div>
+                    <div className="px-2 py-0.5 bg-slate-900 border border-slate-800 rounded text-amber-300 text-[10px] font-bold flex items-center gap-1.5">
+                      <span>R:R 1:{momDynamicRR}</span>
+                    </div>
+                  </div>
 
-            // Dynamic Volatility & True Range
-            const dayRange = Math.max(30, high - low);
-            
-            // Dynamic Trailing Stop Loss pegged to intraday support & ATR
-            const stopPts = Math.max(20, Math.round(Math.min(p * 0.024, Math.max(p * 0.012, dayRange * 0.82))));
-            const stop = Math.round(p - stopPts);
-            const stopPct = ((stopPts / p) * 100).toFixed(1);
+                  <div className="bg-slate-950/80 rounded-xl p-3 border border-slate-800/80 space-y-1.5 text-xs font-mono">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400">TRIGGER ENTRY:</span>
+                      <span className="text-cyan-300 font-bold">₹{momPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400">PROJ TARGET:</span>
+                      <span className="text-emerald-400 font-bold">₹{momTarget.toLocaleString('en-IN')} (+{momTgtPts} pts / +{momTargetPct}%)</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400">TSL RATCHET FLOOR:</span>
+                      <span className="text-rose-400 font-bold">
+                        ₹{momStop.toLocaleString('en-IN')} (-{momStopPts} pts) · <span className="text-cyan-300">BE: ₹{beTrigger}</span>
+                      </span>
+                    </div>
+                  </div>
 
-            // Dynamic Target expansion: scales with session momentum thrust & alpha (never constant!)
-            const velocityMultiplier = Math.max(1.75, Math.min(3.20, Number((2.15 + (chg * 0.38)).toFixed(2))));
-            const targetPts = Math.round(stopPts * velocityMultiplier);
-            const target = Math.round(p + targetPts);
-            const targetPct = ((targetPts / p) * 100).toFixed(1);
-
-            // Mathematically computed dynamic Risk-to-Reward ratio
-            const dynamicRR = (targetPts / Math.max(1, stopPts)).toFixed(2);
-            
-            const lotSize = 175; // NSE L&T Futures Lot Size
-            const lotProfit = targetPts * lotSize;
-            const lotRisk = stopPts * lotSize;
-
-            return (
-              <div className="bg-[#080d1a]/90 rounded-2xl p-5 border border-amber-500/25 shadow-xl flex flex-col justify-between gap-3">
-                <div className="flex items-start justify-between">
-                  <div className="flex flex-col">
+                  <div className="flex items-center justify-between mt-1">
+                    <div>
+                      <div className="text-[9px] text-slate-400 uppercase font-mono">EST. HARVEST ({momShares} SHS / 1R ≤₹400)</div>
+                      <div className="text-xs text-emerald-400 font-bold font-mono">+₹{momLotProfit.toLocaleString('en-IN')}</div>
+                    </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-amber-300 font-bold uppercase tracking-wider">L&T (LARSEN & TOUBRO)</span>
-                      <span className="px-1.5 py-0.2 bg-amber-500/20 text-amber-400 text-[9px] rounded uppercase border border-amber-500/30">CURRENT FUT</span>
+                      <button
+                        onClick={() => {
+                          setSelectedDeliveryScript(momTicker);
+                          setDecisionViewMode('LONG_DELIVERY');
+                        }}
+                        className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-emerald-400 text-[10px] font-bold uppercase rounded-lg border border-emerald-500/30 transition flex items-center gap-1 cursor-pointer"
+                        title={`Inspect ${momTicker} Dossier`}
+                      >
+                        <Building2 className="w-3 h-3" />
+                        <span>DOSSIER</span>
+                      </button>
+                      <button
+                        onClick={() => handleFireSignal(`${momTicker} Momentum Breakout`)}
+                        className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold uppercase rounded-xl shadow-[0_0_15px_rgba(52,246,168,0.35)] transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                      >
+                        <TrendingUp className="w-3.5 h-3.5" />
+                        <span>GO LONG</span>
+                      </button>
                     </div>
-                    <span className="text-[10px] text-slate-400 mt-0.5 font-mono">
-                      LIVE ₹{p.toLocaleString('en-IN')} ({chg >= 0 ? '+' : ''}{chg.toFixed(2)}%) • BREAKOUT
-                    </span>
-                  </div>
-                  <div 
-                    className="px-2 py-0.5 bg-slate-900 border border-slate-800 rounded text-amber-300 text-[10px] font-bold"
-                    title={`Dynamic R:R computed from +${targetPts} pts Target vs -${stopPts} pts Stop`}
-                  >
-                    R:R 1:{dynamicRR}
                   </div>
                 </div>
 
-                <div className="bg-slate-950/80 rounded-xl p-3 border border-slate-800/80 space-y-1.5 text-xs font-mono">
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-400">TRIGGER ENTRY:</span>
-                    <span className="text-cyan-300 font-bold">₹{p.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                {/* BOT CARD 3: REGIME-ADAPTIVE VOLATILITY SPREAD ENGINE */}
+                <div className="bg-[#080d1a]/90 rounded-2xl p-5 border border-amber-500/25 shadow-xl flex flex-col justify-between gap-3">
+                  <div className="flex items-start justify-between">
+                    <div className="flex flex-col">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-amber-300 font-bold uppercase tracking-wider">
+                          REGIME SPREAD (NIFTY 50)
+                        </span>
+                        <span className="px-1.5 py-0.2 bg-amber-500/20 text-amber-400 text-[9px] rounded uppercase border border-amber-500/30">
+                          EXP: {selectedExpiry.split(' ')[0]}
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-slate-400 mt-0.5">
+                        DYNAMIC VEGA HARVEST // VIX: {vixVal.toFixed(2)} // SPOT: ₹{Math.round(niftySpot).toLocaleString('en-IN')}
+                      </span>
+                    </div>
+                    <div className="px-2 py-0.5 bg-slate-900 border border-slate-700 rounded text-slate-400 text-[10px] font-bold">
+                      PoP: <span className="text-amber-400 font-mono">~{popVal}%</span> <span className="text-slate-500 font-normal">(ATM {atmStrike})</span>
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-400">PROJ TARGET:</span>
-                    <span className="text-emerald-400 font-bold">₹{target.toLocaleString('en-IN')} (+{targetPts} pts / +{targetPct}%)</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-400">TRAIL STOP LOSS:</span>
-                    <span className="text-rose-400 font-bold">₹{stop.toLocaleString('en-IN')} (-{stopPts} pts / -{stopPct}%)</span>
-                  </div>
-                </div>
 
-                <div className="flex items-center justify-between mt-1">
-                  <div>
-                    <div className="text-[9px] text-slate-400 uppercase font-mono">EST. 1-LOT PROFIT (RISK: ₹{lotRisk.toLocaleString('en-IN')})</div>
-                    <div className="text-xs text-amber-400 font-bold font-mono">+₹{lotProfit.toLocaleString('en-IN')}</div>
+                  <div className="bg-slate-950/80 rounded-xl p-3 border border-slate-800/80 space-y-1.5 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400">SELL {callStrike.toLocaleString('en-IN')} CE (OTM +{wingDist})</span>
+                      <span className="text-cyan-300 font-bold">@ ₹{callPrem.toFixed(2)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400">SELL {putStrike.toLocaleString('en-IN')} PE (OTM -{wingDist})</span>
+                      <span className="text-cyan-300 font-bold">@ ₹{putPrem.toFixed(2)}</span>
+                    </div>
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-800 text-[10px]">
+                      <span className="text-amber-300 font-bold">COMBINED PREM: ₹{combinedPrem.toFixed(2)}</span>
+                      <span className="text-rose-400 font-bold">HARD SL: ₹{hardSl.toFixed(2)}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => {
-                        setSelectedDeliveryScript('LT');
-                        setDecisionViewMode('LONG_DELIVERY');
-                      }}
-                      className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-amber-300 text-[10px] font-bold uppercase rounded-lg border border-amber-500/30 transition flex items-center gap-1 cursor-pointer"
-                      title="Inspect L&T Institutional Delivery & Covered Call Overlay"
-                    >
-                      <Building2 className="w-3 h-3" />
-                      <span>DELIVERY DOSSIER</span>
-                    </button>
-                    <button
-                      onClick={() => handleFireSignal('L&T Futures Long')}
-                      className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold uppercase rounded-xl shadow-[0_0_15px_rgba(254,183,0,0.35)] transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
-                    >
-                      <TrendingUp className="w-3.5 h-3.5" />
-                      <span>GO LONG FUT</span>
-                    </button>
+
+                  <div className="flex items-center justify-between mt-1">
+                    <div>
+                      <div className="text-[9px] text-slate-400 uppercase">MAX HARVEST (1 LOT / 25 QTY)</div>
+                      <div className="text-xs text-amber-400 font-bold">+₹{lotHarvest.toLocaleString('en-IN')}</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setDecisionViewMode('PAYOFF')}
+                        className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-amber-300 text-[10px] font-bold uppercase rounded-lg border border-amber-500/30 transition flex items-center gap-1 cursor-pointer"
+                        title="Simulate expiry payoff curve"
+                      >
+                        <LineChart className="w-3 h-3" />
+                        <span>PAYOFF</span>
+                      </button>
+                      <button
+                        onClick={() => handleFireSignal(`NIFTY ${callStrike}/${putStrike} Adaptive Spread`)}
+                        className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold uppercase rounded-xl shadow-[0_0_15px_rgba(254,183,0,0.35)] transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                        <span>DEPLOY SPREAD</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
+              </>
             );
           })()}
         </div>
@@ -2561,6 +2602,8 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
           ))}
         </div>
       </div>
+        </>
+      )}
 
       {/* 1-CLICK ORDER STAGING & PRE-TRADE MARGIN VERIFICATION DOCKET MODAL */}
       {isDeployModalOpen && stagedPosition && (
