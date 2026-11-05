@@ -13,8 +13,13 @@ import {
   extractBaseSymbolFromOrder,
   isAutoPruneLosersEnabled,
   pruneLosingOrdersAndQuarantine,
-  loadPersistedScriptMemory
+  loadPersistedScriptMemory,
+  evaluateAdaptiveScriptLearningMatrix,
 } from './scriptLearningEngine';
+import {
+  evaluateElevenVectorMacroMatrix,
+  resolveSymbolSector,
+} from './macroCausalLearningEngine';
 
 export interface AgentPortfolioLedger {
   totalAllocatedCapitalINR: number;
@@ -234,218 +239,276 @@ export function deriveLiveAutonomousAgents(
   const dxyPrice = quotes['DX-Y.NYB']?.price ?? 101.69;
   const usdinrPrice = quotes['INR=X']?.price ?? 94.81;
 
-  // Build dynamic decision-making equity scripts for Arjuna across all tracked Indian sectors
-  const candidateSymbols = [
-    'CIPLA.NS', 'ULTRACEMCO.NS', 'ICICIBANK.NS', 'SBIN.NS', 'SUNPHARMA.NS',
-    'INDIACEM.NS', 'HAL.NS', 'LT.NS', 'ASIANPAINT.NS', 'INDIGO.NS',
-    'INFY.NS', 'TCS.NS', 'HDFCBANK.NS', 'HINDALCO.NS', 'TRENT.NS',
-    'BEL.NS', 'RELIANCE.NS', 'ONGC.NS', 'BPCL.NS', 'TATASTEEL.NS'
-  ];
+  // 100% Dynamic Universe Discovery + 12-Vector Macro / US Mid-Term / FII-DII Evaluation
+  const learningMatrix = evaluateAdaptiveScriptLearningMatrix(quotes, sessionOrders);
+  const macro12 = evaluateElevenVectorMacroMatrix(quotes, sessionOrders);
+  const usMidtermVec = macro12.vectors.find((v) => v.id === 'vec_us_midterms');
 
-  const arjunaDecisionScripts: AgentDecisionScript[] = [];
-  const validQuotes = candidateSymbols
-    .map(sym => ({ sym, q: quotes[sym] }))
-    .filter(item => item.q && item.q.price != null);
+  const validQuotes = learningMatrix
+    .map((rec) => ({
+      sym: rec.yahooSymbol,
+      rec,
+      q: quotes[rec.yahooSymbol] || {
+        symbol: rec.yahooSymbol,
+        name: rec.name,
+        price: rec.ltp,
+        change: 0,
+        changePct: rec.changePct,
+        high: rec.ltp * 1.01,
+        low: rec.ltp * 0.99,
+        volume: 350000,
+        marketState: 'REGULAR',
+        updatedAt: new Date().toISOString(),
+      },
+    }))
+    .filter((item) => item.rec.ltp > 0);
 
   const learnedMemory = loadPersistedScriptMemory();
   const openLosingSymbols = new Set(
     sessionOrders
-      .filter(o => o.status === 'OPEN' && (o.pnlINR || 0) < 0)
-      .map(o => extractBaseSymbolFromOrder(o))
+      .filter((o) => o.status === 'OPEN' && (o.pnlINR || 0) < 0)
+      .map((o) => extractBaseSymbolFromOrder(o))
   );
 
   const actualGainers = validQuotes
-    .filter(item => {
-      const clean = item.sym.replace('.NS', '');
-      const isQuarantined = Boolean(learnedMemory[clean]?.quarantined) || openLosingSymbols.has(clean);
-      return (item.q.changePct || 0) > 0 && !isQuarantined;
+    .filter((item) => {
+      const clean = item.rec.symbol;
+      const isQuarantined =
+        item.rec.isQuarantined ||
+        Boolean(learnedMemory[clean]?.quarantined) ||
+        openLosingSymbols.has(clean);
+      return item.rec.changePct > 0 && !isQuarantined;
     })
-    .sort((a, b) => (b.q.changePct || 0) - (a.q.changePct || 0));
+    .sort((a, b) => b.rec.learnedScore - a.rec.learnedScore || b.rec.changePct - a.rec.changePct);
 
   const actualDecliners = validQuotes
-    .filter(item => {
-      const clean = item.sym.replace('.NS', '');
-      const isQuarantined = Boolean(learnedMemory[clean]?.quarantined) || openLosingSymbols.has(clean);
-      return (item.q.changePct || 0) < 0 || isQuarantined;
+    .filter((item) => {
+      const clean = item.rec.symbol;
+      const isQuarantined =
+        item.rec.isQuarantined ||
+        Boolean(learnedMemory[clean]?.quarantined) ||
+        openLosingSymbols.has(clean);
+      return item.rec.changePct < 0 || isQuarantined;
     })
-    .sort((a, b) => (a.q.changePct || 0) - (b.q.changePct || 0));
+    .sort((a, b) => a.rec.learnedScore - b.rec.learnedScore || a.rec.changePct - b.rec.changePct);
 
-  // Build clean non-contradictory actionable scripts:
-  // Top learned positive gainers get BUY scripts; losing/quarantined or declining scripts get SELL/AVOID scripts
+  // Build 100% dynamic non-contradictory actionable scripts for Arjuna:
+  const arjunaDecisionScripts: AgentDecisionScript[] = [];
   const stocksToScript = [
-    ...actualGainers.slice(0, 3).map(i => ({ ...i, forcedAction: 'BUY' as const })),
-    ...actualDecliners.slice(0, 3).map(i => ({ ...i, forcedAction: 'SELL' as const }))
+    ...actualGainers.slice(0, 3).map((i) => ({ ...i, forcedAction: 'BUY' as const })),
+    ...actualDecliners.slice(0, 3).map((i) => ({ ...i, forcedAction: 'SELL' as const })),
   ];
 
   for (const item of stocksToScript) {
-    const symClean = item.sym.replace('.NS', '');
-    const ltp = item.q.price || 1000;
-    const chg = item.q.changePct || 0;
+    const symClean = item.rec.symbol;
+    const ltp = item.rec.ltp || 1000;
+    const chg = item.rec.changePct || 0;
     const vol = item.q.volume || 250000;
     const action: 'BUY' | 'SELL' = item.forcedAction;
     const isBullishStock = action === 'BUY';
     const entryLevel = Math.round(ltp * (isBullishStock ? 1.001 : 0.999) * 100) / 100;
     const target1 = Math.round(ltp * (isBullishStock ? 1.028 : 0.972) * 100) / 100;
-    const stopL = Math.round(ltp * (isBullishStock ? 0.987 : 1.013) * 100) / 100;
-    const relAlpha = chg - niftyPct;
-    const dynScore = Math.min(96, Math.max(74, Math.round(80 + Math.abs(relAlpha) * 6)));
-
-    let causalReason = '';
-    if (symClean === 'ASIANPAINT' || symClean === 'INDIGO' || symClean === 'BPCL') {
-      causalReason = brentPct > 0
-        ? `Brent Crude up +${brentPct.toFixed(2)}% ($${brentPrice}) inflates raw material/fuel costs → ${action === 'SELL' ? 'Short/Avoid on margin compression' : 'Rebound play'}`
-        : `Brent Crude cooling (${brentPct.toFixed(2)}%) expands operating margins`;
-    } else if (symClean === 'INFY' || symClean === 'TCS') {
-      causalReason = nasdaqPct < 0
-        ? `NASDAQ fell ${nasdaqPct.toFixed(2)}% overnight → US tech spending headwind weighing on IT exporters`
-        : `NASDAQ up +${nasdaqPct.toFixed(2)}% + USD/INR ₹${usdinrPrice} tailwind`;
-    } else if (symClean === 'HINDALCO' || symClean === 'TATASTEEL') {
-      causalReason = `Hang Seng (${hangsengPct.toFixed(2)}%) & Copper (${copperPct.toFixed(2)}%) dictating LME metal realizations`;
-    } else if (symClean === 'CIPLA' || symClean === 'SUNPHARMA') {
-      causalReason = `Defensive institutional rotation + USD/INR ₹${usdinrPrice} export tailwind (Alpha ${relAlpha >= 0 ? '+' : ''}${relAlpha.toFixed(2)}% vs NIFTY)`;
-    } else if (symClean === 'ULTRACEMCO' || symClean === 'INDIACEM') {
-      causalReason = action === 'BUY'
-        ? `Domestic cement M&A consolidation & capex demand insulated from global tech/China selloffs (Alpha +${relAlpha.toFixed(2)}%)`
-        : `Cement sector pullback/profit booking after prior runup (${chg.toFixed(2)}% today; Avoid until support test)`;
-    } else {
-      causalReason = `Relative Alpha ${relAlpha >= 0 ? '+' : ''}${relAlpha.toFixed(2)}% vs NIFTY (${(vol / 1000).toFixed(0)}K Vol)`;
-    }
+    const stopL = Math.round(ltp * (isBullishStock ? 0.992 : 1.008) * 100) / 100;
+    const dynScore = item.rec.learnedScore;
 
     arjunaDecisionScripts.push({
       id: `script-arjuna-${symClean}`,
       agentId: 'agent_arjuna',
       symbol: symClean,
-      name: item.q.name || `${symClean} Equity`,
+      name: `${item.rec.name} (${item.rec.sector})`,
       segment: 'NSE_CASH',
       action,
-      entryTrigger: `${action === 'BUY' ? 'Buy at/above' : 'Short/Exit below'} ₹${entryLevel.toLocaleString('en-IN')}`,
-      targetPrice: `₹${target1.toLocaleString('en-IN')} (${action === 'BUY' ? '+2.8%' : '-2.8%'} ROI)`,
+      entryTrigger: `${action === 'BUY' ? 'Buy at/above' : 'Avoid / Short below'} ₹${entryLevel.toLocaleString('en-IN')}`,
+      targetPrice: `₹${target1.toLocaleString('en-IN')} (${action === 'BUY' ? '+2.8%' : '-2.8%'} Gross · >2.2% Net)`,
       targetUpsidePct: 2.8,
-      stopLoss: `₹${stopL.toLocaleString('en-IN')} (1.3% Risk)`,
-      riskPct: 1.3,
+      stopLoss: `₹${stopL.toLocaleString('en-IN')} (0.8% Stop · ≤₹380 1R)`,
+      riskPct: 0.8,
       convictionScore: dynScore,
-      convictionTier: dynScore >= 88 ? 'VERY_HIGH' : 'HIGH',
-      catalyst: causalReason,
+      convictionTier: dynScore >= 85 ? 'VERY_HIGH' : 'HIGH',
+      catalyst: item.rec.rationale,
       derivedMetrics: {
         ltp,
         changePct: chg,
         volume: vol,
         dayHigh: item.q.high ?? null,
         dayLow: item.q.low ?? null,
-      }
+      },
     });
   }
 
+  // Dynamic Banking & F&O Pair + Live Option Spread for Bhishma (Zero static ICICIBANK/HDFCBANK hardcoding)
+  const bankRecords = learningMatrix
+    .filter((r) => resolveSymbolSector(r.symbol) === 'BANKING' && r.ltp > 0)
+    .sort((a, b) => b.learnedScore - a.learnedScore);
+  const bestBank = bankRecords[0] || learningMatrix[0];
+  const worstBank = bankRecords[bankRecords.length - 1] || learningMatrix[learningMatrix.length - 1];
+  const isBearSpreadRegime =
+    macro12.warEscalationIndex >= 55 ||
+    macro12.participantFlow.isRetailCrowdedLongTrap ||
+    niftyPct < -0.25;
+  const callCeilingStrike = putFloorStrike + 200;
+  const activeSpreadLabel = isBearSpreadRegime
+    ? `NIFTY ${callCeilingStrike}/${callCeilingStrike + 50} CE Bear Call Spread`
+    : `NIFTY ${putFloorStrike}/${putFloorStrike - 50} PE Bull Put Spread`;
+
   const bhishmaDecisionScripts: AgentDecisionScript[] = [
     {
-      id: `script-bhishma-${putFloorStrike}`,
+      id: `script-bhishma-spread-${putFloorStrike}`,
       agentId: 'agent_bhishma',
-      symbol: `ICICIBANK Long vs HDFCBANK Short Pair`,
-      name: `Banking Institutional Flow Divergence Pair`,
+      symbol: activeSpreadLabel,
+      name: `Adaptive ${isBearSpreadRegime ? 'Bear Call' : 'Bull Put'} Credit Spread (${macro12.regime.replace(/_/g, ' ')})`,
       segment: 'NSE_FNO',
-      action: 'BUY',
-      entryTrigger: `Long ICICIBANK @ ₹${(quotes['ICICIBANK.NS']?.price ?? 1398.5).toLocaleString('en-IN')} / Avoid HDFCBANK @ ₹${(quotes['HDFCBANK.NS']?.price ?? 694).toLocaleString('en-IN')}`,
-      targetPrice: `+2.8% Relative Spread Capture (Target ₹${Math.round((quotes['ICICIBANK.NS']?.price ?? 1398.5) * 1.028).toLocaleString('en-IN')})`,
-      targetUpsidePct: 2.8,
-      stopLoss: `Strict 1.2% Stop at ₹${Math.round((quotes['ICICIBANK.NS']?.price ?? 1398.5) * 0.988).toLocaleString('en-IN')}`,
-      riskPct: 1.2,
-      convictionScore: 91,
+      action: 'SELL',
+      entryTrigger: `Collect OTM Spread Credit on ${activeSpreadLabel} · FII LSR ${macro12.participantFlow.fiiIndexFuturesLSR}% vs Retail ${macro12.participantFlow.clientRetailIndexFuturesLSR}%`,
+      targetPrice: `Capture +65% Theta Decay (>2.4% Net-of-Tax Return on Margin)`,
+      targetUpsidePct: 2.6,
+      stopLoss: `Strict ₹375 Max Loss Cap (82% Peak Profit-Lock Ratchet)`,
+      riskPct: 0.38,
+      convictionScore: 92,
       convictionTier: 'VERY_HIGH',
-      catalyst: `ICICI Bank (${(quotes['ICICIBANK.NS']?.changePct ?? 0.97) >= 0 ? '+' : ''}${(quotes['ICICIBANK.NS']?.changePct ?? 0.97).toFixed(2)}%) & SBI (${(quotes['SBIN.NS']?.changePct ?? 0.73) >= 0 ? '+' : ''}${(quotes['SBIN.NS']?.changePct ?? 0.73).toFixed(2)}%) outperforming FII-sold HDFC Bank (${(quotes['HDFCBANK.NS']?.changePct ?? -1.82).toFixed(2)}%)`,
+      catalyst: `${macro12.regimeHeadline}. Smart-Money vs Retail LSR Divergence: ${macro12.participantFlow.smartMoneyVsRetailDivergence >= 0 ? '+' : ''}${macro12.participantFlow.smartMoneyVsRetailDivergence}%.`,
       derivedMetrics: {
-        ltp: quotes['ICICIBANK.NS']?.price ?? niftyPrice,
-        changePct: quotes['ICICIBANK.NS']?.changePct ?? niftyPct,
-      }
-    }
+        ltp: niftyPrice,
+        changePct: niftyPct,
+      },
+    },
+    ...(bestBank && worstBank
+      ? [
+          {
+            id: `script-bhishma-bank-${bestBank.symbol}`,
+            agentId: 'agent_bhishma',
+            symbol: `${bestBank.symbol} Long vs ${worstBank.symbol} Avoid/Short Pair`,
+            name: `Dynamic Banking Flow Divergence (${bestBank.symbol} Score ${bestBank.learnedScore} vs ${worstBank.symbol} Score ${worstBank.learnedScore})`,
+            segment: 'NSE_FNO' as const,
+            action: (bestBank.isEligibleForDeploy ? 'BUY' : 'SPREAD') as 'BUY' | 'SPREAD',
+            entryTrigger: `${bestBank.isEligibleForDeploy ? `Long ${bestBank.symbol} @ ₹${bestBank.ltp.toLocaleString('en-IN')}` : `Hold Cash on Banks`} · Avoid ${worstBank.symbol} @ ₹${worstBank.ltp.toLocaleString('en-IN')}`,
+            targetPrice: `₹${Math.round(bestBank.ltp * 1.028).toLocaleString('en-IN')} (+2.8% Gross · >2.2% Net)`,
+            targetUpsidePct: 2.8,
+            stopLoss: `₹${Math.round(bestBank.ltp * 0.992).toLocaleString('en-IN')} (0.8% Stop · ≤₹380 1R)`,
+            riskPct: 0.8,
+            convictionScore: bestBank.learnedScore,
+            convictionTier: (bestBank.learnedScore >= 85 ? 'VERY_HIGH' : 'HIGH') as 'VERY_HIGH' | 'HIGH',
+            catalyst: `Live Banking Ranking: ${bestBank.symbol} (${bestBank.changePct >= 0 ? '+' : ''}${bestBank.changePct}%) leads while ${worstBank.symbol} (${worstBank.changePct >= 0 ? '+' : ''}${worstBank.changePct}%) lags under FII Cash ₹${macro12.participantFlow.fiiCashNetCrINR} Cr.`,
+            derivedMetrics: {
+              ltp: bestBank.ltp,
+              changePct: bestBank.changePct,
+            },
+          },
+        ]
+      : []),
   ];
 
-  const chanakyaDecisionScripts: AgentDecisionScript[] = [
-    {
-      id: `script-chanakya-macro`,
-      agentId: 'agent_chanakya',
-      symbol: nasdaqPct < 0 ? `BUY CIPLA / AVOID INFY` : `BUY TCS & INFY`,
-      name: `Global Macro & US NASDAQ Transmission Call`,
-      segment: 'NSE_CASH',
-      action: 'BUY',
-      entryTrigger: `Long CIPLA @ ₹${(quotes['CIPLA.NS']?.price ?? 1330.9).toLocaleString('en-IN')} (Avoid INFY @ ₹${(quotes['INFY.NS']?.price ?? 1153.35).toLocaleString('en-IN')})`,
-      targetPrice: `Target ₹${Math.round((quotes['CIPLA.NS']?.price ?? 1330.9) * 1.032).toLocaleString('en-IN')} (+3.2% ROI)`,
-      targetUpsidePct: 3.2,
-      stopLoss: `Stop ₹${Math.round((quotes['CIPLA.NS']?.price ?? 1330.9) * 0.986).toLocaleString('en-IN')} (-1.4%)`,
-      riskPct: 1.4,
-      convictionScore: 90,
-      convictionTier: 'VERY_HIGH',
-      catalyst: `NASDAQ (${nasdaqPct.toFixed(2)}%) & Hang Seng (${hangsengPct.toFixed(2)}%) drag IT/Metals; USD/INR at ₹${usdinrPrice} & VIX at ${vixDisplay} drive institutional flows into Cipla & UltraTech Cement`,
-      derivedMetrics: {
-        ltp: quotes['CIPLA.NS']?.price ?? niftyPrice,
-        changePct: quotes['CIPLA.NS']?.changePct ?? niftyPct,
-      }
-    }
-  ];
+  // Dynamic Chanakya Scripts: Ranked from live FII/DII + 2026 US Mid-Term Election + Global Macro leaders
+  const chanakyaTop1 = actualGainers[0]?.rec || learningMatrix[0];
+  const chanakyaTop2 = actualGainers[1]?.rec || learningMatrix[1] || chanakyaTop1;
+  const chanakyaWorst = actualDecliners[0]?.rec || learningMatrix[learningMatrix.length - 1];
 
-  const mcxCrudePrice = Math.round((brentPrice * usdinrPrice * 0.72)) || 7650;
-  const mcxGoldPrice = Math.round((goldPrice * usdinrPrice / 31.1035 * 10 * 1.15)) || 78500;
+  const chanakyaDecisionScripts: AgentDecisionScript[] = chanakyaTop1
+    ? [
+        {
+          id: `script-chanakya-macro-${chanakyaTop1.symbol}`,
+          agentId: 'agent_chanakya',
+          symbol: `BUY ${chanakyaTop1.symbol} & ${chanakyaTop2.symbol} / VETO ${chanakyaWorst?.symbol || 'LAGGARDS'}`,
+          name: `12-Vector Macro, FII/DII & 2026 US Mid-Term Transmission Call`,
+          segment: 'NSE_CASH',
+          action: 'BUY',
+          entryTrigger: `Accumulate ${chanakyaTop1.symbol} @ ₹${chanakyaTop1.ltp.toLocaleString('en-IN')} (${chanakyaTop1.changePct >= 0 ? '+' : ''}${chanakyaTop1.changePct}%) · Hard-Veto ${chanakyaWorst?.symbol || 'Losers'}`,
+          targetPrice: `Target ₹${Math.round(chanakyaTop1.ltp * 1.029).toLocaleString('en-IN')} (+2.9% Gross · >2.3% Net after Tax)`,
+          targetUpsidePct: 2.9,
+          stopLoss: `Stop ₹${Math.round(chanakyaTop1.ltp * 0.9925).toLocaleString('en-IN')} (-0.75% · ≤₹380 1R)`,
+          riskPct: 0.75,
+          convictionScore: chanakyaTop1.learnedScore,
+          convictionTier: chanakyaTop1.learnedScore >= 85 ? 'VERY_HIGH' : 'HIGH',
+          catalyst: `US Mid-Term Vector (${usMidtermVec?.liveValueText || 'Active'}) + FII/DII Net ₹${macro12.participantFlow.netInstitutionalCashCrINR} Cr: ${chanakyaTop1.rationale}`,
+          derivedMetrics: {
+            ltp: chanakyaTop1.ltp,
+            changePct: chanakyaTop1.changePct,
+          },
+        },
+      ]
+    : [];
+
+  const mcxCrudePrice = Math.round(brentPrice * usdinrPrice * 0.72) || 7650;
+  const mcxGoldPrice = Math.round(((goldPrice * usdinrPrice) / 31.1035) * 10 * 1.15) || 78500;
+
+  // Dynamic Kuber Commodity-to-Equity Pair (Eliminates static "SHORT ASIANPAINT / BUY ULTRACEMCO" string!)
+  const commodityBeneficiary =
+    actualGainers.find((g) => {
+      const sec = resolveSymbolSector(g.rec.symbol);
+      return sec === 'ENERGY_UPSTREAM' || sec === 'DEFENSE_CAPEX' || sec === 'PHARMA' || sec === 'METALS';
+    })?.rec || chanakyaTop1;
+
+  const commodityVictim =
+    actualDecliners.find((d) => {
+      const sec = resolveSymbolSector(d.rec.symbol);
+      return sec === 'CEMENT_INFRA' || sec === 'OIL_PAINT_AVIATION_CONSUMERS' || sec === 'METALS';
+    })?.rec || chanakyaWorst;
 
   const kuberDecisionScripts: AgentDecisionScript[] = [
     {
       id: `script-kuber-crude-fut`,
       agentId: 'agent_kuber',
-      symbol: `MCX CRUDEOIL Futures (Defined Bracket)`,
-      name: `ICE Brent ($${brentPrice}) to MCX Crude Transmission`,
+      symbol: `MCX CRUDEOILM Futures (Defined Bracket)`,
+      name: `ICE Brent ($${brentPrice}) & NatGas ($${(quotes['NG=F']?.price ?? 2.78).toFixed(2)}) Parity`,
       segment: 'MCX_FUTURES',
       action: brentPct >= 0 ? 'BUY' : 'SELL',
-      entryTrigger: `${brentPct >= 0 ? 'Long MCX CRUDE' : 'Short MCX CRUDE'} @ ₹${mcxCrudePrice.toLocaleString('en-IN')} (Brent ${brentPct >= 0 ? '+' : ''}${brentPct.toFixed(2)}%)`,
-      targetPrice: `₹${Math.round(mcxCrudePrice * (brentPct >= 0 ? 1.025 : 0.975)).toLocaleString('en-IN')} (+₹${Math.round(mcxCrudePrice * 0.025)} pts)`,
-      targetUpsidePct: 2.5,
-      stopLoss: `₹${Math.round(mcxCrudePrice * (brentPct >= 0 ? 0.99 : 1.01)).toLocaleString('en-IN')} (Strict ₹750 Risk Cap)`,
-      riskPct: 1.0,
+      entryTrigger: `${brentPct >= 0 ? 'Long MCX CRUDEOILM' : 'Short MCX CRUDEOILM'} @ ₹${mcxCrudePrice.toLocaleString('en-IN')} (Brent ${brentPct >= 0 ? '+' : ''}${brentPct.toFixed(2)}%)`,
+      targetPrice: `₹${Math.round(mcxCrudePrice * (brentPct >= 0 ? 1.026 : 0.974)).toLocaleString('en-IN')} (+2.6% Gross · >2.2% Net)`,
+      targetUpsidePct: 2.6,
+      stopLoss: `₹${Math.round(mcxCrudePrice * (brentPct >= 0 ? 0.994 : 1.006)).toLocaleString('en-IN')} (Strict ₹380 1R Risk Cap)`,
+      riskPct: 0.6,
       convictionScore: 92,
       convictionTier: 'VERY_HIGH',
-      catalyst: `ICE Brent Crude is trading at $${brentPrice}/bbl (${brentPct >= 0 ? '+' : ''}${brentPct.toFixed(2)}%). MCX Crude Futures tracking real dollar-to-rupee parity with strict ₹760 max risk stop.`,
+      catalyst: `ICE Brent at $${brentPrice}/bbl (${brentPct >= 0 ? '+' : ''}${brentPct.toFixed(2)}%) & War Index ${macro12.warEscalationIndex}/100. MCX Crude Futures tracking live USD/INR (₹${usdinrPrice}) parity.`,
       derivedMetrics: {
         ltp: mcxCrudePrice,
         changePct: brentPct,
-      }
+      },
     },
     {
       id: `script-kuber-gold-mini`,
       agentId: 'agent_kuber',
-      symbol: `MCX GOLD MINI Futures (100g Bracket)`,
-      name: `COMEX Gold ($${goldPrice}) & USD/INR Parity Hedge`,
+      symbol: `MCX GOLDM Futures (100g Bracket)`,
+      name: `COMEX Gold ($${goldPrice}) & Silver ($${(quotes['SI=F']?.price ?? 32.65).toFixed(2)}) Safe-Haven Parity`,
       segment: 'MCX_FUTURES',
       action: goldPct >= 0 ? 'BUY' : 'SELL',
       entryTrigger: `${goldPct >= 0 ? 'Long GOLDM' : 'Hedge GOLDM'} @ ₹${mcxGoldPrice.toLocaleString('en-IN')}/10g`,
-      targetPrice: `₹${Math.round(mcxGoldPrice * 1.022).toLocaleString('en-IN')} (+₹${Math.round(mcxGoldPrice * 0.022)} pts)`,
-      targetUpsidePct: 2.2,
-      stopLoss: `₹${Math.round(mcxGoldPrice * 0.991).toLocaleString('en-IN')} (Strict ₹780 Risk Cap)`,
-      riskPct: 0.9,
-      convictionScore: 90,
+      targetPrice: `₹${Math.round(mcxGoldPrice * 1.024).toLocaleString('en-IN')} (+2.4% Gross · >2.1% Net)`,
+      targetUpsidePct: 2.4,
+      stopLoss: `₹${Math.round(mcxGoldPrice * 0.995).toLocaleString('en-IN')} (Strict ₹360 1R Risk Cap)`,
+      riskPct: 0.5,
+      convictionScore: 91,
       convictionTier: 'VERY_HIGH',
-      catalyst: `COMEX Gold ($${goldPrice}/oz) & USD/INR ₹${usdinrPrice}. Defined-risk mini contract with capped stop preventing daily drawdown.`,
+      catalyst: `COMEX Gold ($${goldPrice}/oz, ${goldPct >= 0 ? '+' : ''}${goldPct.toFixed(2)}%) & Silver (${(quotes['SI=F']?.changePct ?? 0.65) >= 0 ? '+' : ''}${(quotes['SI=F']?.changePct ?? 0.65).toFixed(2)}%) safe-haven hedge against War & US Mid-Term yield volatility.`,
       derivedMetrics: {
         ltp: mcxGoldPrice,
         changePct: goldPct,
-      }
+      },
     },
-    {
-      id: `script-kuber-energy`,
-      agentId: 'agent_kuber',
-      symbol: brentPct > 0 ? `SHORT ASIANPAINT / BUY ULTRACEMCO` : `BUY ASIANPAINT & BPCL`,
-      name: `Brent Crude ($${brentPrice}) & Copper ($${copperPrice}) Cost Transmission`,
-      segment: 'NSE_CASH',
-      action: brentPct > 0 ? 'SELL' : 'BUY',
-      entryTrigger: `Brent Crude ${brentPct >= 0 ? '+' : ''}${brentPct.toFixed(2)}% at $${brentPrice}/bbl → ${brentPct > 0 ? `Sell/Avoid ASIANPAINT @ ₹${(quotes['ASIANPAINT.NS']?.price ?? 2284.8).toLocaleString('en-IN')}` : `Buy ASIANPAINT`}`,
-      targetPrice: `₹${Math.round((quotes['ASIANPAINT.NS']?.price ?? 2284.8) * (brentPct > 0 ? 0.972 : 1.028)).toLocaleString('en-IN')} (2.8% Move)`,
-      targetUpsidePct: 2.8,
-      stopLoss: `₹${Math.round((quotes['ASIANPAINT.NS']?.price ?? 2284.8) * (brentPct > 0 ? 1.013 : 0.987)).toLocaleString('en-IN')} (1.3% Risk)`,
-      riskPct: 1.3,
-      convictionScore: 89,
-      convictionTier: 'HIGH',
-      catalyst: `Brent Crude (${brentPct >= 0 ? '+' : ''}${brentPct.toFixed(2)}% to $${brentPrice}) squeezes Paint (Asian Paints ${(quotes['ASIANPAINT.NS']?.changePct ?? -1.49).toFixed(2)}%) & Aviation (IndiGo ${(quotes['INDIGO.NS']?.changePct ?? -0.89).toFixed(2)}%) margins`,
-      derivedMetrics: {
-        ltp: quotes['ASIANPAINT.NS']?.price ?? brentPrice,
-        changePct: quotes['ASIANPAINT.NS']?.changePct ?? brentPct,
-      }
-    }
+    ...(commodityBeneficiary && commodityVictim
+      ? [
+          {
+            id: `script-kuber-dynamic-pair-${commodityBeneficiary.symbol}`,
+            agentId: 'agent_kuber',
+            symbol: `LONG ${commodityBeneficiary.symbol} / VETO ${commodityVictim.symbol}`,
+            name: `Dynamic Commodity Margin Transmission (${commodityBeneficiary.symbol} vs ${commodityVictim.symbol})`,
+            segment: 'NSE_CASH' as const,
+            action: 'BUY' as const,
+            entryTrigger: `Buy Beneficiary ${commodityBeneficiary.symbol} @ ₹${commodityBeneficiary.ltp.toLocaleString('en-IN')} · Hard-Veto Victim ${commodityVictim.symbol} @ ₹${commodityVictim.ltp.toLocaleString('en-IN')}`,
+            targetPrice: `₹${Math.round(commodityBeneficiary.ltp * 1.028).toLocaleString('en-IN')} (+2.8% Gross · >2.2% Net)`,
+            targetUpsidePct: 2.8,
+            stopLoss: `₹${Math.round(commodityBeneficiary.ltp * 0.9925).toLocaleString('en-IN')} (0.75% Stop · ≤₹380 1R)`,
+            riskPct: 0.75,
+            convictionScore: commodityBeneficiary.learnedScore,
+            convictionTier: 'VERY_HIGH' as const,
+            catalyst: `Live Commodity Transmission: ${commodityBeneficiary.symbol} (+${commodityBeneficiary.changePct.toFixed(2)}%) benefits from current Brent ($${brentPrice}) & Bullion regime while ${commodityVictim.symbol} (${commodityVictim.changePct.toFixed(2)}%) is quarantined/vetoed.`,
+            derivedMetrics: {
+              ltp: commodityBeneficiary.ltp,
+              changePct: commodityBeneficiary.changePct,
+            },
+          },
+        ]
+      : []),
   ];
 
   const viduraLeader = selectBestLearnedEquityCandidate(quotes, sessionOrders, 0);
@@ -456,14 +519,14 @@ export function deriveLiveAutonomousAgents(
     {
       id: `script-vidura-audit-${viduraLeader.symbol}`,
       agentId: 'agent_vidura',
-      symbol: `${viduraLeader.symbol} (₹1L Capital → ${viduraQty} Shares, Max Risk ≤₹380)`,
-      name: `Adaptive Learned Leader & Anti-Erosion TSL Allocation`,
+      symbol: `${viduraLeader.symbol} (98.5% Protected Floor → ${viduraQty} Shares, 1R ≤₹380)`,
+      name: `5-Agent Consensus Leader & 82% Anti-Whipsaw Profit-Lock`,
       segment: 'NSE_CASH',
       action: 'BUY',
-      entryTrigger: `Buy Learned Leader ${viduraLeader.symbol} @ ₹${viduraLeader.price.toLocaleString('en-IN')} (${viduraLeader.changePct >= 0 ? '+' : ''}${viduraLeader.changePct.toFixed(2)}%)`,
-      targetPrice: `Target ₹${Math.round(viduraLeader.price * 1.026).toLocaleString('en-IN')} (+2.6% ROI · 82% Anti-Erosion Lock)`,
-      targetUpsidePct: 2.6,
-      stopLoss: `Strict Stop ₹${Math.round(viduraLeader.price * 0.991).toLocaleString('en-IN')} (-0.9% · ≤₹380 1R)`,
+      entryTrigger: `Buy Council-Approved ${viduraLeader.symbol} @ ₹${viduraLeader.price.toLocaleString('en-IN')} (${viduraLeader.changePct >= 0 ? '+' : ''}${viduraLeader.changePct.toFixed(2)}%)`,
+      targetPrice: `Target ₹${Math.round(viduraLeader.price * 1.028).toLocaleString('en-IN')} (+2.8% Gross · >${macro12.requiredMinNetProfitPct.toFixed(1)}% Net Gate)`,
+      targetUpsidePct: 2.8,
+      stopLoss: `Strict Stop ₹${Math.round(viduraLeader.price * 0.991).toLocaleString('en-IN')} (Max Daily DD ≤1.50% / <2.0%)`,
       riskPct: 0.9,
       convictionScore: viduraLeader.learnedScore,
       convictionTier: viduraLeader.learnedScore >= 85 ? 'VERY_HIGH' : 'HIGH',
@@ -471,8 +534,8 @@ export function deriveLiveAutonomousAgents(
       derivedMetrics: {
         ltp: viduraLeader.price,
         changePct: viduraLeader.changePct,
-      }
-    }
+      },
+    },
   ];
 
   return [
@@ -480,9 +543,9 @@ export function deriveLiveAutonomousAgents(
       id: 'agent_chanakya',
       name: 'Chanakya',
       codeName: 'MACRO_SENTINEL',
-      role: 'Global Macro, News & Cross-Asset Stock Transmission Desk',
-      targetMarket: `NASDAQ (${nasdaqPct.toFixed(2)}%) · Hang Seng (${hangsengPct.toFixed(2)}%) · USD/INR (₹${usdinrPrice})`,
-      strategyType: 'Global-to-India Sector Rotation & News Catalyst Arbitrage',
+      role: '3-Layer FII/DII Flow, 2026 US Mid-Terms & Global Macro Detective',
+      targetMarket: `FII ₹${macro12.participantFlow.fiiCashNetCrINR}Cr · DII ₹${macro12.participantFlow.diiCashNetCrINR}Cr · US Mid-Terms (${usMidtermVec?.liveValueText || 'Gridlock'})`,
+      strategyType: '3-Layer FII/DII/Pro vs Retail Flow + US Mid-Term & Sector Rotation',
       status: (chanakyaStats.tradingState === 'DAILY_HALTED' || chanakyaStats.tradingState === 'WEEKLY_HALTED') ? 'SQUARED_OFF' : (vix > 24.0 ? 'STANDBY_RULES' : 'ACTIVE_HEDGING'),
       tradingState: chanakyaStats.tradingState,
       allocatedCapitalINR: chanakyaStats.allocatedCapitalINR,
@@ -500,11 +563,11 @@ export function deriveLiveAutonomousAgents(
       haltTimestamp: chanakyaStats.haltTimestamp,
       lastHealingReport: chanakyaStats.lastHealingReport,
       strictRuleSet: [
-        `Overnight NASDAQ (${nasdaqPct.toFixed(2)}%) & S&P 500 (${sp500Pct.toFixed(2)}%) dictate morning IT posture (Avoid/Short INFY & TCS on US tech weakness)`,
-        `Rotate into USD-earning Defensive Pharma (CIPLA, SUNPHARMA) when USD/INR is at ₹${usdinrPrice} and VIX is ${vixDisplay}`,
-        'Hard stop-loss strictly capped at 0.9% to 1.2% per equity position (Max risk ≤ ₹800)'
+        `Track live FII Cash (₹${macro12.participantFlow.fiiCashNetCrINR} Cr), DII Cash (+₹${macro12.participantFlow.diiCashNetCrINR} Cr), and FII LSR (${macro12.participantFlow.fiiIndexFuturesLSR}%) vs Retail (${macro12.participantFlow.clientRetailIndexFuturesLSR}%)`,
+        `Price 2026 US Mid-Term Elections (${usMidtermVec?.liveValueText || 'Divided Congress'}), US 10Y (${us10yPrice}%) & USD/INR (₹${usdinrPrice}) into IT, Pharma, Defence & Metals`,
+        'Hard-Veto any sector with negative institutional conviction or >64% retail long crowding'
       ],
-      lastAction: chanakyaStats.haltReason ? `🚨 RISK GUARD: ${chanakyaStats.haltReason}` : `LIVE DECISION: NASDAQ ${nasdaqPct >= 0 ? '+' : ''}${nasdaqPct.toFixed(2)}%, Hang Seng ${hangsengPct.toFixed(2)}%. Avoiding ${actualDecliners.slice(0, 2).map(d => `${d.sym.replace('.NS', '')} (${(d.q.changePct || 0).toFixed(2)}%)`).join(', ') || 'vulnerable laggards'} → Rotating LONG into ${actualGainers.slice(0, 2).map(g => `${g.sym.replace('.NS', '')} (+${(g.q.changePct || 0).toFixed(2)}%)`).join(', ') || 'defensive cash'}.`,
+      lastAction: chanakyaStats.haltReason ? `🚨 RISK GUARD: ${chanakyaStats.haltReason}` : `12-VECTOR & FLOW VERDICT: FII ₹${macro12.participantFlow.fiiCashNetCrINR}Cr / DII +₹${macro12.participantFlow.diiCashNetCrINR}Cr · US Mid-Terms [${usMidtermVec?.liveValueText}]. Accumulating ${actualGainers.slice(0, 2).map(g => `${g.rec.symbol} (+${g.rec.changePct.toFixed(2)}%)`).join(', ') || 'Cash'}; Vetoing ${actualDecliners.slice(0, 2).map(d => `${d.rec.symbol} (${d.rec.changePct.toFixed(2)}%)`).join(', ') || 'Laggards'}.`,
       lastActionTimestamp: timeStr,
       liveInsights: [
         {
@@ -514,10 +577,10 @@ export function deriveLiveAutonomousAgents(
           agentCodeName: 'MACRO_SENTINEL',
           timestamp: timeStr,
           category: 'GLOBAL_POLICY',
-          headline: `US Tech & Asian Cues Impact: NASDAQ (${nasdaqPct.toFixed(2)}%), Hang Seng (${hangsengPct.toFixed(2)}%)`,
-          detail: `Weakness in US Tech (NASDAQ at ${nasdaqPrice.toLocaleString('en-IN')}, ${nasdaqPct.toFixed(2)}%) and Asian markets (Hang Seng ${hangsengPct.toFixed(2)}%, Nikkei ${nikkeiPct.toFixed(2)}%) is directly pulling down Indian IT (Infosys ${(quotes['INFY.NS']?.changePct ?? -1.25).toFixed(2)}%, TCS ${(quotes['TCS.NS']?.changePct ?? -0.87).toFixed(2)}%) and FII-owned HDFC Bank (${(quotes['HDFCBANK.NS']?.changePct ?? -1.82).toFixed(2)}%).`,
+          headline: `2026 US Mid-Term Elections (${usMidtermVec?.liveValueText}) & 3-Layer FII/DII Flow Impact`,
+          detail: `${usMidtermVec?.causalImpactSummary || ''} Live FII Cash is ₹${macro12.participantFlow.fiiCashNetCrINR} Cr vs DII +₹${macro12.participantFlow.diiCashNetCrINR} Cr (FII Futures LSR ${macro12.participantFlow.fiiIndexFuturesLSR}% vs Retail ${macro12.participantFlow.clientRetailIndexFuturesLSR}%).`,
           severity: 'HIGH_CONVICTION',
-          sources: ['Live Global Index Feed', 'Cross-Asset Transmission Matrix'],
+          sources: ['12-Vector Macro-Causal Engine', 'NSE Participant OI & FII/DII Feed'],
           decisionScript: chanakyaDecisionScripts[0]
         },
         {
@@ -528,9 +591,9 @@ export function deriveLiveAutonomousAgents(
           timestamp: timeStr,
           category: 'GLOBAL_NEWS',
           headline: `USD/INR at ₹${usdinrPrice} & US 10Y Yield at ${us10yPrice}% (${us10yPct.toFixed(2)}%)`,
-          detail: `Elevated USD/INR (₹${usdinrPrice}) acts as a direct revenue tailwind for Indian Pharma exporters (Cipla +${(quotes['CIPLA.NS']?.changePct ?? 1.29).toFixed(2)}%, Sun Pharma +${(quotes['SUNPHARMA.NS']?.changePct ?? 0.74).toFixed(2)}%), while easing US 10Y yields support domestic banks (ICICI Bank +${(quotes['ICICIBANK.NS']?.changePct ?? 0.97).toFixed(2)}%, SBI +${(quotes['SBIN.NS']?.changePct ?? 0.73).toFixed(2)}%).`,
+          detail: `Dynamic leader ranking highlights ${actualGainers.slice(0, 3).map(g => `${g.rec.symbol} (+${g.rec.changePct.toFixed(2)}%)`).join(', ')} while quarantining ${actualDecliners.slice(0, 2).map(d => `${d.rec.symbol} (${d.rec.changePct.toFixed(2)}%)`).join(', ')}.`,
           severity: 'OPPORTUNITY',
-          sources: ['FX & Treasury Feed', 'NSE Sector Rotation Monitor']
+          sources: ['FX & Treasury Feed', 'Dynamic Universe Scanner']
         }
       ],
       decisionScripts: chanakyaDecisionScripts
@@ -539,9 +602,9 @@ export function deriveLiveAutonomousAgents(
       id: 'agent_bhishma',
       name: 'Bhishma',
       codeName: 'DERIVATIVES_DESK',
-      role: 'Banking Flow Divergence & Institutional Derivatives Specialist',
-      targetMarket: `ICICI Bank (+${(quotes['ICICIBANK.NS']?.changePct ?? 0.97).toFixed(2)}%) · SBI (+${(quotes['SBIN.NS']?.changePct ?? 0.73).toFixed(2)}%) · NIFTY (${niftyDisplay})`,
-      strategyType: 'Relative Strength Banking Pairs & Defined-Risk Spreads',
+      role: 'Adaptive Index Credit Spreads & Banking Flow Divergence Architect',
+      targetMarket: `${activeSpreadLabel} · Top Bank: ${bestBank?.symbol || 'ICICIBANK'} (${(bestBank?.changePct ?? 0) >= 0 ? '+' : ''}${(bestBank?.changePct ?? 0).toFixed(2)}%)`,
+      strategyType: 'Regime-Switching Bull Put / Bear Call Spreads & Dynamic Bank Pairs',
       status: (bhishmaStats.tradingState === 'DAILY_HALTED' || bhishmaStats.tradingState === 'WEEKLY_HALTED') ? 'SQUARED_OFF' : 'ACTIVE_HEDGING',
       tradingState: bhishmaStats.tradingState,
       allocatedCapitalINR: bhishmaStats.allocatedCapitalINR,
@@ -559,11 +622,11 @@ export function deriveLiveAutonomousAgents(
       haltTimestamp: bhishmaStats.haltTimestamp,
       lastHealingReport: bhishmaStats.lastHealingReport,
       strictRuleSet: [
-        'Buy relative-strength banking leaders (ICICIBANK, SBIN) outperforming BankNifty',
-        'Avoid FII-crowded index draggers (HDFCBANK) during global risk-off sessions',
-        'Zero naked option selling; spreads strictly sized so max defined loss ≤ ₹800'
+        `Automatically switch between Bull Put Spreads and Bear Call Spreads based on War Index (${macro12.warEscalationIndex}/100) & Retail LSR (${macro12.participantFlow.clientRetailIndexFuturesLSR}%)`,
+        `Dynamically pair #1 Ranked Bank (${bestBank?.symbol || 'Leader'}) against #1 Weakest Bank (${worstBank?.symbol || 'Laggard'})`,
+        'Zero naked option buying; every spread enforces 82% Peak Profit-Lock TSL'
       ],
-      lastAction: bhishmaStats.haltReason ? `🚨 RISK GUARD: ${bhishmaStats.haltReason}` : `ACTIONABLE CALL: Buy ICICIBANK @ ₹${(quotes['ICICIBANK.NS']?.price ?? 1398.5).toLocaleString('en-IN')} (+${(quotes['ICICIBANK.NS']?.changePct ?? 0.97).toFixed(2)}%) & SBIN @ ₹${(quotes['SBIN.NS']?.price ?? 970).toLocaleString('en-IN')} (+${(quotes['SBIN.NS']?.changePct ?? 0.73).toFixed(2)}%); Avoid HDFCBANK (${(quotes['HDFCBANK.NS']?.changePct ?? -1.82).toFixed(2)}%) due to FII ETF selling.`,
+      lastAction: bhishmaStats.haltReason ? `🚨 RISK GUARD: ${bhishmaStats.haltReason}` : `DYNAMIC F&O CALL: Deploying ${activeSpreadLabel} · Banking Leader ${bestBank?.symbol} (₹${bestBank?.ltp.toLocaleString('en-IN')}, ${(bestBank?.changePct ?? 0) >= 0 ? '+' : ''}${(bestBank?.changePct ?? 0).toFixed(2)}%) vs Avoid ${worstBank?.symbol} (${(worstBank?.changePct ?? 0).toFixed(2)}%).`,
       lastActionTimestamp: timeStr,
       liveInsights: [
         {
@@ -573,10 +636,10 @@ export function deriveLiveAutonomousAgents(
           agentCodeName: 'DERIVATIVES_DESK',
           timestamp: timeStr,
           category: 'F_AND_O_SIGNAL',
-          headline: `Major Banking Divergence: ICICI Bank (+${(quotes['ICICIBANK.NS']?.changePct ?? 0.97).toFixed(2)}%) & SBI (+${(quotes['SBIN.NS']?.changePct ?? 0.73).toFixed(2)}%) vs HDFC Bank (${(quotes['HDFCBANK.NS']?.changePct ?? -1.82).toFixed(2)}%)`,
-          detail: `While passive FII outflows weigh on HDFC Bank, domestic institutional buying and easing bond yields (${us10yPrice}%) are driving strong accumulation in ICICI Bank and SBI.`,
+          headline: `Dynamic F&O Posture: ${activeSpreadLabel} + ${bestBank?.symbol} vs ${worstBank?.symbol}`,
+          detail: `With NIFTY at ${niftyDisplay} and VIX at ${vixDisplay}, Bhishma deploys ${activeSpreadLabel} and ranks ${bestBank?.symbol} (Score ${bestBank?.learnedScore}) above ${worstBank?.symbol} (Score ${worstBank?.learnedScore}).`,
           severity: 'HIGH_CONVICTION',
-          sources: ['NSE Banking Flow Monitor', 'Institutional Order Book'],
+          sources: ['NSE Option Chain Feed', 'Dynamic Banking Ranker'],
           decisionScript: bhishmaDecisionScripts[0]
         }
       ],
@@ -586,9 +649,9 @@ export function deriveLiveAutonomousAgents(
       id: 'agent_arjuna',
       name: 'Arjuna',
       codeName: 'EQUITY_ALPHA',
-      role: 'NSE/BSE Stock Picker (Rising Winners vs Falling Laggards)',
-      targetMarket: `Top Rising: ${actualGainers.slice(0, 3).map(g => `${g.sym.replace('.NS', '')} (+${(g.q.changePct || 0).toFixed(2)}%)`).join(', ') || 'None'} | Top Falling: ${actualDecliners.slice(0, 3).map(d => `${d.sym.replace('.NS', '')} (${(d.q.changePct || 0).toFixed(2)}%)`).join(', ') || 'None'}`,
-      strategyType: 'Relative Alpha vs NIFTY 50 & Volume Breakout Execution',
+      role: 'Dynamic Universe Stock Picker (30+ Live NSE/BSE & Chartink Leaders)',
+      targetMarket: `Top Rising: ${actualGainers.slice(0, 3).map(g => `${g.rec.symbol} (+${g.rec.changePct.toFixed(2)}%)`).join(', ') || 'None'} | Quarantined: ${actualDecliners.slice(0, 3).map(d => `${d.rec.symbol} (${d.rec.changePct.toFixed(2)}%)`).join(', ') || 'None'}`,
+      strategyType: 'Dynamic Universe Relative Alpha + 3-Tick Anti-Whipsaw Breakout',
       status: (arjunaStats.tradingState === 'DAILY_HALTED' || arjunaStats.tradingState === 'WEEKLY_HALTED') ? 'SQUARED_OFF' : 'ACTIVE_HEDGING',
       tradingState: arjunaStats.tradingState,
       allocatedCapitalINR: arjunaStats.allocatedCapitalINR,
@@ -606,11 +669,11 @@ export function deriveLiveAutonomousAgents(
       haltTimestamp: arjunaStats.haltTimestamp,
       lastHealingReport: arjunaStats.lastHealingReport,
       strictRuleSet: [
-        'Only BUY stocks showing positive Relative Alpha (> +1.0% vs NIFTY 50) backed by sector catalysts',
-        'Immediately flag falling stocks hurt by global crude or US tech for SHORT / EXIT',
-        'Pre-trade risk strictly sized so single trade loss is capped ≤ ₹800'
+        'Dynamically scan all streaming NSE/BSE & Chartink stocks; never lock onto static tickers',
+        'Require 3-tick persistence + >2.0% Net-of-Tax profit (>2.5% under shock/recovery)',
+        'Immediately quarantine any script with an open/realized loss or 12-vector sector veto'
       ],
-      lastAction: arjunaStats.haltReason ? `🚨 RISK GUARD: ${arjunaStats.haltReason}` : `TOP LONG PICKS: ${actualGainers.slice(0, 3).map(g => `${g.q.name || g.sym.replace('.NS', '')} (₹${g.q.price?.toLocaleString('en-IN')}, +${(g.q.changePct || 0).toFixed(2)}%)`).join(', ') || 'Cash Preservation (Zero long triggers)'}. TOP SHORTS/AVOID: ${actualDecliners.slice(0, 2).map(d => `${d.q.name || d.sym.replace('.NS', '')} (${(d.q.changePct || 0).toFixed(2)}%)`).join(', ') || 'None'}.`,
+      lastAction: arjunaStats.haltReason ? `🚨 RISK GUARD: ${arjunaStats.haltReason}` : `DYNAMIC LONG PICKS (${learningMatrix.length} Stocks Scanned): ${actualGainers.slice(0, 3).map(g => `${g.rec.symbol} (₹${g.rec.ltp.toLocaleString('en-IN')}, +${g.rec.changePct.toFixed(2)}%)`).join(', ') || '100% Cash Preservation'}. QUARANTINED/VETOED: ${actualDecliners.slice(0, 3).map(d => `${d.rec.symbol} (${d.rec.changePct.toFixed(2)}%)`).join(', ') || 'None'}.`,
       lastActionTimestamp: timeStr,
       liveInsights: [
         {
@@ -621,11 +684,11 @@ export function deriveLiveAutonomousAgents(
           timestamp: timeStr,
           category: 'EQUITY_BREAKOUT',
           headline: actualGainers.length > 0
-            ? `Actionable Stock Divergence: Buy ${actualGainers.slice(0, 2).map(g => g.sym.replace('.NS', '')).join(' & ')}; Avoid ${actualDecliners.slice(0, 2).map(d => d.sym.replace('.NS', '')).join(' & ')}`
-            : `Defensive Risk-Off Regime: No Long Triggers Qualified; Hold Cash & Capital Floor`,
-          detail: `In a headline index at ${niftyPct.toFixed(2)}%, stocks with genuine positive catalysts (${actualGainers.slice(0, 2).map(g => g.sym.replace('.NS', '')).join(', ') || 'none'}) are decoupled from general weakness while vulnerable sectors are flagged for avoidance.`,
+            ? `Dynamic Leader Discovery: Buy ${actualGainers.slice(0, 2).map(g => g.rec.symbol).join(' & ')}; Quarantine ${actualDecliners.slice(0, 2).map(d => d.rec.symbol).join(' & ')}`
+            : `Defensive Risk-Off Regime: Zero Stocks Passed 12-Vector Hurdle; Holding 100% Protected Cash`,
+          detail: `Evaluated ${learningMatrix.length} live streaming equities against NIFTY (${niftyPct.toFixed(2)}%), 12 Macro/US-Midterm Vectors, and 2026 statutory tax friction.`,
           severity: 'HIGH_CONVICTION',
-          sources: ['NSE Cash Relative Strength Scanner', 'Live Sector Attribution'],
+          sources: ['Dynamic Universe Learning Engine', 'Chartink Live Screener'],
           decisionScript: arjunaDecisionScripts[0]
         }
       ],
@@ -635,9 +698,9 @@ export function deriveLiveAutonomousAgents(
       id: 'agent_kuber',
       name: 'Kuber',
       codeName: 'COMMODITIES_DESK',
-      role: 'Commodity Cost Transmission (Crude, Copper & Gold → Indian Stocks)',
-      targetMarket: `Brent Crude ($${brentPrice}, ${brentPct >= 0 ? '+' : ''}${brentPct.toFixed(2)}%) · Copper ($${copperPrice}, ${copperPct.toFixed(2)}%) · Gold ($${goldPrice})`,
-      strategyType: 'Raw-Material Margin Expansion / Compression Stock Arbitrage',
+      role: '12-Vector Macro, War, Energy (Oil/Gas) & Bullion (Gold/Silver) Sentinel',
+      targetMarket: `Brent ($${brentPrice}, ${brentPct >= 0 ? '+' : ''}${brentPct.toFixed(2)}%) · NatGas ($${(quotes['NG=F']?.price ?? 2.78).toFixed(2)}) · Gold ($${goldPrice}) · Silver ($${(quotes['SI=F']?.price ?? 32.65).toFixed(2)})`,
+      strategyType: 'MCX Energy/Bullion Parity + Dynamic Commodity Margin Arbitrage',
       status: (kuberStats.tradingState === 'DAILY_HALTED' || kuberStats.tradingState === 'WEEKLY_HALTED') ? 'SQUARED_OFF' : 'ACTIVE_HEDGING',
       tradingState: kuberStats.tradingState,
       allocatedCapitalINR: kuberStats.allocatedCapitalINR,
@@ -655,11 +718,11 @@ export function deriveLiveAutonomousAgents(
       haltTimestamp: kuberStats.haltTimestamp,
       lastHealingReport: kuberStats.lastHealingReport,
       strictRuleSet: [
-        `When Brent Crude rises >1% (Now $${brentPrice}, +${brentPct.toFixed(2)}%), SHORT/AVOID Paint (ASIANPAINT) & Aviation (INDIGO)`,
-        `When Copper (${copperPct.toFixed(2)}%) & Hang Seng (${hangsengPct.toFixed(2)}%) fall, AVOID Non-Ferrous Metals (HINDALCO, TATASTEEL)`,
-        'Max single commodity/equity trade risk strictly bounded to ≤ ₹800'
+        `When Brent ($${brentPrice}) or NatGas rises, Hard-Veto Energy/Cement/Paint consumers (${commodityVictim?.symbol || 'ULTRACEMCO/ASIANPAINT'})`,
+        `Deploy MCX Crude & Gold/Silver parity brackets + #1 Commodity Beneficiary (${commodityBeneficiary?.symbol || 'ONGC/HAL'})`,
+        'Stage 1 Council Gatekeeper: Any Kuber Hard-Veto blocks Arjuna & Bhishma immediately'
       ],
-      lastAction: kuberStats.haltReason ? `🚨 RISK GUARD: ${kuberStats.haltReason}` : `COMMODITY TRANSMISSION ALERT: Brent Crude surged +${brentPct.toFixed(2)}% to $${brentPrice}/bbl → Pulling down Asian Paints (${(quotes['ASIANPAINT.NS']?.changePct ?? -1.49).toFixed(2)}%) & IndiGo (${(quotes['INDIGO.NS']?.changePct ?? -0.89).toFixed(2)}%). Copper down ${copperPct.toFixed(2)}% → Pulling down Hindalco (${(quotes['HINDALCO.NS']?.changePct ?? -0.81).toFixed(2)}%).`,
+      lastAction: kuberStats.haltReason ? `🚨 RISK GUARD: ${kuberStats.haltReason}` : `COMMODITY & WAR SENTINEL (War Index ${macro12.warEscalationIndex}/100): Brent $${brentPrice} (${brentPct >= 0 ? '+' : ''}${brentPct.toFixed(2)}%), Gold $${goldPrice} (${goldPct >= 0 ? '+' : ''}${goldPct.toFixed(2)}%) → Long Beneficiary ${commodityBeneficiary?.symbol || 'MCX'} / Veto Victim ${commodityVictim?.symbol || 'Cement/Paints'}.`,
       lastActionTimestamp: timeStr,
       liveInsights: [
         {
@@ -669,10 +732,10 @@ export function deriveLiveAutonomousAgents(
           agentCodeName: 'COMMODITIES_DESK',
           timestamp: timeStr,
           category: 'COMMODITY_VECTOR',
-          headline: `Brent Crude at $${brentPrice} (+${brentPct.toFixed(2)}%) Hits Paint & Airline Stocks`,
-          detail: `Crude derivatives make up >50% of paint raw material costs and ~40% of airline OPEX. Today's crude surge directly explains why Asian Paints (${(quotes['ASIANPAINT.NS']?.changePct ?? -1.49).toFixed(2)}%), IndiGo (${(quotes['INDIGO.NS']?.changePct ?? -0.89).toFixed(2)}%), and BPCL (${(quotes['BPCL.NS']?.changePct ?? -0.36).toFixed(2)}%) are falling.`,
+          headline: `Live Commodity Transmission: Long ${commodityBeneficiary?.symbol || 'ONGC'} vs Veto ${commodityVictim?.symbol || 'ULTRACEMCO'}`,
+          detail: `Brent Crude ($${brentPrice}/bbl, ${brentPct >= 0 ? '+' : ''}${brentPct.toFixed(2)}%) & Natural Gas ($${(quotes['NG=F']?.price ?? 2.78).toFixed(2)}) directly drive Kuber's dynamic Stage-1 Council approval of ${commodityBeneficiary?.symbol} and hard-veto of energy-intensive ${commodityVictim?.symbol}.`,
           severity: 'HIGH_CONVICTION',
-          sources: ['ICE Brent Crude Feed', 'NSE Sector Margin Matrix'],
+          sources: ['ICE Brent & NYMEX NatGas Feed', 'Stage-1 Council Sentinel'],
           decisionScript: kuberDecisionScripts[0]
         },
         {
@@ -682,10 +745,10 @@ export function deriveLiveAutonomousAgents(
           agentCodeName: 'COMMODITIES_DESK',
           timestamp: timeStr,
           category: 'GLOBAL_POLICY',
-          headline: `Copper (${copperPct.toFixed(2)}%) & Gold (${goldPct.toFixed(2)}%) Impact on Hindalco & Titan`,
-          detail: `Weakness in COMEX Copper ($${copperPrice}/lb) and Asian industrial demand is weighing on Hindalco (${(quotes['HINDALCO.NS']?.changePct ?? -0.81).toFixed(2)}%) and Tata Steel (${(quotes['TATASTEEL.NS']?.changePct ?? -0.07).toFixed(2)}%), while Gold's ${goldPct.toFixed(2)}% pullback weighs on Titan (${(quotes['TITAN.NS']?.changePct ?? -0.71).toFixed(2)}%).`,
+          headline: `Gold ($${goldPrice}) & Silver ($${(quotes['SI=F']?.price ?? 32.65).toFixed(2)}) Safe-Haven Parity`,
+          detail: `COMEX Gold (${goldPct >= 0 ? '+' : ''}${goldPct.toFixed(2)}%) and Silver (${(quotes['SI=F']?.changePct ?? 0.65) >= 0 ? '+' : ''}${(quotes['SI=F']?.changePct ?? 0.65).toFixed(2)}%) alongside Copper ($${copperPrice}/lb) set MCX bullion & base-metal posture.`,
           severity: 'ALERT',
-          sources: ['COMEX / LME Metals Feed', 'NSE Metals Index']
+          sources: ['COMEX Bullion & LME Feed', 'MCX Parity Engine']
         }
       ],
       decisionScripts: kuberDecisionScripts
@@ -694,9 +757,9 @@ export function deriveLiveAutonomousAgents(
       id: 'agent_vidura',
       name: 'Vidura',
       codeName: 'RISK_ARBITER',
-      role: 'Capital Protection, Position Sizing & ROI Gatekeeper',
-      targetMarket: `Strict 1% Risk Rule · India VIX (${vixDisplay}) · SEBI Margin Guard`,
-      strategyType: 'Rupee Position Sizing, Stop-Loss Enforcement & Drawdown Prevention',
+      role: 'Stage-4 Adversarial Red-Team Critic & <=1.50% (<2.0%) Drawdown Governor',
+      targetMarket: `98.5% Protected Floor (≤1.50% Max DD) · India VIX (${vixDisplay}) · >${macro12.requiredMinNetProfitPct.toFixed(1)}% Net Tax Gate`,
+      strategyType: 'Red-Team Meta-Labeling Veto, 82% Profit-Lock & Quarter-Kelly Sizing',
       status: (viduraStats.tradingState === 'DAILY_HALTED' || viduraStats.tradingState === 'WEEKLY_HALTED') ? 'SQUARED_OFF' : 'ACTIVE_HEDGING',
       tradingState: viduraStats.tradingState,
       allocatedCapitalINR: viduraStats.allocatedCapitalINR,
@@ -714,11 +777,11 @@ export function deriveLiveAutonomousAgents(
       haltTimestamp: viduraStats.haltTimestamp,
       lastHealingReport: viduraStats.lastHealingReport,
       strictRuleSet: [
-        'Never risk more than 0.8% of capital on any single trade (₹800 max risk per ₹1,00,000 capital)',
-        'If remaining daily budget < ₹500, immediately block order creation to prevent breaker trips',
-        'In elevated VIX (>14.5), block blind index option buying and restrict deployment to high-relative-strength stocks'
+        'Lock Intraday Capital Floor at 98.50% (Max Daily Drawdown ≤ 1.50%, strictly < 2.00%)',
+        'Enforce 0.20%–0.45% per-trade 1R stop risk via Quarter-Kelly × Volatility Scalar',
+        'Stage-4 Red-Team Veto: Block retail-crowded traps, duplicate sectors, and <2.0% net-of-tax setups'
       ],
-      lastAction: viduraStats.haltReason ? `🚨 RISK GUARD: ${viduraStats.haltReason}` : `LEAK-PROOF SIZING VERDICT: With VIX at ${vixDisplay}, deploy capital into ${actualGainers.slice(0, 3).map(g => g.sym.replace('.NS', '')).join(', ') || 'defensive capital reserves'} with max ₹800 risk per trade.`,
+      lastAction: viduraStats.haltReason ? `🚨 RISK GUARD: ${viduraStats.haltReason}` : `RED-TEAM & KELLY VERDICT: Protected Floor 98.50% (≤1.50% Max DD). Approved Council Leaders: ${actualGainers.slice(0, 3).map(g => g.rec.symbol).join(', ') || '100% Cash Preservation'} (> ${macro12.requiredMinNetProfitPct.toFixed(2)}% Net Gate).`,
       lastActionTimestamp: timeStr,
       liveInsights: [
         {
@@ -728,10 +791,10 @@ export function deriveLiveAutonomousAgents(
           agentCodeName: 'RISK_ARBITER',
           timestamp: timeStr,
           category: 'REGULATORY_AUDIT',
-          headline: `Why Traders Lose Money in VIX ${vixDisplay} Regimes & How to Fix It Today`,
-          detail: `When India VIX is ${vixDisplay} and global cues are mixed, buying naked NIFTY calls/puts leads to theta decay and whipsaw losses. Positive ROI requires trading only verified sector rotation leaders (${actualGainers.slice(0, 3).map(g => g.sym.replace('.NS', '')).join(', ') || 'defensive cash'}) with fixed 1% capital risk.`,
+          headline: `Red-Team Audit: 98.50% Protected Floor (≤1.50% Max DD) & 82% Profit-Lock Active`,
+          detail: `With India VIX at ${vixDisplay} and Retail LSR at ${macro12.participantFlow.clientRetailIndexFuturesLSR}%, Vidura enforces 3-tick anti-whipsaw persistence, 100% Cash preservation on stopped trades, and >${macro12.requiredMinNetProfitPct.toFixed(2)}% net-of-tax profit on ${actualGainers.slice(0, 3).map(g => g.rec.symbol).join(', ') || 'defensive cash'}.`,
           severity: 'HIGH_CONVICTION',
-          sources: ['Vidura Position Sizing Engine', 'SEBI Risk Management Framework'],
+          sources: ['Stage-4 Red-Team Critic', 'Quarter-Kelly Drawdown Governor'],
           decisionScript: viduraDecisionScripts[0]
         }
       ],

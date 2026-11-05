@@ -311,8 +311,8 @@ function AppInner() {
                   {[
                     {
                       id: 'equity_radar' as ActiveTab,
-                      coreBadge: 'CORE 1 · 11-VECTOR MACRO & FII/DII',
-                      title: 'Macro, Policy, War & Sector Screener',
+                      coreBadge: 'CORE 1 · 12-VECTOR MACRO, US MID-TERMS & FII/DII',
+                      title: 'Macro, US Mid-Terms, War & Sector Screener',
                       matchTabs: ['equity_radar', 'deep_thesis'],
                     },
                     {

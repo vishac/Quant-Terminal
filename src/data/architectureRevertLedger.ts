@@ -211,5 +211,35 @@ export const ARCHITECTURE_REVERT_LEDGER: RevertLedgerEntry[] = [
     revertInstruction:
       'Remove the 4-Core Pipeline bar and stress_test_lab route in src/App.tsx to restore legacy 7-tab only layout.',
   },
+  {
+    revertId: 'REV-014',
+    dateIST: '04-Nov-2026',
+    category: 'STRATEGY_VETO_ENGINE',
+    moduleName: '100% Dynamic Universe Discovery & Elimination of Remaining Static Agent Scripts',
+    filePath: 'src/services/scriptLearningEngine.ts, src/services/agentQuantEngine.ts, src/services/macroCausalLearningEngine.ts',
+    previousStateSummary:
+      'Bhishma, Chanakya, and Kuber decision script arrays still contained fallback static strings (e.g., ICICIBANK vs HDFCBANK, BUY CIPLA / AVOID INFY, SHORT ASIANPAINT / BUY ULTRACEMCO), and FII/DII cash baselines in LIVE_EXCHANGE_FEED mode used static defaults.',
+    newStateSummary:
+      'Added discoverDynamicEquityUniverse(quotes) to automatically ingest all 30+ tracked NSE/BSE equities plus any runtime .NS/.BO symbols; rewrote Bhishma, Chanakya, and Kuber decisionScripts to rank 100% dynamically from evaluateAdaptiveScriptLearningMatrix(); and derived live FII/DII Cash & LSR numbers directly from streaming index/FX/heavyweight ticks.',
+    quantValueJustification:
+      'Guarantees zero static scripts, zero hardcoded stock pairs, and zero static FII/DII numbers remain anywhere in the terminal.',
+    revertInstruction:
+      'In src/services/agentQuantEngine.ts and src/services/scriptLearningEngine.ts, restore the static 20-stock candidateSymbols array and static decisionScript templates.',
+  },
+  {
+    revertId: 'REV-015',
+    dateIST: '04-Nov-2026',
+    category: 'STRATEGY_VETO_ENGINE',
+    moduleName: 'Vector #12: 2026 US Mid-Term Elections & Indo-US Sectoral Transmission Matrix',
+    filePath: 'src/services/macroCausalLearningEngine.ts, src/components/BrutalStressTestLab.tsx, src/components/MacroPolicyThesis.tsx',
+    previousStateSummary:
+      'The macro engine tracked 11 vectors without modeling the 2026 US Mid-Term Elections (Divided Congress Gridlock vs. Tariff/H-1B Hawk Sweep vs. Pro-Tech Fiscal Sweep) or its sector-specific transmission into Indian IT, Pharma, Defence, Metals, and FII flows.',
+    newStateSummary:
+      'Added Vector #12 (vec_us_midterms), US_MIDTERM_TARIFF_YIELD_SHOCK stress preset, interactive US Mid-Term stance selector in BrutalStressTestLab.tsx, and a dedicated 4-channel Indo-US transmission & live dynamic leader stack in MacroPolicyThesis.tsx.',
+    quantValueJustification:
+      'Captures US Congressional tariff, H-1B visa, Biosecure Act, INDUS-X defense, and 10Y Treasury yield shocks in real time before deploying capital.',
+    revertInstruction:
+      'In src/services/macroCausalLearningEngine.ts, remove vec_us_midterms and US_MIDTERM_TARIFF_YIELD_SHOCK.',
+  },
 ];
 

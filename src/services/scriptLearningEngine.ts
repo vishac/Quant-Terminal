@@ -61,26 +61,66 @@ export const TRACKED_EQUITY_UNIVERSE: Array<{
   sector: string;
 }> = [
   { symbol: 'CIPLA', yahooSymbol: 'CIPLA.NS', name: 'Cipla Ltd', sector: 'Pharma & Healthcare' },
-  { symbol: 'ICICIBANK', yahooSymbol: 'ICICIBANK.NS', name: 'ICICI Bank', sector: 'Private Banking' },
-  { symbol: 'SBIN', yahooSymbol: 'SBIN.NS', name: 'State Bank of India', sector: 'PSU Banking' },
   { symbol: 'SUNPHARMA', yahooSymbol: 'SUNPHARMA.NS', name: 'Sun Pharmaceutical', sector: 'Pharma & Specialty' },
+  { symbol: 'DRREDDY', yahooSymbol: 'DRREDDY.NS', name: 'Dr. Reddys Laboratories', sector: 'Pharma & US Generics' },
+  { symbol: 'ICICIBANK', yahooSymbol: 'ICICIBANK.NS', name: 'ICICI Bank', sector: 'Private Banking' },
+  { symbol: 'HDFCBANK', yahooSymbol: 'HDFCBANK.NS', name: 'HDFC Bank', sector: 'Private Banking' },
+  { symbol: 'SBIN', yahooSymbol: 'SBIN.NS', name: 'State Bank of India', sector: 'PSU Banking' },
+  { symbol: 'AXISBANK', yahooSymbol: 'AXISBANK.NS', name: 'Axis Bank', sector: 'Private Banking' },
+  { symbol: 'BAJFINANCE', yahooSymbol: 'BAJFINANCE.NS', name: 'Bajaj Finance', sector: 'NBFC & Consumer Credit' },
   { symbol: 'HAL', yahooSymbol: 'HAL.NS', name: 'Hindustan Aeronautics', sector: 'Defence & Aerospace' },
   { symbol: 'BEL', yahooSymbol: 'BEL.NS', name: 'Bharat Electronics', sector: 'Defence Electronics' },
+  { symbol: 'SOLARINDS', yahooSymbol: 'SOLARINDS.NS', name: 'Solar Industries', sector: 'Defence Munitions' },
+  { symbol: 'COCHINSHIP', yahooSymbol: 'COCHINSHIP.NS', name: 'Cochin Shipyard', sector: 'Defence Shipbuilding' },
   { symbol: 'LT', yahooSymbol: 'LT.NS', name: 'Larsen & Toubro', sector: 'EPC & Infrastructure' },
+  { symbol: 'NTPC', yahooSymbol: 'NTPC.NS', name: 'NTPC Ltd', sector: 'Power Generation' },
+  { symbol: 'POLYCAB', yahooSymbol: 'POLYCAB.NS', name: 'Polycab India', sector: 'Cables & Capex' },
   { symbol: 'TRENT', yahooSymbol: 'TRENT.NS', name: 'Trent Ltd', sector: 'Domestic Retail' },
+  { symbol: 'TITAN', yahooSymbol: 'TITAN.NS', name: 'Titan Company', sector: 'Consumer Discretionary' },
+  { symbol: 'DIXON', yahooSymbol: 'DIXON.NS', name: 'Dixon Technologies', sector: 'EMS & PLI Manufacturing' },
+  { symbol: 'BHARTIARTL', yahooSymbol: 'BHARTIARTL.NS', name: 'Bharti Airtel', sector: 'Telecom' },
   { symbol: 'RELIANCE', yahooSymbol: 'RELIANCE.NS', name: 'Reliance Industries', sector: 'Energy & Telecom' },
   { symbol: 'ONGC', yahooSymbol: 'ONGC.NS', name: 'ONGC Ltd', sector: 'Upstream Energy' },
-  { symbol: 'BHARTIARTL', yahooSymbol: 'BHARTIARTL.NS', name: 'Bharti Airtel', sector: 'Telecom' },
+  { symbol: 'BPCL', yahooSymbol: 'BPCL.NS', name: 'Bharat Petroleum', sector: 'Oil Refining & Marketing' },
   { symbol: 'TCS', yahooSymbol: 'TCS.NS', name: 'Tata Consultancy Services', sector: 'IT Services' },
   { symbol: 'INFY', yahooSymbol: 'INFY.NS', name: 'Infosys Ltd', sector: 'IT Services' },
-  { symbol: 'HDFCBANK', yahooSymbol: 'HDFCBANK.NS', name: 'HDFC Bank', sector: 'Private Banking' },
+  { symbol: 'HCLTECH', yahooSymbol: 'HCLTECH.NS', name: 'HCL Technologies', sector: 'IT Services' },
   { symbol: 'ULTRACEMCO', yahooSymbol: 'ULTRACEMCO.NS', name: 'UltraTech Cement', sector: 'Cement & Infra' },
   { symbol: 'INDIACEM', yahooSymbol: 'INDIACEM.NS', name: 'The India Cements', sector: 'Cement & Infra' },
   { symbol: 'ASIANPAINT', yahooSymbol: 'ASIANPAINT.NS', name: 'Asian Paints', sector: 'Consumer Paints' },
   { symbol: 'INDIGO', yahooSymbol: 'INDIGO.NS', name: 'InterGlobe Aviation', sector: 'Aviation' },
   { symbol: 'HINDALCO', yahooSymbol: 'HINDALCO.NS', name: 'Hindalco Industries', sector: 'Metals & Mining' },
   { symbol: 'TATASTEEL', yahooSymbol: 'TATASTEEL.NS', name: 'Tata Steel', sector: 'Metals & Steel' },
+  { symbol: 'JSWSTEEL', yahooSymbol: 'JSWSTEEL.NS', name: 'JSW Steel', sector: 'Metals & Steel' },
 ];
+
+/**
+ * Dynamically merges the canonical tracked universe with any live .NS/.BO symbols
+ * streaming in `quotes` so zero new stocks are ever ignored by the learning engine.
+ */
+export function discoverDynamicEquityUniverse(
+  quotes: Record<string, MarketQuote>
+): Array<{ symbol: string; yahooSymbol: string; name: string; sector: string }> {
+  const map = new Map<string, { symbol: string; yahooSymbol: string; name: string; sector: string }>();
+  for (const item of TRACKED_EQUITY_UNIVERSE) {
+    map.set(item.symbol, item);
+  }
+  for (const [key, q] of Object.entries(quotes)) {
+    if ((key.endsWith('.NS') || key.endsWith('.BO')) && q && q.price && q.price > 0) {
+      const cleanSym = key.replace('.NS', '').replace('.BO', '').toUpperCase().trim();
+      if (!map.has(cleanSym)) {
+        const sectorCode = resolveSymbolSector(cleanSym);
+        map.set(cleanSym, {
+          symbol: cleanSym,
+          yahooSymbol: key,
+          name: q.name || cleanSym,
+          sector: sectorCode.replace(/_/g, ' '),
+        });
+      }
+    }
+  }
+  return Array.from(map.values());
+}
 
 export function loadPersistedScriptMemory(): Record<string, PersistedScriptMemory> {
   try {
@@ -229,7 +269,8 @@ export function evaluateAdaptiveScriptLearningMatrix(
   const macroSnapshot = evaluateElevenVectorMacroMatrix(quotes, orders);
   let memoryUpdated = false;
 
-  const records: ScriptLearningRecord[] = TRACKED_EQUITY_UNIVERSE.map((item) => {
+  const dynamicUniverse = discoverDynamicEquityUniverse(quotes);
+  const records: ScriptLearningRecord[] = dynamicUniverse.map((item) => {
     const q = quotes[item.yahooSymbol];
     const ltp = Number((q?.price ?? 0).toFixed(2));
     const rawChangePct = Number((q?.changePct ?? 0).toFixed(2));

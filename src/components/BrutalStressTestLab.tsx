@@ -96,7 +96,7 @@ export const BrutalStressTestLab: React.FC<BrutalStressTestLabProps> = ({
     setStressConfig(next);
     saveMacroStressConfig(next);
     setActionBanner(
-      `Loaded Scenario [${next.presetLabel}] -> Recomputed 11 Causal Vectors, 3-Layer FII/DII Flows & 5-Agent Council Weights.`
+      `Loaded Scenario [${next.presetLabel}] -> Recomputed 12 Causal Vectors (incl. 2026 US Mid-Terms), 3-Layer FII/DII Flows & 5-Agent Council Weights.`
     );
   };
 
@@ -163,7 +163,7 @@ export const BrutalStressTestLab: React.FC<BrutalStressTestLabProps> = ({
               </span>
             </div>
             <h1 className="text-base sm:text-lg font-bold text-white mt-1.5 font-sans">
-              11-Vector Macro, War, Policy & 3-Layer FII/DII Self-Learning Proving Ground
+              12-Vector Macro, 2026 US Mid-Terms, War, Policy &amp; 3-Layer FII/DII Self-Learning Proving Ground
             </h1>
             <p className="text-xs text-slate-400 mt-0.5">
               {macroSnapshot.regimeHeadline}
@@ -232,42 +232,48 @@ export const BrutalStressTestLab: React.FC<BrutalStressTestLabProps> = ({
               10-Point Brutal Audit Score: {passedChecksCount} / {tenPointChecks.length} PASSED
             </span>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-2">
             {[
               {
                 key: 'LIVE_EXCHANGE_FEED',
                 title: '1. Live Exchange Feed',
-                sub: 'Real-time Yahoo/Upstox + RSS',
+                sub: '100% Live Ticks + Dynamic FII/DII',
                 tone: 'emerald',
               },
               {
+                key: 'US_MIDTERM_TARIFF_YIELD_SHOCK',
+                title: '2. US Mid-Term Shock',
+                sub: 'Tariff Sweep · H-1B · 10Y Yield Spike',
+                tone: 'amber',
+              },
+              {
                 key: 'WAR_HORMUZ_ESCALATION',
-                title: '2. Global War & Oil $115',
+                title: '3. Global War & Oil $115',
                 sub: 'War 92/100 · Oil +11.8% · Gold +4.2%',
                 tone: 'rose',
               },
               {
                 key: 'FED_HAWKISH_JOBS_STAGFLATION',
-                title: '3. Fed +50bps & Jobs Miss',
+                title: '4. Fed +50bps & Jobs Miss',
                 sub: 'NFP -110K · DXY +1.95% · IT/Pharma',
                 tone: 'amber',
               },
               {
                 key: 'FII_CAPITULATION_DII_CAPEX',
-                title: '4. FII Dump vs DII Capex',
+                title: '5. FII Dump vs DII Capex',
                 sub: 'FII -₹6,100Cr · DII +₹6,850Cr · Retail Trap',
                 tone: 'cyan',
               },
               {
                 key: 'GOVT_WINDFALL_SEBI_POLICY_SHOCK',
-                title: '5. Policy & Tax Tightening',
+                title: '6. Policy & Tax Tightening',
                 sub: 'Windfall Tax + SEBI Margin Hike',
                 tone: 'purple',
               },
               {
                 key: 'GLOBAL_RISK_ON_DEFLATION',
-                title: '6. Oil Crash & Risk-On',
-                sub: 'Brent -7.5% · Fed Cut · Dual FII/DII Inflow',
+                title: '7. Gridlock & Risk-On',
+                sub: 'Divided Congress · Brent -7.5% · Inflow',
                 tone: 'emerald',
               },
             ].map((item) => {
@@ -293,12 +299,33 @@ export const BrutalStressTestLab: React.FC<BrutalStressTestLabProps> = ({
           </div>
         </div>
 
-        {/* Interactive Multi-Vector Fine-Tuning Sliders */}
-        <div className="mt-3 pt-3 border-t border-slate-800/80 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {/* Interactive Multi-Vector Fine-Tuning Sliders + 2026 US Mid-Term Election Selector */}
+        <div className="mt-3 pt-3 border-t border-slate-800/80 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+          <div className="bg-slate-900/70 border border-slate-800 rounded-lg p-2">
+            <div className="flex justify-between text-[10px] text-slate-400">
+              <span>2026 US MID-TERMS</span>
+              <span className="font-bold text-cyan-300">VEC #12</span>
+            </div>
+            <select
+              value={stressConfig.usMidtermElectionOutcome || 'LIVE_DYNAMIC_TRACKING'}
+              onChange={(e) =>
+                handleUpdateCustomSlider({
+                  usMidtermElectionOutcome: e.target.value as MacroStressOverrideConfig['usMidtermElectionOutcome'],
+                })
+              }
+              className="w-full mt-1.5 bg-slate-950 border border-slate-700 rounded px-1.5 py-1 text-[10px] text-white font-bold cursor-pointer"
+            >
+              <option value="LIVE_DYNAMIC_TRACKING">Live Yield/DXY Tracking</option>
+              <option value="GRIDLOCK_DIVIDED_CONGRESS">Divided Congress Gridlock</option>
+              <option value="TARIFF_HAWK_SWEEP">Tariff &amp; H-1B Hawk Sweep</option>
+              <option value="FISCAL_STIMULUS_SWEEP">Fiscal &amp; Tech Capex Sweep</option>
+            </select>
+          </div>
+
           <div className="bg-slate-900/70 border border-slate-800 rounded-lg p-2">
             <div className="flex justify-between text-[10px] text-slate-400">
               <span>WAR ESCALATION</span>
-              <span className="font-bold text-rose-400">{stressConfig.warEscalationIndex}/100</span>
+              <span className="font-bold text-rose-400">{macroSnapshot.warEscalationIndex}/100</span>
             </div>
             <input
               type="range"
@@ -333,8 +360,8 @@ export const BrutalStressTestLab: React.FC<BrutalStressTestLabProps> = ({
             <div className="flex justify-between text-[10px] text-slate-400">
               <span>BRENT OIL SHOCK</span>
               <span className="font-bold text-cyan-300">
-                {(stressConfig.brentOilOverrideChangePct ?? 0.8) >= 0 ? '+' : ''}
-                {(stressConfig.brentOilOverrideChangePct ?? 0.8).toFixed(1)}%
+                {(stressConfig.brentOilOverrideChangePct ?? quotes['BZ=F']?.changePct ?? 0.8) >= 0 ? '+' : ''}
+                {(stressConfig.brentOilOverrideChangePct ?? quotes['BZ=F']?.changePct ?? 0.8).toFixed(1)}%
               </span>
             </div>
             <input
@@ -342,7 +369,7 @@ export const BrutalStressTestLab: React.FC<BrutalStressTestLabProps> = ({
               min={-10}
               max={15}
               step={0.5}
-              value={stressConfig.brentOilOverrideChangePct ?? 0.8}
+              value={stressConfig.brentOilOverrideChangePct ?? quotes['BZ=F']?.changePct ?? 0.8}
               onChange={(e) =>
                 handleUpdateCustomSlider({ brentOilOverrideChangePct: Number(e.target.value) })
               }
@@ -355,10 +382,10 @@ export const BrutalStressTestLab: React.FC<BrutalStressTestLabProps> = ({
               <span>FII CASH FLOW</span>
               <span
                 className={`font-bold ${
-                  stressConfig.fiiCashNetCrINR >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                  macroSnapshot.participantFlow.fiiCashNetCrINR >= 0 ? 'text-emerald-400' : 'text-rose-400'
                 }`}
               >
-                {stressConfig.fiiCashNetCrINR >= 0 ? '+' : ''}₹{stressConfig.fiiCashNetCrINR}Cr
+                {macroSnapshot.participantFlow.fiiCashNetCrINR >= 0 ? '+' : ''}₹{macroSnapshot.participantFlow.fiiCashNetCrINR}Cr
               </span>
             </div>
             <input
@@ -366,7 +393,7 @@ export const BrutalStressTestLab: React.FC<BrutalStressTestLabProps> = ({
               min={-7000}
               max={5000}
               step={250}
-              value={stressConfig.fiiCashNetCrINR}
+              value={macroSnapshot.participantFlow.fiiCashNetCrINR}
               onChange={(e) => handleUpdateCustomSlider({ fiiCashNetCrINR: Number(e.target.value) })}
               className="w-full accent-emerald-400 mt-1 cursor-pointer"
             />
@@ -375,13 +402,13 @@ export const BrutalStressTestLab: React.FC<BrutalStressTestLabProps> = ({
           <div className="bg-slate-900/70 border border-slate-800 rounded-lg p-2">
             <div className="flex justify-between text-[10px] text-slate-400">
               <span>FII FUTURES LSR</span>
-              <span className="font-bold text-cyan-300">{stressConfig.fiiIndexFuturesLSR}%</span>
+              <span className="font-bold text-cyan-300">{macroSnapshot.participantFlow.fiiIndexFuturesLSR}%</span>
             </div>
             <input
               type="range"
               min={15}
               max={75}
-              value={stressConfig.fiiIndexFuturesLSR}
+              value={macroSnapshot.participantFlow.fiiIndexFuturesLSR}
               onChange={(e) =>
                 handleUpdateCustomSlider({ fiiIndexFuturesLSR: Number(e.target.value) })
               }
@@ -394,17 +421,17 @@ export const BrutalStressTestLab: React.FC<BrutalStressTestLabProps> = ({
               <span>RETAIL (CLIENT) LSR</span>
               <span
                 className={`font-bold ${
-                  stressConfig.clientRetailIndexFuturesLSR >= 64 ? 'text-rose-400' : 'text-slate-200'
+                  macroSnapshot.participantFlow.clientRetailIndexFuturesLSR >= 64 ? 'text-rose-400' : 'text-slate-200'
                 }`}
               >
-                {stressConfig.clientRetailIndexFuturesLSR}%
+                {macroSnapshot.participantFlow.clientRetailIndexFuturesLSR}%
               </span>
             </div>
             <input
               type="range"
               min={25}
               max={82}
-              value={stressConfig.clientRetailIndexFuturesLSR}
+              value={macroSnapshot.participantFlow.clientRetailIndexFuturesLSR}
               onChange={(e) =>
                 handleUpdateCustomSlider({ clientRetailIndexFuturesLSR: Number(e.target.value) })
               }
@@ -477,7 +504,7 @@ export const BrutalStressTestLab: React.FC<BrutalStressTestLabProps> = ({
           },
           {
             id: 'ELEVEN_VECTORS',
-            label: '2. All 11 Live Macro, Policy & War Vectors',
+            label: '2. All 12 Live Macro, US Mid-Terms & War Vectors',
           },
           {
             id: 'FII_DII_SECTOR_MATRIX',
@@ -556,11 +583,11 @@ export const BrutalStressTestLab: React.FC<BrutalStressTestLabProps> = ({
         </div>
       )}
 
-      {/* VIEW 2: ALL 11 LIVE MACRO, POLICY & WAR VECTORS */}
+      {/* VIEW 2: ALL 12 LIVE MACRO, US MID-TERMS, POLICY & WAR VECTORS */}
       {activeSubView === 'ELEVEN_VECTORS' && (
         <div className="rounded-xl bg-[#0b101d] border border-slate-800 p-4">
           <h2 className="text-sm font-bold text-white uppercase tracking-wider mb-3">
-            11-Vector Macro-Causal Telemetry &amp; Sector Transmission Matrix
+            12-Vector Macro-Causal Telemetry (Including 2026 US Mid-Term Elections) &amp; Sector Transmission Matrix
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {macroSnapshot.vectors.map((vec) => (

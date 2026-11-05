@@ -4,26 +4,34 @@ This document records every surgical UI/module pruning action, static data remov
 
 ---
 
-## 1. Core Quantitative Rules Enforced (`04-Nov-2026`)
+## 1. Core Quantitative Rules Enforced (`04-Nov-2026` · `REV-001` – `REV-015`)
 
-1. **Strict Cost-of-Trading & 3.0x Friction Veto Gate**:
-   - Every candidate trade across `NSE F&O`, `NSE Cash`, `BSE Cash`, and `MCX` calculates round-trip **2026 Indian Statutory Taxes + Brokerage** (`src/services/statutoryVetoEngine.ts`):
+1. **Strict Cost-of-Trading & 3.0x Friction Veto Gate (`src/services/statutoryVetoEngine.ts`)**:
+   - Every candidate trade across `NSE F&O`, `NSE Cash`, `BSE Cash`, and `MCX` calculates round-trip **2026 Indian Statutory Taxes + Brokerage**:
      - **Brokerage**: `₹20` flat per executed order (`₹40` round-trip per single-leg order; `₹80` round-trip for 2-leg defined-risk option spreads).
      - **NSE F&O Options**: STT `0.15%` (sell on premium), Exchange+IPFT `0.03553%`, SEBI `₹10/Cr`, Stamp Duty `0.003%` (buy on premium), GST `18%` on `(Brokerage + Exchange + SEBI)`.
      - **NSE/BSE Cash**: STT `0.025%` (sell), Exchange+IPFT `0.00307%` (NSE) / `0.00375%` (BSE), SEBI `₹10/Cr`, Stamp Duty `0.003%` (buy), GST `18%`.
      - **MCX Futures**: CTT `0.01%` (sell), Exchange `0.0026%`, SEBI `₹10/Cr`, Stamp Duty `0.002%` (buy), GST `18%`.
    - **Hard Veto Condition**:
      - If `Total Friction INR >= Target Gross Profit INR` OR `Gross Profit / Total Friction < 3.0x`, the trade is **VETOED** immediately.
-2. **Strict `> 2.0%` Net-of-Tax Profit Requirement**:
+2. **Strict `> 2.00%` (`> 2.50%` Under Shock/Post-Loss) Net-of-Tax Profit Requirement**:
    - `Net Profit % = ((Target Gross Profit INR - Total Friction INR) / Capital or Margin Deployed INR) × 100`.
-   - Any trade projecting `<= 2.00%` Net Profit is **VETOED** immediately.
-3. **Confirmed Scripts Only (Zero Duplicate Stacking, Zero Losing Script Lock-In)**:
-   - `Scan & Deploy (All Desks)` only deploys confirmed leaders (`!isQuarantined`, `isEligibleForDeploy`, `learnedScore >= 68`, not already `OPEN`).
-   - If fewer scripts (or zero scripts) qualify on a given scan, only the confirmed `> 2.0%` net setups are deployed, and all skipped desks are logged in the **Live Scan & Veto Audit Strip**.
+   - Any trade projecting `<= 2.00%` Net Profit (`<= 2.50%` during War/Fed/Election shock or post-loss recovery) is **VETOED** immediately.
+3. **12-Vector Macro-Causal, 2026 US Mid-Term Elections & 3-Layer FII/DII/Pro vs Retail Flow Engine (`src/services/macroCausalLearningEngine.ts`)**:
+   - Continuously evaluates all **12 Live Vectors**: (1) Market Regime & VIX, (2) Live News RSS, (3) US Dollar (`DX-Y.NYB` & `INR=X`), (4) Global Markets (`^GSPC`, `^IXIC`, `^N225`, `^HSI`), (5) Domestic Govt/RBI/SEBI Policy Rules, (6) US Fed Rates (`^TNX` & `^IRX`), (7) US Jobs/NFP & Unemployment, (8) Gold (`GC=F`) & Silver (`SI=F`), (9) Brent Oil (`BZ=F` / `CL=F`) & Natural Gas (`NG=F`), (10) War & Geopolitical Escalation Index, (11) **3-Layer FII / DII / Pro vs. Retail (`Client`) Futures LSR & Cash Flow**, and (12) **2026 US Mid-Term Elections & Indo-US Sectoral Transmission (`vec_us_midterms`)**.
+   - In `LIVE_EXCHANGE_FEED` mode, FII/DII Cash and Futures LSR numbers are dynamically derived on every tick from live NSE/FX/heavyweight price and breadth telemetry so nothing sits static.
+4. **5-Stage Inter-Agent Shared-Blackboard Consensus Council with Vidura Red-Team Veto**:
+   - Sequential pipeline: `Stage 1 Kuber (12-Vector Macro/War/Commodity Sentinel)` $\rightarrow$ `Stage 2 Chanakya (3-Layer FII/DII & US Mid-Term Flow Detective)` $\rightarrow$ `Stage 3 Arjuna / Bhishma (Cash & F&O Structure Proposer)` $\rightarrow$ `Stage 4 Vidura (Adversarial Red-Team Critic & Sector Correlation Veto)` $\rightarrow$ `Stage 5 Execution & Risk Governor`.
+5. **Hard Intraday Drawdown Locked at `<= 1.50%` (Strictly `< 2.00%`) via Consensus Quarter-Kelly Sizing**:
+   - Enforces a **98.50% Intraday Protected Capital Floor** (`Max Daily Drawdown <= 1.50%`). Per-trade `1R` stop-loss risk scales between `0.20%` and `0.45%` of total equity via Quarter-Kelly $\times$ Volatility Target while deploying full working capital notional with zero return drag.
+6. **3-State Asymmetric Shock & Anti-Whipsaw Cash Preservation Protocol**:
+   - (State 1) Open winners lock **82% of peak unrealized profit** during shocks; (State 2) Open losers in hard-vetoed sectors exit to **100% Protected Cash** (never force-rotating on the same tick); (State 3) Freed cash requires **3-tick persistence** and a **`> 2.50%` Net Profit Recovery Hurdle** before redeployment.
+7. **100% Dynamic Universe Discovery (Zero Static Scripts)**:
+   - `discoverDynamicEquityUniverse(quotes)` automatically ingests all 30+ tracked NSE/BSE equities plus any runtime `.NS`/`.BO` symbols. All 5 agents generate their `decisionScripts` 100% dynamically from `evaluateAdaptiveScriptLearningMatrix()`.
 
 ---
 
-## 2. Granular Change & Revert Ledger (`REV-001` – `REV-008`)
+## 2. Granular Change & Revert Ledger (`REV-001` – `REV-015`)
 
 ### `REV-001` — Intelligent Scan & Deploy Veto Engine (`src/services/statutoryVetoEngine.ts`)
 - **Files Modified**: `src/services/statutoryVetoEngine.ts`, `src/components/TradeHistory.tsx`, `src/components/AutonomousAgentsDesk.tsx`
@@ -98,3 +106,12 @@ This document records every surgical UI/module pruning action, static data remov
 - **New Behavior**: Adds the interactive **Brutal Stress-Test Lab** with 1-click institutional crisis presets, custom multi-vector sliders, 1-click Reset to Live Feed, and the **10-Point Brutal Audit Scorecard**, integrated into the top **4-Core Causal Pipeline Bar**.
 - **How to Revert**: Remove the 4-Core Pipeline bar and `stress_test_lab` route in `src/App.tsx`.
 
+### `REV-014` — 100% Dynamic Universe Discovery & Elimination of Remaining Static Agent Scripts (`src/services/scriptLearningEngine.ts`, `src/services/agentQuantEngine.ts`, `src/services/macroCausalLearningEngine.ts`)
+- **Files Modified**: `src/services/scriptLearningEngine.ts`, `src/services/agentQuantEngine.ts`, `src/services/macroCausalLearningEngine.ts`
+- **New Behavior**: Added `discoverDynamicEquityUniverse(quotes)` to automatically ingest all 30+ tracked NSE/BSE equities plus any runtime `.NS`/`.BO` symbols; rewrote `Bhishma`, `Chanakya`, and `Kuber` `decisionScripts` so every stock pick, pair trade, and commodity beneficiary/victim is ranked 100% dynamically from `evaluateAdaptiveScriptLearningMatrix()`; and derived live FII/DII Cash & LSR numbers directly from streaming index/FX/heavyweight ticks in `LIVE_EXCHANGE_FEED` mode.
+- **How to Revert**: Restore static `candidateSymbols` and static `decisionScript` templates in `src/services/agentQuantEngine.ts`.
+
+### `REV-015` — Vector #12: 2026 US Mid-Term Elections & Indo-US Sectoral Transmission Matrix (`src/services/macroCausalLearningEngine.ts`, `src/components/BrutalStressTestLab.tsx`, `src/components/MacroPolicyThesis.tsx`)
+- **Files Modified**: `src/services/macroCausalLearningEngine.ts`, `src/components/BrutalStressTestLab.tsx`, `src/components/MacroPolicyThesis.tsx`
+- **New Behavior**: Added **Vector #12 (`vec_us_midterms`)** modeling **2026 US Mid-Term Elections** (`LIVE_DYNAMIC_TRACKING`, `GRIDLOCK_DIVIDED_CONGRESS`, `TARIFF_HAWK_SWEEP`, `FISCAL_STIMULUS_SWEEP`) across 4 Indo-US channels: (1) US Biosecure Act & FDA Generics (`CIPLA`, `SUNPHARMA`, `DRREDDY`), (2) H-1B Visa & Fortune-500 IT Spend (`TCS`, `INFY`, `HCLTECH`), (3) INDUS-X & GE-F404 Defence Co-Production (`HAL`, `BEL`, `SOLARINDS`), and (4) Section 232 Tariffs & US 10Y Treasury Yields (`^TNX`) on Metals & FII-Heavy Banks.
+- **How to Revert**: Remove `vec_us_midterms` and `US_MIDTERM_TARIFF_YIELD_SHOCK` in `src/services/macroCausalLearningEngine.ts`.

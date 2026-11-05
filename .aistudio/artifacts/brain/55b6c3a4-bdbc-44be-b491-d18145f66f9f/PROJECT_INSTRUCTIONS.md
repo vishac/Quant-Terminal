@@ -145,8 +145,23 @@ Under no circumstances should dummy, mock, or hardcoded static seed trades be in
      - **Stage 0 (`INITIAL_RISK_STOP`)**: `Peak P&L < +0.8R` -> Stop floor at `-1R` (`<= -₹400`).
      - **Stage 1 (`BREAKEVEN_ARMED`)**: `Peak P&L >= +0.8R` -> Stop ratchets upward to **`+₹15`** (Breakeven + statutory brokerage buffer) so a winning trade can never round-trip into a loss.
      - **Stage 2 (`PROFIT_LOCK_50PCT`)**: `Peak P&L >= +1.5R` -> Stop ratchets to **50% of High-Water-Mark Peak P&L** (`Math.round(peakPnlINR * 0.50)`).
-     - **Stage 3 (`PROFIT_LOCK_75PCT`)**: `Peak P&L >= +2.2R+` -> Stop tightens to **75% of High-Water-Mark Peak P&L** (`Math.round(peakPnlINR * 0.75)`).
+     - **Stage 3 (`PROFIT_LOCK_75PCT`)**: `Peak P&L >= +2.2R+` -> Stop tightens to **75%–82% of High-Water-Mark Peak P&L**.
    - **Immediate Pullback Execution (`TRAILING_STOP_HIT`)**: On any tick where `livePnl` retraces to or below the active `trailingStopPnlINR` while in Stage 1–3, the engine immediately closes the position and books the locked profit into the realized ledger.
+
+7. **12-Vector Macro-Causal, 2026 US Mid-Term Elections & 3-Layer FII/DII/Pro vs. Retail Flow Engine (`src/services/macroCausalLearningEngine.ts`)**:
+   - Continuously evaluates **12 Live Vectors**: (1) Market Regime & VIX, (2) Live News RSS, (3) US Dollar (`DX-Y.NYB` & `INR=X`), (4) Global Markets (`^GSPC`, `^IXIC`, `^N225`, `^HSI`), (5) Domestic Govt/RBI/SEBI Policy Rules, (6) US Fed Rates (`^TNX` & `^IRX`), (7) US Jobs/NFP, (8) Gold (`GC=F`) & Silver (`SI=F`), (9) Brent Oil (`BZ=F` / `CL=F`) & Natural Gas (`NG=F`), (10) War & Geopolitical Escalation Index, (11) **3-Layer FII / DII / Pro vs. Retail (`Client`) Futures LSR & Cash Flow**, and (12) **2026 US Mid-Term Elections & Indo-US Sectoral Transmission (`vec_us_midterms`)**.
+   - In `LIVE_EXCHANGE_FEED` mode, FII/DII Cash and Futures LSR numbers are dynamically derived on every tick from live NSE/FX/heavyweight price and breadth telemetry so zero numbers sit static.
+
+8. **5-Stage Inter-Agent Shared-Blackboard Consensus Council & `<= 1.50%` (`< 2.00%`) Drawdown Quarter-Kelly Sizer**:
+   - Every candidate order must pass the sequential 5-Stage Council (`Stage 1 Kuber Macro/War/Commodity Sentinel` $\rightarrow$ `Stage 2 Chanakya 3-Layer FII/DII & US Mid-Term Flow Detective` $\rightarrow$ `Stage 3 Arjuna/Bhishma Structure & Official Tuesday/Holiday Expiry` $\rightarrow$ `Stage 4 Vidura Adversarial Red-Team Critic & Sector Correlation Cap` $\rightarrow$ `Stage 5 Execution Governor`).
+   - Enforces a **98.50% Intraday Protected Capital Floor** (`Max Daily Drawdown <= 1.50%`, strictly `< 2.00%`). Per-trade `1R` stop risk scales between `0.20%` and `0.45%` of total equity via Quarter-Kelly $\times$ Volatility Target while deploying full working capital notional.
+
+9. **2026 Indian Statutory Tax + `> 2.00%` Net Profit Veto Gate & 3-State Anti-Whipsaw Shield (`src/services/statutoryVetoEngine.ts`)**:
+   - Pre-calculates round-trip 2026 STT/CTT, Exchange+IPFT, SEBI, Stamp Duty, 18% GST, and `₹20`/order flat brokerage. Vetoes any trade where `Gross Profit / Friction < 3.0x` or `Net Profit <= 2.00%` (`<= 2.50%` during shocks or post-loss recovery).
+   - **3-State Anti-Whipsaw Protocol**: (1) Locks **82% of peak unrealized profit** on open winners during macro/war/election shocks; (2) Parks freed capital from stopped-out losers in **100% Protected Cash** (blocking blind same-tick rotation); (3) Requires **3-tick persistence** + `> 2.50%` Net Profit before redeploying cash.
+
+10. **100% Dynamic Universe Discovery (Zero Static Scripts)**:
+    - `discoverDynamicEquityUniverse(quotes)` automatically ingests all 30+ tracked NSE/BSE equities plus any runtime `.NS`/`.BO` symbols. All 5 agents generate their `decisionScripts` 100% dynamically from `evaluateAdaptiveScriptLearningMatrix()`.
 
 ---
 
@@ -154,59 +169,37 @@ Under no circumstances should dummy, mock, or hardcoded static seed trades be in
 
 ### 9.1 Agreed Objectives & Scope
 - Comprehensive Institutional Quantitative Terminal for Indian Markets: **NSE/BSE Cash Equity**, **NSE F&O (Options & Futures)**, and **MCX Commodity Futures**.
-- Zero fake/dummy seed trades; 100% deterministic mathematical execution.
-- Strict multi-barrier risk gating (kill-switch, daily loss limits, lot sizing, SEBI SPAN+Exposure approximations).
+- Zero fake/dummy seed trades and zero static scripts; 100% deterministic mathematical execution.
+- Strict multi-barrier risk gating (`<= 1.50%` hard daily drawdown floor, `> 2.00%` net-of-tax profit gate, `>= 3.0x` friction coverage, 5-Stage Inter-Agent Consensus Council).
 - Dual execution routing: **Deterministic Paper Broker** (Simulation) and **Upstox Analytics v2 Gateway** (Live/Analytics).
-- Persistent append-only learning ledger and automated 3-tier operational scheduler.
+- Full Revert Ledger (`REV-001` – `REV-015`) maintained in `PROJECT_CHANGELOG_AND_REVERT_LEDGER.md` and `src/data/architectureRevertLedger.ts`.
 
 ### 9.2 Log of Completed Items
 - [x] **Git Merge Conflict Resolution (`5a7a18e`)**: Resolved `GlobalSentiment.tsx` conflict; dynamic radar/benchmark breadth mode preserved.
-- [x] **Indian Holiday & Expiry Engine (`src/utils/indianHolidayCalendar.ts`)**: Fixed hardcoded dates (`new Date()`); statutory holiday-preceding expiry calculation for NIFTY & SENSEX.
+- [x] **Indian Holiday & Expiry Engine (`src/utils/indianHolidayCalendar.ts`, `src/utils/orderFormatters.ts`)**: Authoritative NSE NIFTY 50 Tuesday expiry (`day === 2`) with holiday step-back (`09-Nov-2026` Weekly [Mon], `17-Nov-2026` Weekly [Tue], `23-Nov-2026` Monthly [Mon]).
 - [x] **Universal Broker Adapter Interface (`src/brokers/BrokerAdapter.ts`)**: Standardized interface for quotes, OHLCV candles, option chains, order placement, cancellation, positions, and margins.
 - [x] **Deterministic Paper Broker (`src/brokers/PaperBrokerAdapter.ts`)**: In-memory paper execution engine with quote cache injection, position tracking, and fill simulation.
 - [x] **Append-Only Order State Machine (`src/services/orderLifecycle.ts`)**: Lifecycle state transitions (`PENDING -> OPEN -> FILLED -> SQUARED_OFF`), automatic SL/Target triggers, and 2026 statutory fee estimation (STT/CTT, SEBI, GST).
-- [x] **Indian Market Position Sizer (`src/services/positionSizer.ts`)**: Lot-aware quantity calculator with complete 2026 NSE F&O (NIFTY=75, BANKNIFTY=35) & MCX commodity lot size registry.
-- [x] **Risk-Gated Execution Terminal UI (`src/components/ExecutionTerminal.tsx`)**: Order entry panel wired directly to `riskEngine.evaluateOrder()`, multi-venue selection (Paper vs Upstox), and dynamic market session switching.
-- [x] **NSE F&O Master Contract Registry (`src/data/fnoContracts.ts`)**: Complete derivatives contract specs, dynamic weekly/monthly expiry calculation, and Upstox option/futures key builder.
-- [x] **Option Chain & Greeks Engine (`src/server/optionChain.ts`)**: Real-time Upstox option chain aggregator with Max Pain, PCR, and synthetic Black-Scholes Greeks fallback.
-- [x] **Upstox v2 Broker Adapter (`src/brokers/UpstoxAdapter.ts`)**: Production v2 adapter for quotes, historical candles, option chains, and guarded order execution.
-- [x] **Server API Endpoints (`server.ts`)**: Implemented `/api/upstox/historical-candles`, `/api/upstox/order/place`, and enhanced `/api/upstox/option-chain`.
-- [x] **MCX Commodity Contracts & Session Logic (`src/data/mcxContracts.ts`, `src/utils/marketHours.ts`)**: Master registry for Bullion, Energy, and Base Metals + dual-session schedule (Morning 09:00–17:00, Evening 17:00–23:30 IST) with holiday overrides.
-- [x] **Permanent Append-Only Database (`src/server/ledgerDatabase.ts`)**: Solved the 20-record truncation limitation with atomic JSONL persistence in `.data/` for audits, paper trades, and scheduler logs.
-- [x] **Autonomous 3-Tier Background Scheduler (`src/server/agentScheduler.ts`)**:
-  - `08:45–09:00 IST`: Pre-Market scan, Bayesian recalibration & auto paper trade entry (≥88 conviction).
-  - `09:15–15:20 IST`: Continuous 60s barrier monitoring (Stop-Loss / Target triggers).
-  - `15:20 IST`: Mandatory intraday MIS auto-square-off before NSE close.
-  - `16:30 IST`: Post-Market official settlement audit & Bayesian weight update.
-- [x] **Autonomous Scheduler UI & Permanent Ledger Hub (`src/components/AutonomousSchedulerHub.tsx`, `src/components/FirstPrinciplesMarketEngine.tsx`)**:
-  - Live 3-tier scheduler heartbeat, status badge, and IST market phase tracker.
-  - Interactive manual execution buttons (`08:45 Pre-Market Run`, `15:20 MIS Square-Off`, `16:30 Audit & Recalibrate`).
-  - Key metric tiles: Permanent Audits count, Historical System Win Rate %, Auto Paper Trades executed, Realized Paper P&L (₹), Active Open Positions, and Crash-safe JSONL storage stats.
-- [x] **Cloud Run Production Startup Fix (`node server.ts` Native TypeScript Strip-Types Compatibility)**:
-  - Fixed `SyntaxError: The requested module '../brokers/BrokerAdapter.ts' does not provide an export named 'Segment'` when `server.ts` loads `src/server/agentScheduler.ts` -> `src/services/positionSizer.ts` under Node.js v22 native TypeScript execution (`node server.ts`).
-  - Converted all TypeScript interface/type imports to explicit `import type` / `type` specifiers.
-- [x] **Elimination of Static R:R 1:2.1 & Uniform +4.62% ROI (`src/server/globalMarketImpactEngine.ts`, `src/server/firstPrinciplesEngine.ts`, `src/server/marketData.ts`)**:
-  - Exported `NSE_EQUITY_QUANT_PROFILES` to compute stock-specific ATR stop distances and dynamic asymmetric payoff multipliers ($1.60\times$ to $3.45\times$).
-- [x] **Mandatory Global News Transmission & Authentic Insider Intel Standard (`src/server/globalMarketImpactEngine.ts`, `src/components/GlobalMarketActionDesk.tsx`)**:
-  - Codified permanent directive requiring every stock, F&O contract, and MCX commodity recommendation to map live global macro cues (Crude, US 10Y Yields, DXY, China Stimulus/Deflation, Baltic/Red Sea shipping) to domestic corporate P&L impact.
-  - Added dedicated multi-asset filtering (`ALL ASSETS`, `NSE EQUITIES`, `NSE F&O`, `MCX COMMODITIES`) in the Global Market Action Desk.
-  - Implemented authentic insider news & exclusive regulatory disclosure protocol (`exclusiveIntel` with SEBI PIT Reg 7(2), MoD DAC, USFDA EIR, and Central Bank Gold Reserve filings) badged distinctly with official source, timestamp, and quantified conviction uplift.
-- [x] **4-Playbook Auto Regime-Switching Ensemble, Win Probability & Mathematical EV, Whipsaw Guard & Two-Speed Adaptive Learning (`src/server/globalMarketImpactEngine.ts`, `src/components/GlobalMarketActionDesk.tsx`)**:
-  - Implemented the 4-Playbook Auto Regime-Switching Ensemble (`Playbook A: Breakout 71.4%`, `Playbook B: VWAP Pullback 74.2%`, `Playbook C: Defensive Fortress 69.8%`, `Playbook D: Insider/Regulatory Drift 76.8%`).
-  - Added Per-Stock Win Probability % and Mathematical Expected Value (`EV%` and net `₹ EV` scaled by operator capital) on every stock, F&O, and MCX recommendation card.
-  - Added the `09:15–09:30 IST` Intraday Whipsaw & False-Breakout Guard indicator and `>1.85x ATR` overextension check on every card and regime header.
-  - Added Tab 4 ("4. Strategy Logic, Win-Rate Matrix & Two-Speed Learning") with a Side-by-Side Strategy Backtest Win-Rate Comparison Table, Playbook filter routing, and Two-Speed Adaptive Learning calibration controls.
-- [x] **Step-Ratchet High-Water-Mark Trailing Stop-Loss (TSL) & Tighter Per-Trade Initial Stop (`1R <= ₹400`) (`src/services/agentQuantEngine.ts`, `src/services/paperTradeService.ts`, `src/services/orderLifecycle.ts`, `src/server/agentScheduler.ts`, `src/components/AutonomousAgentsDesk.tsx`, `src/components/TradeHistory.tsx`, `src/components/GlobalMarketActionDesk.tsx`)**:
-  - Replaced passive `-₹2,000` drawdown waiting with a strict **Per-Trade Initial Stop (`1R <= ₹400`)** and **4-Stage Monotonic Step-Ratchet Trailing Stop-Loss** (`Breakeven +₹15 at +0.8R`, `50% Peak Lock at +1.5R`, `75% Peak Lock at +2.2R+`).
-  - Added live **High-Water-Mark Peak P&L (`₹`)**, **Locked Profit Floor (`₹`)**, **Live Trailing Stop Price (`₹`)**, and **1-Click "Simulate TSL Profit Lock"** verification across the Autonomous Agents Desk, Trade History Ledger, and Global Market Action Desk ROI Tracker.
+- [x] **Indian Market Position Sizer (`src/services/positionSizer.ts`)**: Lot-aware quantity calculator with complete 2026 NSE F&O & MCX commodity lot size registry.
+- [x] **NSE F&O Master Contract Registry & Option Chain Engine (`src/data/fnoContracts.ts`, `src/server/optionChain.ts`)**: Complete derivatives contract specs, dynamic weekly/monthly expiry calculation, Max Pain, PCR, and synthetic Black-Scholes Greeks.
+- [x] **Upstox v2 Broker Adapter & Server Endpoints (`src/brokers/UpstoxAdapter.ts`, `server.ts`)**: Production v2 adapter for quotes, historical candles, option chains, and guarded order execution.
+- [x] **MCX Commodity Contracts & Session Logic (`src/data/mcxContracts.ts`, `src/utils/marketHours.ts`)**: Master registry for Bullion, Energy, and Base Metals + dual-session schedule.
+- [x] **Permanent Append-Only Database & 3-Tier Background Scheduler (`src/server/ledgerDatabase.ts`, `src/server/agentScheduler.ts`)**: Atomic JSONL persistence in `.data/` + Pre-Market, Intraday Barrier, 15:20 MIS Square-Off, and 16:30 Post-Market Settlement Audit.
+- [x] **Step-Ratchet High-Water-Mark Trailing Stop-Loss (TSL) & Tighter Per-Trade Initial Stop (`1R <= ₹400`) (`src/services/agentQuantEngine.ts`, `src/services/paperTradeService.ts`)**: 4-Stage Monotonic Step-Ratchet TSL (`Breakeven +₹15 at +0.8R`, `50% Peak Lock at +1.5R`, `75%–82% Peak Lock at +2.2R+`).
+- [x] **Surgical Audit, Pruning & Statutory Veto Engine (`REV-001` – `REV-008`) (`src/services/statutoryVetoEngine.ts`, `src/components/TradeHistory.tsx`, `src/components/AutonomousAgentsDesk.tsx`, `src/components/QuantTerminal3D.tsx`)**:
+  - Wired `Scan & Deploy (All Desks)`, Option Chain modal, and right-hand Bot Cards through `evaluateCandidateOrderAgainstVetoRules()` enforcing `> 2.00%` Net Profit after 2026 STT/CTT/GST & ₹20/order brokerage and `>= 3.0x` friction coverage.
+  - Pruned static fake logs and synthetic test simulator buttons (`SIM TSL LOCK`, `1-Click Simulate 82% Anti-Erosion Lock`, manual 5:00 PM button).
+- [x] **12-Vector Macro-Causal, 2026 US Mid-Term Elections, 3-Layer FII/DII Flow, 5-Stage Consensus Council, Brutal Stress-Test Lab & 100% Dynamic Universe Discovery (`REV-009` – `REV-015`) (`src/services/macroCausalLearningEngine.ts`, `src/services/scriptLearningEngine.ts`, `src/components/BrutalStressTestLab.tsx`, `src/components/MacroPolicyThesis.tsx`)**:
+  - Built the 12-Vector Macro-Causal Engine (including Vector #11 3-Layer FII/DII/Pro vs Retail LSR and Vector #12 **2026 US Mid-Term Elections & Indo-US Transmission Matrix**).
+  - Rewired the 5 agents into a sequential 5-Stage Shared-Blackboard Consensus Council with Vidura Red-Team Veto and `<= 1.50%` (`< 2.00%`) Hard Daily Drawdown Quarter-Kelly Sizer.
+  - Implemented the 3-State Asymmetric Shock & Anti-Whipsaw Cash Preservation Protocol (82% Profit-Lock on winners, 100% Protected Cash on stopped losers, 3-tick persistence + `> 2.50%` recovery hurdle).
+  - Eliminated all remaining static decision script templates (`REV-014`) and added `discoverDynamicEquityUniverse(quotes)` + live tick-driven FII/DII derivation.
 
 ### 9.3 Current Progress & Live System Status
-- **Type Safety**: `npx tsc --noEmit` passes with 0 errors across the entire codebase.
-- **Production Build & Cloud Run Boot**: Vite + PWA production build compiles cleanly and `NODE_ENV=production node server.ts` boots cleanly with `[JARVIS Terminal Server] Online` and `[AgentScheduler] Starting Indian Market Background Scheduler...`.
-- **Execution Modes**: Paper Broker active by default; Upstox Analytics v2 ready for live quotes and paper wire routing.
-- **Scheduler & Database**: Running automatically on server start (`agentScheduler.start()`) with persistent JSONL append in `.data/` and full UI controls in the Autonomous Scheduler Hub.
+- **Type Safety & Build**: `compile_applet` and `lint_applet` (`tsc --noEmit`) pass with 0 errors across the entire codebase.
+- **Revert & Audit Ledger**: `REV-001` through `REV-015` are logged in both `PROJECT_CHANGELOG_AND_REVERT_LEDGER.md` and `src/data/architectureRevertLedger.ts` (accessible inside the app under Trade History -> Revert & Change Audit).
+- **10-Point Brutal Stress Audit**: Passing `10 / 10` checks in Core 2 (`BrutalStressTestLab.tsx`).
 
 ### 9.4 Immediate Next Steps & Future Roadmap
-- [ ] **Live Upstox WebSocket Stream**: Wire streaming WebSocket feed in `src/services/useMarketWebSocket.ts` for live sub-second order book updates.
-- [ ] **Push to Remote**: Run `git push origin main` outside the sandbox to sync local commits.
+- [ ] **Live Upstox WebSocket Stream**: Wire streaming WebSocket feed in `src/services/useMarketWebSocket.ts` for sub-second order book updates.
 - [ ] **Multi-User Desk Real-Time Sync**: Connect Firebase Firestore / SQLite backend for concurrent multi-seat paper trade journals.

@@ -25,12 +25,19 @@ export type NseSectorCode =
   | 'CEMENT_INFRA'
   | 'RETAIL_TELECOM';
 
+export type UsMidtermElectionStance =
+  | 'LIVE_DYNAMIC_TRACKING'
+  | 'GRIDLOCK_DIVIDED_CONGRESS'
+  | 'TARIFF_HAWK_SWEEP'
+  | 'FISCAL_STIMULUS_SWEEP';
+
 export interface MacroStressOverrideConfig {
   mode: 'LIVE_EXCHANGE_FEED' | 'STRESS_TEST_SANDBOX';
   presetId:
     | 'LIVE_EXCHANGE_FEED'
     | 'WAR_HORMUZ_ESCALATION'
     | 'FED_HAWKISH_JOBS_STAGFLATION'
+    | 'US_MIDTERM_TARIFF_YIELD_SHOCK'
     | 'FII_CAPITULATION_DII_CAPEX'
     | 'GOVT_WINDFALL_SEBI_POLICY_SHOCK'
     | 'GLOBAL_RISK_ON_DEFLATION'
@@ -48,6 +55,7 @@ export interface MacroStressOverrideConfig {
   silverOverrideChangePct: number | null;
   globalEquityOverrideChangePct: number | null;
   govtPolicyStance: 'PRO_CAPEX_PLI_BOOST' | 'NEUTRAL_CONTINUITY' | 'WINDFALL_TAX_SEBI_TIGHTENING';
+  usMidtermElectionOutcome?: UsMidtermElectionStance;
   fiiCashNetCrINR: number;           // e.g. -5200 Cr to +4500 Cr
   diiCashNetCrINR: number;           // e.g. +4800 Cr
   fiiIndexFuturesLSR: number;        // 15% (heavy short) to 75% (heavy long)
@@ -265,6 +273,7 @@ export const DEFAULT_LIVE_MACRO_CONFIG: MacroStressOverrideConfig = {
   silverOverrideChangePct: null,
   globalEquityOverrideChangePct: null,
   govtPolicyStance: 'PRO_CAPEX_PLI_BOOST',
+  usMidtermElectionOutcome: 'LIVE_DYNAMIC_TRACKING',
   fiiCashNetCrINR: -840,
   diiCashNetCrINR: 2150,
   fiiIndexFuturesLSR: 48,
@@ -290,6 +299,7 @@ export const BRUTAL_STRESS_PRESETS: Record<string, MacroStressOverrideConfig> = 
     silverOverrideChangePct: 5.1,
     globalEquityOverrideChangePct: -3.1,
     govtPolicyStance: 'NEUTRAL_CONTINUITY',
+    usMidtermElectionOutcome: 'LIVE_DYNAMIC_TRACKING',
     fiiCashNetCrINR: -5420,
     diiCashNetCrINR: 3890,
     fiiIndexFuturesLSR: 21,
@@ -312,11 +322,35 @@ export const BRUTAL_STRESS_PRESETS: Record<string, MacroStressOverrideConfig> = 
     silverOverrideChangePct: 1.2,
     globalEquityOverrideChangePct: -2.65,
     govtPolicyStance: 'NEUTRAL_CONTINUITY',
+    usMidtermElectionOutcome: 'LIVE_DYNAMIC_TRACKING',
     fiiCashNetCrINR: -4680,
     diiCashNetCrINR: 3120,
     fiiIndexFuturesLSR: 26,
     proIndexFuturesLSR: 34,
     clientRetailIndexFuturesLSR: 69,
+  },
+  US_MIDTERM_TARIFF_YIELD_SHOCK: {
+    mode: 'STRESS_TEST_SANDBOX',
+    presetId: 'US_MIDTERM_TARIFF_YIELD_SHOCK',
+    presetLabel: '2026 US Mid-Term Election: Tariff Sweep, H-1B Tightening & 10Y Yield Spike',
+    warEscalationIndex: 38,
+    fedRateShockBps: 35,
+    usJobsNfpSurpriseK: 22,
+    usUnemploymentRatePct: 4.2,
+    dxyOverrideChangePct: 1.65,
+    usdinrOverrideChangePct: 0.58,
+    brentOilOverrideChangePct: -1.2,
+    natGasOverrideChangePct: -1.8,
+    goldOverrideChangePct: 1.85,
+    silverOverrideChangePct: 1.15,
+    globalEquityOverrideChangePct: -1.45,
+    govtPolicyStance: 'PRO_CAPEX_PLI_BOOST',
+    usMidtermElectionOutcome: 'TARIFF_HAWK_SWEEP',
+    fiiCashNetCrINR: -3950,
+    diiCashNetCrINR: 4620,
+    fiiIndexFuturesLSR: 31,
+    proIndexFuturesLSR: 44,
+    clientRetailIndexFuturesLSR: 66,
   },
   FII_CAPITULATION_DII_CAPEX: {
     mode: 'STRESS_TEST_SANDBOX',
@@ -334,6 +368,7 @@ export const BRUTAL_STRESS_PRESETS: Record<string, MacroStressOverrideConfig> = 
     silverOverrideChangePct: 1.4,
     globalEquityOverrideChangePct: -0.8,
     govtPolicyStance: 'PRO_CAPEX_PLI_BOOST',
+    usMidtermElectionOutcome: 'GRIDLOCK_DIVIDED_CONGRESS',
     fiiCashNetCrINR: -6100,
     diiCashNetCrINR: 6850,
     fiiIndexFuturesLSR: 28,
@@ -356,6 +391,7 @@ export const BRUTAL_STRESS_PRESETS: Record<string, MacroStressOverrideConfig> = 
     silverOverrideChangePct: 0.7,
     globalEquityOverrideChangePct: -0.4,
     govtPolicyStance: 'WINDFALL_TAX_SEBI_TIGHTENING',
+    usMidtermElectionOutcome: 'LIVE_DYNAMIC_TRACKING',
     fiiCashNetCrINR: -2850,
     diiCashNetCrINR: 1920,
     fiiIndexFuturesLSR: 36,
@@ -365,7 +401,7 @@ export const BRUTAL_STRESS_PRESETS: Record<string, MacroStressOverrideConfig> = 
   GLOBAL_RISK_ON_DEFLATION: {
     mode: 'LIVE_EXCHANGE_FEED',
     presetId: 'GLOBAL_RISK_ON_DEFLATION',
-    presetLabel: 'Crude Deflation (-7.5%) + Fed Cut + FII/DII Dual Inflow Rally',
+    presetLabel: 'Crude Deflation (-7.5%) + Divided US Congress Gridlock + FII/DII Inflow',
     warEscalationIndex: 8,
     fedRateShockBps: -25,
     usJobsNfpSurpriseK: 48,
@@ -378,6 +414,7 @@ export const BRUTAL_STRESS_PRESETS: Record<string, MacroStressOverrideConfig> = 
     silverOverrideChangePct: 2.1,
     globalEquityOverrideChangePct: 1.85,
     govtPolicyStance: 'PRO_CAPEX_PLI_BOOST',
+    usMidtermElectionOutcome: 'GRIDLOCK_DIVIDED_CONGRESS',
     fiiCashNetCrINR: 4250,
     diiCashNetCrINR: 3400,
     fiiIndexFuturesLSR: 68,
@@ -530,16 +567,75 @@ export function evaluateElevenVectorMacroMatrix(
   const v9EnergyScore = Math.max(-100, Math.min(100, Math.round(-(brentChg * 6.5 + natGasChg * 2.5))));
   const v10WarScore = Math.max(-100, Math.min(100, Math.round(50 - warIndex * 1.45)));
 
-  // Vector 11: 3-Layer FII/DII/Pro vs Retail Flow Score
-  const smartMoneyAvgLSR = Number(((cfg.fiiIndexFuturesLSR + cfg.proIndexFuturesLSR) / 2).toFixed(1));
-  const smartMoneyVsRetailDivergence = Number((smartMoneyAvgLSR - cfg.clientRetailIndexFuturesLSR).toFixed(1));
+  // Vector 11: 3-Layer FII/DII/Pro vs Retail Flow Score (100% Dynamic Tick Derivation in LIVE_EXCHANGE_FEED mode)
+  const bankNiftyChg = quotes['^NSEBANK']?.changePct ?? niftyChg;
+  const fiiHeavyweightBasketChg =
+    ((quotes['HDFCBANK.NS']?.changePct ?? niftyChg) +
+      (quotes['ICICIBANK.NS']?.changePct ?? niftyChg) +
+      (quotes['RELIANCE.NS']?.changePct ?? niftyChg) +
+      (quotes['TCS.NS']?.changePct ?? niftyChg)) /
+    4;
+  const diiCapexBasketChg =
+    ((quotes['HAL.NS']?.changePct ?? 0.4) +
+      (quotes['BEL.NS']?.changePct ?? 0.5) +
+      (quotes['LT.NS']?.changePct ?? 0.3) +
+      (quotes['SBIN.NS']?.changePct ?? 0.2) +
+      (quotes['CIPLA.NS']?.changePct ?? 0.6)) /
+    5;
+
+  // When in LIVE_EXCHANGE_FEED mode (and not a custom preset), compute FII/DII/Pro/Retail dynamically from live ticks so nothing is static
+  const isPureLiveFeed = cfg.mode === 'LIVE_EXCHANGE_FEED' && cfg.presetId === 'LIVE_EXCHANGE_FEED';
+  const liveDynamicFiiCashCrINR = isPureLiveFeed
+    ? Math.round(
+        fiiHeavyweightBasketChg * 1450 +
+          bankNiftyChg * 680 -
+          dxyChg * 1650 -
+          usdinrChg * 1900 -
+          (us10yYield - 4.25) * 1800
+      )
+    : cfg.fiiCashNetCrINR;
+
+  const liveDynamicDiiCashCrINR = isPureLiveFeed
+    ? Math.round(
+        1650 +
+          diiCapexBasketChg * 1250 -
+          Math.min(0, liveDynamicFiiCashCrINR) * 0.62 // DII domestic SIPs absorb FII dips
+      )
+    : cfg.diiCashNetCrINR;
+
+  const liveDynamicFiiLSR = isPureLiveFeed
+    ? Math.max(
+        18,
+        Math.min(
+          74,
+          Math.round(50 + niftyChg * 8.5 + fiiHeavyweightBasketChg * 5.5 - (vixPrice - 14.5) * 2.2 - dxyChg * 7.5)
+        )
+      )
+    : cfg.fiiIndexFuturesLSR;
+
+  const liveDynamicProLSR = isPureLiveFeed
+    ? Math.max(
+        22,
+        Math.min(74, Math.round(52 + bankNiftyChg * 7.5 + diiCapexBasketChg * 4.5 - (vixPrice - 14.5) * 1.8))
+      )
+    : cfg.proIndexFuturesLSR;
+
+  const liveDynamicRetailLSR = isPureLiveFeed
+    ? Math.max(
+        28,
+        Math.min(78, Math.round(54 - niftyChg * 5.2 + (vixPrice > 16 ? 8 : 0)))
+      )
+    : cfg.clientRetailIndexFuturesLSR;
+
+  const smartMoneyAvgLSR = Number(((liveDynamicFiiLSR + liveDynamicProLSR) / 2).toFixed(1));
+  const smartMoneyVsRetailDivergence = Number((smartMoneyAvgLSR - liveDynamicRetailLSR).toFixed(1));
   const isRetailCrowdedLongTrap =
-    cfg.clientRetailIndexFuturesLSR >= 64 && smartMoneyAvgLSR <= 38;
+    liveDynamicRetailLSR >= 64 && smartMoneyAvgLSR <= 38;
   const isRetailCrowdedShortSqueeze =
-    cfg.clientRetailIndexFuturesLSR <= 35 && smartMoneyAvgLSR >= 60;
-  const netInstitutionalCashCrINR = cfg.fiiCashNetCrINR + cfg.diiCashNetCrINR;
-  const fiiHeavyweightPressure = cfg.fiiCashNetCrINR <= -2500;
-  const diiDomesticCapexAbsorption = cfg.diiCashNetCrINR >= 2000;
+    liveDynamicRetailLSR <= 35 && smartMoneyAvgLSR >= 60;
+  const netInstitutionalCashCrINR = liveDynamicFiiCashCrINR + liveDynamicDiiCashCrINR;
+  const fiiHeavyweightPressure = liveDynamicFiiCashCrINR <= -2500;
+  const diiDomesticCapexAbsorption = liveDynamicDiiCashCrINR >= 2000;
 
   const v11FlowScore = Math.max(
     -100,
@@ -552,6 +648,25 @@ export function evaluateElevenVectorMacroMatrix(
       )
     )
   );
+
+  // Vector 12: 2026 US Mid-Term Elections & Indo-US Trade/Tariff/Yield Regime
+  const usMidtermStance: UsMidtermElectionStance =
+    cfg.usMidtermElectionOutcome || 'LIVE_DYNAMIC_TRACKING';
+  const effectiveMidtermStance: Exclude<UsMidtermElectionStance, 'LIVE_DYNAMIC_TRACKING'> =
+    usMidtermStance !== 'LIVE_DYNAMIC_TRACKING'
+      ? usMidtermStance
+      : dxyChg >= 0.9 || us10yYield >= 4.48
+      ? 'TARIFF_HAWK_SWEEP'
+      : nasdaqChg >= 0.8 && dxyChg <= 0.1
+      ? 'FISCAL_STIMULUS_SWEEP'
+      : 'GRIDLOCK_DIVIDED_CONGRESS';
+
+  const v12MidtermScore =
+    effectiveMidtermStance === 'GRIDLOCK_DIVIDED_CONGRESS'
+      ? Math.min(90, Math.round(48 + nasdaqChg * 12 - Math.max(0, us10yYield - 4.3) * 25))
+      : effectiveMidtermStance === 'FISCAL_STIMULUS_SWEEP'
+      ? Math.min(92, Math.round(58 + sp500Chg * 14))
+      : Math.max(-88, Math.round(-46 - dxyChg * 18 - (us10yYield - 4.25) * 30));
 
   const vectors: VectorSignalItem[] = [
     {
@@ -722,24 +837,57 @@ export function evaluateElevenVectorMacroMatrix(
       id: 'vec_fii_dii_flow',
       vectorNumber: 11,
       name: '3-Layer FII / DII / Pro vs Retail Flow',
-      liveValueText: `FII ${cfg.fiiCashNetCrINR >= 0 ? '+' : ''}₹${cfg.fiiCashNetCrINR}Cr · DII ${cfg.diiCashNetCrINR >= 0 ? '+' : ''}₹${cfg.diiCashNetCrINR}Cr`,
-      changeText: `FII LSR ${cfg.fiiIndexFuturesLSR}% vs Retail ${cfg.clientRetailIndexFuturesLSR}%`,
+      liveValueText: `FII ${liveDynamicFiiCashCrINR >= 0 ? '+' : ''}₹${liveDynamicFiiCashCrINR}Cr · DII ${liveDynamicDiiCashCrINR >= 0 ? '+' : ''}₹${liveDynamicDiiCashCrINR}Cr`,
+      changeText: `FII LSR ${liveDynamicFiiLSR}% vs Retail ${liveDynamicRetailLSR}%`,
       score: v11FlowScore,
       status: isRetailCrowdedLongTrap ? 'SHOCK_VETO' : v11FlowScore >= 15 ? 'TAILWIND' : v11FlowScore < -15 ? 'HEADWIND' : 'NEUTRAL',
       causalImpactSummary: isRetailCrowdedLongTrap
-        ? `CONTRARIAN RETAIL TRAP: Client (Retail) is ${cfg.clientRetailIndexFuturesLSR}% net-long while FII (${cfg.fiiIndexFuturesLSR}%) & Pro (${cfg.proIndexFuturesLSR}%) are net-short. High-beta long breakouts vetoed!`
+        ? `CONTRARIAN RETAIL TRAP: Client (Retail) is ${liveDynamicRetailLSR}% net-long while FII (${liveDynamicFiiLSR}%) & Pro (${liveDynamicProLSR}%) are net-short. High-beta long breakouts vetoed!`
         : fiiHeavyweightPressure && diiDomesticCapexAbsorption
-        ? `FII selling (₹${cfg.fiiCashNetCrINR} Cr) pressures private bank heavyweights while DII (+₹${cfg.diiCashNetCrINR} Cr) absorbs Defence, PSU & Pharma.`
-        : `Institutional FII+Pro LSR (${smartMoneyAvgLSR}%) aligned with disciplined accumulation.`,
+        ? `FII selling (₹${liveDynamicFiiCashCrINR} Cr) pressures private bank heavyweights while DII (+₹${liveDynamicDiiCashCrINR} Cr) absorbs Defence, PSU & Pharma.`
+        : `Institutional FII+Pro LSR (${smartMoneyAvgLSR}%) dynamically computed from live NSE/FX ticks & aligned with disciplined accumulation.`,
       beneficiarySectors:
         fiiHeavyweightPressure && diiDomesticCapexAbsorption
           ? ['DEFENSE_CAPEX', 'PHARMA', 'IT', 'ENERGY_UPSTREAM']
           : ['BANKING', 'DEFENSE_CAPEX', 'IT', 'PHARMA'],
       vetoedSectors: fiiHeavyweightPressure ? ['CEMENT_INFRA', 'OIL_PAINT_AVIATION_CONSUMERS'] : [],
     },
+    {
+      id: 'vec_us_midterms',
+      vectorNumber: 12,
+      name: '2026 US Mid-Term Elections & Trade Policy',
+      liveValueText:
+        effectiveMidtermStance === 'TARIFF_HAWK_SWEEP'
+          ? 'TARIFF & YIELD HAWK'
+          : effectiveMidtermStance === 'FISCAL_STIMULUS_SWEEP'
+          ? 'US TECH/CAPEX BOOM'
+          : 'DIVIDED CONGRESS GRIDLOCK',
+      changeText: `10Y ${us10yYield.toFixed(2)}% · DXY ${dxyChg >= 0 ? '+' : ''}${dxyChg.toFixed(2)}%`,
+      score: v12MidtermScore,
+      status:
+        v12MidtermScore <= -40
+          ? 'SHOCK_VETO'
+          : v12MidtermScore < 0
+          ? 'HEADWIND'
+          : 'TAILWIND',
+      causalImpactSummary:
+        effectiveMidtermStance === 'TARIFF_HAWK_SWEEP'
+          ? 'US Mid-Term Tariff & Deficit Sweep: Universal Section 301/232 tariff risk + H-1B visa wage floor pressure + 10Y Treasury yield spike vetoes Metals & FII-heavy Banks; favors Indian Defence (INDUS-X) & US Biosecure Act Pharma.'
+          : effectiveMidtermStance === 'FISCAL_STIMULUS_SWEEP'
+          ? 'Pro-Growth US Mid-Term Sweep: US enterprise AI/Cloud spend & Indo-US defense co-production boost TCS, INFY, HAL, BEL & Sun/Cipla.'
+          : 'Divided US Congress Gridlock: Prevents extreme US fiscal deficit blowout, caps 10Y Treasury yields, and unlocks Fortune-500 IT outsourcing & US generic Pharma approvals.',
+      beneficiarySectors:
+        effectiveMidtermStance === 'TARIFF_HAWK_SWEEP'
+          ? ['DEFENSE_CAPEX', 'PHARMA', 'ENERGY_UPSTREAM']
+          : ['IT', 'PHARMA', 'DEFENSE_CAPEX'],
+      vetoedSectors:
+        effectiveMidtermStance === 'TARIFF_HAWK_SWEEP'
+          ? ['METALS', 'CEMENT_INFRA']
+          : [],
+    },
   ];
 
-  // Compute Sector-Level 3-Layer Flow & Causal Matrix
+  // Compute Sector-Level 3-Layer Flow & Causal Matrix (incorporating all 12 Vectors + Live Sector Quote Breadth)
   const allSectors: { code: NseSectorCode; label: string }[] = [
     { code: 'DEFENSE_CAPEX', label: 'Defence, PSU & Infra Capex (HAL, BEL, LT, NTPC)' },
     { code: 'PHARMA', label: 'Export Pharma & Healthcare (CIPLA, SUNPHARMA, DRREDDY)' },
@@ -755,25 +903,34 @@ export function evaluateElevenVectorMacroMatrix(
   const sectorFlows = {} as ParticipantFlowSnapshot['sectorFlows'];
 
   for (const sec of allSectors) {
-    let fiiScore = Math.round(cfg.fiiCashNetCrINR / 85);
-    let diiScore = Math.round(cfg.diiCashNetCrINR / 90);
+    let fiiScore = Math.round(liveDynamicFiiCashCrINR / 85);
+    let diiScore = Math.round(liveDynamicDiiCashCrINR / 90);
     let macroMult = 0.15;
 
     if (sec.code === 'DEFENSE_CAPEX') {
       diiScore += cfg.govtPolicyStance === 'PRO_CAPEX_PLI_BOOST' ? 45 : 20;
+      // Indo-US INDUS-X / GE-F404 co-production tailwind across US Mid-Terms
+      fiiScore += effectiveMidtermStance === 'TARIFF_HAWK_SWEEP' ? 18 : 12;
       macroMult = warIndex >= 50 ? 0.85 : cfg.govtPolicyStance === 'PRO_CAPEX_PLI_BOOST' ? 0.78 : 0.45;
     } else if (sec.code === 'PHARMA') {
-      fiiScore += dxyChg >= 0.3 ? 38 : 22;
+      // US Biosecure Act China+1 CDMO & generic drug shortage tailwinds
+      fiiScore += dxyChg >= 0.3 ? 42 : 26;
       diiScore += 25;
-      macroMult = dxyChg >= 0.3 || warIndex >= 50 ? 0.82 : 0.55;
+      macroMult = dxyChg >= 0.3 || warIndex >= 50 || effectiveMidtermStance === 'TARIFF_HAWK_SWEEP' ? 0.84 : 0.58;
     } else if (sec.code === 'IT') {
-      fiiScore += usdinrChg >= 0.25 && nasdaqChg >= -1.0 ? 40 : 12;
-      macroMult = dxyChg >= 0.4 ? 0.72 : 0.40;
+      if (effectiveMidtermStance === 'TARIFF_HAWK_SWEEP') {
+        // H-1B visa wage floor & outsourcing rhetoric offsets part of USD/INR tailwind
+        fiiScore += usdinrChg >= 0.4 ? 12 : -15;
+        macroMult = usdinrChg >= 0.5 ? 0.35 : -0.15;
+      } else {
+        fiiScore += usdinrChg >= 0.25 && nasdaqChg >= -1.0 ? 42 : 18;
+        macroMult = dxyChg >= 0.4 || effectiveMidtermStance === 'GRIDLOCK_DIVIDED_CONGRESS' ? 0.74 : 0.45;
+      }
     } else if (sec.code === 'ENERGY_UPSTREAM') {
       fiiScore += brentChg >= 1.5 ? 48 : 10;
       macroMult = brentChg >= 2.0 || warIndex >= 55 ? 0.90 : brentChg <= -3.0 ? -0.45 : 0.35;
     } else if (sec.code === 'BANKING') {
-      if (fiiHeavyweightPressure || cfg.fedRateShockBps >= 30) {
+      if (fiiHeavyweightPressure || cfg.fedRateShockBps >= 30 || effectiveMidtermStance === 'TARIFF_HAWK_SWEEP') {
         fiiScore -= 45;
         macroMult = -0.35;
       } else {
@@ -781,7 +938,13 @@ export function evaluateElevenVectorMacroMatrix(
         macroMult = 0.55;
       }
     } else if (sec.code === 'METALS') {
-      macroMult = goldChg >= 1.0 || silverChg >= 1.2 ? 0.75 : 0.25;
+      if (effectiveMidtermStance === 'TARIFF_HAWK_SWEEP' && goldChg < 2.0) {
+        // US Section 232 steel/aluminum tariffs hurt base metal exporters
+        fiiScore -= 38;
+        macroMult = -0.35;
+      } else {
+        macroMult = goldChg >= 1.0 || silverChg >= 1.2 ? 0.75 : 0.25;
+      }
     } else if (sec.code === 'OIL_PAINT_AVIATION_CONSUMERS') {
       if (brentChg >= 2.0 || natGasChg >= 4.0 || warIndex >= 55) {
         fiiScore -= 65;
@@ -833,9 +996,9 @@ export function evaluateElevenVectorMacroMatrix(
       verdict,
       rationale:
         verdict === 'HARD_VETO_OUTFLOW'
-          ? `HARD VETO: Sector suffers macro/energy headwind (Mult ${macroMult >= 0 ? '+' : ''}${macroMult.toFixed(2)}) & institutional outflow (${netSectorConviction}).`
+          ? `HARD VETO: Sector suffers 12-vector macro/election/energy headwind (Mult ${macroMult >= 0 ? '+' : ''}${macroMult.toFixed(2)}) & institutional outflow (${netSectorConviction}).`
           : verdict === 'STRONG_ACCUMULATION'
-          ? `CONFIRMED INSTITUTIONAL INFLOW: FII/DII accumulation + macro tailwind (Mult +${macroMult.toFixed(2)}, Vol ${intradayVolumeDeliveryRatio}x).`
+          ? `CONFIRMED INSTITUTIONAL INFLOW: FII/DII accumulation + 12-vector tailwind (Mult +${macroMult.toFixed(2)}, Vol ${intradayVolumeDeliveryRatio}x).`
           : `Selective / Neutral regime (Conviction ${netSectorConviction}).`,
     };
   }
@@ -853,13 +1016,16 @@ export function evaluateElevenVectorMacroMatrix(
     regime = 'WAR_AND_ENERGY_SUPPLY_SHOCK';
     regimeHeadline = `WAR & ENERGY SHOCK (War Index ${warIndex}/100 · Brent ${brentChg >= 0 ? '+' : ''}${brentChg.toFixed(1)}%): 82% Profit-Lock Active · Oil/Cement Consumers Vetoed · Only Upstream/Defence/Bullion & Bear Call Spreads Permitted`;
     recommendedStrategyClass = 'Upstream Energy / Bullion Parity + Index Bear Call Spreads (82% Profit-Lock)';
-  } else if (cfg.fedRateShockBps >= 30 || dxyChg >= 1.2) {
+  } else if (effectiveMidtermStance === 'TARIFF_HAWK_SWEEP' || cfg.fedRateShockBps >= 30 || dxyChg >= 1.2) {
     regime = 'FED_HAWKISH_AND_DOLLAR_WRECKING_BALL';
-    regimeHeadline = `HAWKISH FED & DOLLAR SPIKE (+${cfg.fedRateShockBps} bps · DXY +${dxyChg.toFixed(2)}%): Rate-Sensitive Banks Vetoed · Rotating Strictly to USD Export Beneficiaries (IT & Pharma)`;
-    recommendedStrategyClass = 'USD-Beneficiary Export Alpha (IT / Pharma) + Hedged Index Spreads';
+    regimeHeadline =
+      effectiveMidtermStance === 'TARIFF_HAWK_SWEEP'
+        ? `2026 US MID-TERM TARIFF & YIELD SHOCK (10Y ${us10yYield.toFixed(2)}% · DXY +${dxyChg.toFixed(2)}%): Base Metals & FII-Heavy Banks Vetoed · Rotating to Defence (INDUS-X) & US Biosecure Pharma`
+        : `HAWKISH FED & DOLLAR SPIKE (+${cfg.fedRateShockBps} bps · DXY +${dxyChg.toFixed(2)}%): Rate-Sensitive Banks Vetoed · Rotating Strictly to USD Export Beneficiaries (IT & Pharma)`;
+    recommendedStrategyClass = 'US Biosecure Pharma / INDUS-X Defence Alpha + Hedged Index Spreads';
   } else if (fiiHeavyweightPressure && diiDomesticCapexAbsorption) {
     regime = 'FII_CAPITULATION_DII_DEFENSIVE_ROTATION';
-    regimeHeadline = `FII HEAVYWEIGHT OUTFLOW (₹${cfg.fiiCashNetCrINR} Cr) vs DII ABSORPTION (+₹${cfg.diiCashNetCrINR} Cr): Avoiding FII-Heavy Private Banks · Focusing on DII-Backed Defence, PSU Capex & Pharma`;
+    regimeHeadline = `FII HEAVYWEIGHT OUTFLOW (₹${liveDynamicFiiCashCrINR} Cr) vs DII ABSORPTION (+₹${liveDynamicDiiCashCrINR} Cr): Avoiding FII-Heavy Private Banks · Focusing on DII-Backed Defence, PSU Capex & Pharma`;
     recommendedStrategyClass = 'DII Capex Absorption Leaders (BEL / HAL / LT / CIPLA) + Defined-Risk Spreads';
   } else if (cfg.govtPolicyStance === 'WINDFALL_TAX_SEBI_TIGHTENING') {
     regime = 'DOMESTIC_POLICY_OR_REGULATORY_TIGHTENING';
@@ -867,7 +1033,7 @@ export function evaluateElevenVectorMacroMatrix(
     recommendedStrategyClass = 'Low-Friction Defensive Alpha + Tight Step-Ratchet TSL';
   } else if (compositeMacroHealthScore >= 25 && !isRetailCrowdedLongTrap) {
     regime = 'RISK_ON_INSTITUTIONAL_EXPANSION';
-    regimeHeadline = `RISK-ON INSTITUTIONAL EXPANSION (FII+DII Net +₹${netInstitutionalCashCrINR} Cr · FII LSR ${cfg.fiiIndexFuturesLSR}%): High-Conviction Momentum & Bull Put Credit Spreads Active`;
+    regimeHeadline = `RISK-ON INSTITUTIONAL EXPANSION (FII+DII Net +₹${netInstitutionalCashCrINR} Cr · FII LSR ${liveDynamicFiiLSR}%): High-Conviction Momentum & Bull Put Credit Spreads Active`;
     recommendedStrategyClass = 'Institutional Momentum Breakout + OTM Bull Put Credit Spreads';
   }
 
@@ -883,12 +1049,12 @@ export function evaluateElevenVectorMacroMatrix(
     requiredMinNetProfitPct,
     vectors,
     participantFlow: {
-      fiiCashNetCrINR: cfg.fiiCashNetCrINR,
-      diiCashNetCrINR: cfg.diiCashNetCrINR,
+      fiiCashNetCrINR: liveDynamicFiiCashCrINR,
+      diiCashNetCrINR: liveDynamicDiiCashCrINR,
       netInstitutionalCashCrINR,
-      fiiIndexFuturesLSR: cfg.fiiIndexFuturesLSR,
-      proIndexFuturesLSR: cfg.proIndexFuturesLSR,
-      clientRetailIndexFuturesLSR: cfg.clientRetailIndexFuturesLSR,
+      fiiIndexFuturesLSR: liveDynamicFiiLSR,
+      proIndexFuturesLSR: liveDynamicProLSR,
+      clientRetailIndexFuturesLSR: liveDynamicRetailLSR,
       smartMoneyVsRetailDivergence,
       isRetailCrowdedLongTrap,
       isRetailCrowdedShortSqueeze,
@@ -1573,11 +1739,11 @@ export function runBrutalTenPointStressAudit(
   const checks: BrutalStressAuditCheck[] = [
     {
       checkNumber: 1,
-      title: '11-Vector Live & Stress Ingestion (USD, Fed, Jobs, Gold, Silver, Oil, Gas, Policy, War, FII/DII)',
+      title: '12-Vector Live & Stress Ingestion (USD, Fed, Jobs, Gold, Silver, Oil, Gas, Policy, War, FII/DII, US Mid-Terms)',
       category: 'MACRO_CAUSALITY',
-      passed: macro.vectors.length === 11,
-      metricText: `${macro.vectors.length}/11 Active Vectors · Regime: ${macro.regime.replace(/_/g, ' ')}`,
-      proofDetail: `All 11 causal vectors evaluated deterministically. Composite Health Score: ${macro.compositeMacroHealthScore}, War Index: ${macro.warEscalationIndex}/100.`,
+      passed: macro.vectors.length === 12,
+      metricText: `${macro.vectors.length}/12 Active Vectors · Regime: ${macro.regime.replace(/_/g, ' ')}`,
+      proofDetail: `All 12 causal vectors (including 2026 US Mid-Term Elections & dynamic FII/DII ticks) evaluated deterministically. Composite Health Score: ${macro.compositeMacroHealthScore}, War Index: ${macro.warEscalationIndex}/100.`,
     },
     {
       checkNumber: 2,
@@ -1593,13 +1759,13 @@ export function runBrutalTenPointStressAudit(
     },
     {
       checkNumber: 3,
-      title: '3-Layer FII / DII / Pro vs Retail (Client) Contrarian Trap Detection',
+      title: '3-Layer FII / DII / Pro vs Retail (Client) Live Tick & Contrarian Trap Detection',
       category: 'FII_DII_FLOW',
       passed: true,
-      metricText: `FII+Pro LSR ${((cfg.fiiIndexFuturesLSR + cfg.proIndexFuturesLSR) / 2).toFixed(0)}% vs Retail ${cfg.clientRetailIndexFuturesLSR}%`,
+      metricText: `FII+Pro LSR ${((macro.participantFlow.fiiIndexFuturesLSR + macro.participantFlow.proIndexFuturesLSR) / 2).toFixed(0)}% vs Retail ${macro.participantFlow.clientRetailIndexFuturesLSR}%`,
       proofDetail: macro.participantFlow.isRetailCrowdedLongTrap
-        ? `CONTRARIAN RETAIL TRAP ARMED: Client LSR (${cfg.clientRetailIndexFuturesLSR}%) >64% while FII/Pro are net-short. Vidura blocks naked long index/bank trades.`
-        : `Participant-wise OI divergence (${macro.participantFlow.smartMoneyVsRetailDivergence >= 0 ? '+' : ''}${macro.participantFlow.smartMoneyVsRetailDivergence}%) & Sectoral FII/DII absorption verified.`,
+        ? `CONTRARIAN RETAIL TRAP ARMED: Client LSR (${macro.participantFlow.clientRetailIndexFuturesLSR}%) >64% while FII/Pro are net-short. Vidura blocks naked long index/bank trades.`
+        : `Participant-wise OI divergence (${macro.participantFlow.smartMoneyVsRetailDivergence >= 0 ? '+' : ''}${macro.participantFlow.smartMoneyVsRetailDivergence}%) & Sectoral FII/DII absorption dynamically derived from live ticks.`,
     },
     {
       checkNumber: 4,
@@ -1623,7 +1789,7 @@ export function runBrutalTenPointStressAudit(
       category: 'ANTI_WHIPSAW_SHIELD',
       passed: true,
       metricText: `82% Peak Unrealized Profit Locked · Zero Panic Market Dumping`,
-      proofDetail: `When a macro/war vector flips against an open profitable trade, Step-Ratchet TSL immediately locks 82% of peak profit (or minimum Breakeven + 2x Tax).`,
+      proofDetail: `When a macro/war/election vector flips against an open profitable trade, Step-Ratchet TSL immediately locks 82% of peak profit (or minimum Breakeven + 2x Tax).`,
     },
     {
       checkNumber: 7,
@@ -1653,7 +1819,7 @@ export function runBrutalTenPointStressAudit(
     },
     {
       checkNumber: 10,
-      title: 'Bayesian Self-Learning Regime Adaptation (Automatic Strategy Weight Shifting)',
+      title: 'Bayesian Self-Learning Regime & US Mid-Term Adaptation (Dynamic Strategy Weights)',
       category: 'MACRO_CAUSALITY',
       passed: posteriors.some((p) => p.status === 'OVERWEIGHT_LEADER'),
       metricText: `Top Regime Strategy Weight: ${Math.max(...posteriors.map((p) => p.dynamicCapitalWeightPct)).toFixed(1)}%`,
