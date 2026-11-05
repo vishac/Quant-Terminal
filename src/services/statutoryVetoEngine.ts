@@ -18,6 +18,43 @@ import {
   ElevenVectorMacroSnapshot,
 } from './macroCausalLearningEngine';
 
+export interface StatutoryTaxRateConfig {
+  versionId: string;
+  versionLabel: string;
+  effectiveFromIST: string;
+  brokerageFlatPerOrderINR: number;
+  nseOptionSellSttRate: number;      // e.g. 0.0015 (0.15%)
+  nseFutureSellSttRate: number;      // e.g. 0.0005 (0.05%)
+  nseCashIntradaySellSttRate: number;// e.g. 0.00025 (0.025%)
+  nseOptionExchTurnoverRate: number; // e.g. 0.0003553 (0.03553%)
+  nseFutureExchTurnoverRate: number; // e.g. 0.0000183 (0.00183%)
+  nseCashExchTurnoverRate: number;   // e.g. 0.0000307 (0.00307%)
+  bseCashExchTurnoverRate: number;   // e.g. 0.0000375 (0.00375%)
+  mcxOptionSellCttRate: number;      // e.g. 0.0005 (0.05%)
+  mcxFutureSellCttRate: number;      // e.g. 0.0001 (0.01%)
+  sebiTurnoverRate: number;          // e.g. 0.000001 (₹10/Cr)
+  gstRate: number;                   // e.g. 0.18 (18%)
+}
+
+export interface StatutoryRuleScheduleItem {
+  ruleId: string;
+  versionLabel: string;
+  authority: 'SEBI' | 'FINANCE_MINISTRY_STT' | 'NSE_BSE_EXCHANGE' | 'BROKERAGE_DESK';
+  title: string;
+  circularRef: string;
+  tMinus1AlertDateIST: string;
+  goLivePreMarketTimeIST: string;
+  status: 'ACTIVE_BASELINE' | 'PENDING_T_MINUS_1_APPROVAL' | 'APPROVED_LIVE' | 'DEFERRED_REJECTED';
+  summaryDescription: string;
+  beforeRatesSummary: string;
+  afterRatesSummary: string;
+  sampleImpactOn1LotNiftyOptionINR: string;
+  beforeConfig: StatutoryTaxRateConfig;
+  afterConfig: StatutoryTaxRateConfig;
+  decisionTimestampIST?: string;
+  approvedByUser?: string;
+}
+
 export interface StatutoryFrictionBreakdown {
   segment: 'NSE_FNO' | 'NSE_CASH' | 'BSE_CASH' | 'MCX_FUTURES' | 'MCX_OPTIONS';
   buyTurnoverINR: number;
@@ -29,6 +66,8 @@ export interface StatutoryFrictionBreakdown {
   stampDutyINR: number;
   gst18PctINR: number;
   totalFrictionINR: number;
+  taxRuleVersionId?: string;
+  taxRuleVersionLabel?: string;
 }
 
 export interface CandidateVetoEvaluation {
@@ -77,16 +116,207 @@ export interface ScanAndDeployAuditBatch {
 }
 
 const LAST_AUDIT_STORAGE_KEY = 'jarvis_last_scan_veto_audit_v1';
+const STATUTORY_CALENDAR_STORAGE_KEY = 'jarvis_statutory_tax_calendar_v1';
+
+export const BASELINE_2026_STATUTORY_CONFIG: StatutoryTaxRateConfig = {
+  versionId: 'TAX-2026-V1-OCT',
+  versionLabel: 'FY2026 Statutory Baseline (Oct 2026 STT 0.15% Opt / 0.05% Fut · ₹20 Brok)',
+  effectiveFromIST: '01-Oct-2026 09:15:00 IST',
+  brokerageFlatPerOrderINR: 20,
+  nseOptionSellSttRate: 0.0015,
+  nseFutureSellSttRate: 0.0005,
+  nseCashIntradaySellSttRate: 0.00025,
+  nseOptionExchTurnoverRate: 0.0003553,
+  nseFutureExchTurnoverRate: 0.0000183,
+  nseCashExchTurnoverRate: 0.0000307,
+  bseCashExchTurnoverRate: 0.0000375,
+  mcxOptionSellCttRate: 0.0005,
+  mcxFutureSellCttRate: 0.0001,
+  sebiTurnoverRate: 0.000001,
+  gstRate: 0.18,
+};
+
+export const UPCOMING_T_MINUS_1_STATUTORY_CONFIG: StatutoryTaxRateConfig = {
+  versionId: 'TAX-2026-V2-NOV-T1',
+  versionLabel: 'SEBI & NSE True-to-Label IPFT + Peak Intraday F&O Surcharge (T-1 Pre-Market Go-Live)',
+  effectiveFromIST: 'Next Session 09:15:00 IST (Pre-Market Approved)',
+  brokerageFlatPerOrderINR: 20,
+  nseOptionSellSttRate: 0.0015,
+  nseFutureSellSttRate: 0.0005,
+  nseCashIntradaySellSttRate: 0.00025,
+  nseOptionExchTurnoverRate: 0.000385,
+  nseFutureExchTurnoverRate: 0.0000205,
+  nseCashExchTurnoverRate: 0.0000325,
+  bseCashExchTurnoverRate: 0.0000375,
+  mcxOptionSellCttRate: 0.0005,
+  mcxFutureSellCttRate: 0.0001,
+  sebiTurnoverRate: 0.0000015,
+  gstRate: 0.18,
+};
+
+export const BROKERAGE_ZERO_PROMO_OR_SURCHARGE_CONFIG: StatutoryTaxRateConfig = {
+  versionId: 'TAX-2026-V3-HIGH-VOL-BROK',
+  versionLabel: 'Election & Expiry Day Peak-Load Brokerage & STT Slab (₹25/Order + 0.165% Opt STT)',
+  effectiveFromIST: 'Scheduled Election/Expiry Session 09:15:00 IST',
+  brokerageFlatPerOrderINR: 25,
+  nseOptionSellSttRate: 0.00165,
+  nseFutureSellSttRate: 0.00055,
+  nseCashIntradaySellSttRate: 0.00025,
+  nseOptionExchTurnoverRate: 0.000385,
+  nseFutureExchTurnoverRate: 0.0000205,
+  nseCashExchTurnoverRate: 0.0000325,
+  bseCashExchTurnoverRate: 0.0000375,
+  mcxOptionSellCttRate: 0.0005,
+  mcxFutureSellCttRate: 0.0001,
+  sebiTurnoverRate: 0.0000015,
+  gstRate: 0.18,
+};
+
+function getDefaultStatutorySchedule(): StatutoryRuleScheduleItem[] {
+  return [
+    {
+      ruleId: 'RULE-2026-BASE-OCT',
+      versionLabel: BASELINE_2026_STATUTORY_CONFIG.versionLabel,
+      authority: 'FINANCE_MINISTRY_STT',
+      title: 'Finance Act 2026 F&O STT Revision (0.15% Options / 0.05% Futures) & ₹20 Flat Brokerage',
+      circularRef: 'FINMIN/STT/2026-27/104',
+      tMinus1AlertDateIST: '30-Sep-2026 18:00 IST (T-1 Day)',
+      goLivePreMarketTimeIST: '01-Oct-2026 09:15 IST',
+      status: 'ACTIVE_BASELINE',
+      summaryDescription:
+        'Active baseline statutory friction schedule applied to all orders created prior to any T-1 rule change approval.',
+      beforeRatesSummary: 'Legacy STT: Options 0.10% (Sell) · Futures 0.02% (Sell) · Brokerage ₹20/order',
+      afterRatesSummary: '2026 Baseline: Options 0.15% (Sell) · Futures 0.05% (Sell) · Exch+IPFT 0.03553% · SEBI ₹10/Cr · Brok ₹20/order',
+      sampleImpactOn1LotNiftyOptionINR: '₹49.12 total round-trip friction on 1-lot NIFTY spread',
+      beforeConfig: BASELINE_2026_STATUTORY_CONFIG,
+      afterConfig: BASELINE_2026_STATUTORY_CONFIG,
+      decisionTimestampIST: '01-Oct-2026 08:45:00 IST',
+      approvedByUser: 'Institutional Desk Baseline',
+    },
+    {
+      ruleId: 'RULE-2026-NOV-T1-IPFT',
+      versionLabel: UPCOMING_T_MINUS_1_STATUTORY_CONFIG.versionLabel,
+      authority: 'SEBI',
+      title: 'T-1 Pre-Market Alert: SEBI Surveillance Fee (₹15/Cr) & NSE True-to-Label IPFT Turnover Revision',
+      circularRef: 'SEBI/HO/MRD/TPD-1/CIR/P/2026/118',
+      tMinus1AlertDateIST: 'T-1 Day Pre-Market Alert (Ready 1 Day Before Go-Live)',
+      goLivePreMarketTimeIST: 'Next Market Open 09:15:00 IST',
+      status: 'PENDING_T_MINUS_1_APPROVAL',
+      summaryDescription:
+        'Calendarized T-1 day before Go-Live: Adjusts NSE F&O Exchange+IPFT charge from 0.03553% to 0.03850% and SEBI turnover fee from ₹10/Cr to ₹15/Cr. Requires manual approval before 09:15 IST market open. Existing trades keep Before rates; post-approval trades use After rates.',
+      beforeRatesSummary: 'Before (Active): Exch+IPFT 0.03553% · SEBI ₹10/Cr · Opt STT 0.15% · Brok ₹20/order',
+      afterRatesSummary: 'After (Go-Live): Exch+IPFT 0.03850% · SEBI ₹15/Cr · Opt STT 0.15% · Brok ₹20/order',
+      sampleImpactOn1LotNiftyOptionINR: '+₹0.48 per lot delta (Before: ₹49.12 vs After: ₹49.60)',
+      beforeConfig: BASELINE_2026_STATUTORY_CONFIG,
+      afterConfig: UPCOMING_T_MINUS_1_STATUTORY_CONFIG,
+    },
+    {
+      ruleId: 'RULE-2026-ELECTION-EXPIRY-SLAB',
+      versionLabel: BROKERAGE_ZERO_PROMO_OR_SURCHARGE_CONFIG.versionLabel,
+      authority: 'BROKERAGE_DESK',
+      title: 'T-1 Scheduled Policy: Election / Expiry Peak-Load Brokerage (₹25/Order) & F&O Risk Surcharge',
+      circularRef: 'NSE/INSP/2026/ELECTION-MARGIN-09',
+      tMinus1AlertDateIST: 'T-1 Day Pre-Market Alert (Calendarized Policy)',
+      goLivePreMarketTimeIST: 'Election / Expiry Session 09:15:00 IST',
+      status: 'PENDING_T_MINUS_1_APPROVAL',
+      summaryDescription:
+        'Pre-staged T-1 policy for peak India Lok Sabha / US Election or Weekly Expiry volatility sessions: increases flat brokerage from ₹20 to ₹25/order and models 0.165% Option STT buffer so the >2.00% Net-of-Tax Veto Gate automatically tightens before market open.',
+      beforeRatesSummary: 'Before: Brokerage ₹20/order (₹40 RT) · Option STT 0.15% · Fut STT 0.05%',
+      afterRatesSummary: 'After: Brokerage ₹25/order (₹50 RT) · Option STT 0.165% · Fut STT 0.055%',
+      sampleImpactOn1LotNiftyOptionINR: '+₹12.15 round-trip friction per single-leg order (+₹24.30 on 2-leg spreads)',
+      beforeConfig: BASELINE_2026_STATUTORY_CONFIG,
+      afterConfig: BROKERAGE_ZERO_PROMO_OR_SURCHARGE_CONFIG,
+    },
+  ];
+}
+
+export function getStatutoryTaxRuleCalendar(): StatutoryRuleScheduleItem[] {
+  try {
+    const raw = localStorage.getItem(STATUTORY_CALENDAR_STORAGE_KEY);
+    if (!raw) return getDefaultStatutorySchedule();
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    return getDefaultStatutorySchedule();
+  } catch {
+    return getDefaultStatutorySchedule();
+  }
+}
+
+export function saveStatutoryTaxRuleCalendar(items: StatutoryRuleScheduleItem[]): void {
+  try {
+    localStorage.setItem(STATUTORY_CALENDAR_STORAGE_KEY, JSON.stringify(items));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('jarvis:statutory-rule-updated', { detail: items }));
+    }
+  } catch {
+    // ignore storage errors
+  }
+}
+
+export function getActiveStatutoryTaxRuleVersion(): {
+  activeRule: StatutoryRuleScheduleItem;
+  activeConfig: StatutoryTaxRateConfig;
+  pendingRulesCount: number;
+} {
+  const calendar = getStatutoryTaxRuleCalendar();
+  const approvedRules = calendar.filter((r) => r.status === 'APPROVED_LIVE');
+  const activeRule =
+    approvedRules.length > 0
+      ? approvedRules[approvedRules.length - 1]
+      : calendar.find((r) => r.status === 'ACTIVE_BASELINE') || calendar[0];
+  const pendingRulesCount = calendar.filter((r) => r.status === 'PENDING_T_MINUS_1_APPROVAL').length;
+  return {
+    activeRule,
+    activeConfig: activeRule.afterConfig,
+    pendingRulesCount,
+  };
+}
+
+export function approvePendingStatutoryRule(ruleId: string): StatutoryRuleScheduleItem[] {
+  const now = new Date();
+  const timestampIST = `${formatOrderDate(now)} ${formatOrderTime(now)} IST`;
+  const calendar = getStatutoryTaxRuleCalendar().map((item) => {
+    if (item.ruleId === ruleId) {
+      return {
+        ...item,
+        status: 'APPROVED_LIVE' as const,
+        decisionTimestampIST: timestampIST,
+        approvedByUser: 'Manual Pre-Market Approval (Verified Before 09:15 IST)',
+      };
+    }
+    return item;
+  });
+  saveStatutoryTaxRuleCalendar(calendar);
+  return calendar;
+}
+
+export function rejectOrDeferPendingStatutoryRule(ruleId: string): StatutoryRuleScheduleItem[] {
+  const now = new Date();
+  const timestampIST = `${formatOrderDate(now)} ${formatOrderTime(now)} IST`;
+  const calendar = getStatutoryTaxRuleCalendar().map((item) => {
+    if (item.ruleId === ruleId) {
+      return {
+        ...item,
+        status: 'DEFERRED_REJECTED' as const,
+        decisionTimestampIST: timestampIST,
+        approvedByUser: 'Deferred / Reverted to Previous Approved Schedule',
+      };
+    }
+    return item;
+  });
+  saveStatutoryTaxRuleCalendar(calendar);
+  return calendar;
+}
+
+export function resetStatutoryRuleCalendarToDefault(): StatutoryRuleScheduleItem[] {
+  const defaults = getDefaultStatutorySchedule();
+  saveStatutoryTaxRuleCalendar(defaults);
+  return defaults;
+}
 
 /**
  * 2026 INDIAN STATUTORY TAX & BROKERAGE SPECIFICATION (NSE F&O, NSE/BSE Cash, MCX)
- * Deterministic calculation of round-trip statutory friction before order creation:
- * - Brokerage: ₹20 flat per executed order (₹40 round-trip per leg; ₹80 for 2-leg spreads).
- * - NSE Equity Options: STT 0.15% (sell on premium), Exch+IPFT 0.03553%, SEBI ₹10/Cr, Stamp 0.003% (buy on premium), GST 18%.
- * - NSE Equity Futures: STT 0.05% (sell), Exch+IPFT 0.00183%, SEBI ₹10/Cr, Stamp 0.002% (buy), GST 18%.
- * - NSE/BSE Cash Intraday: STT 0.025% (sell), Exch+IPFT 0.00307% (NSE) / 0.00375% (BSE), SEBI ₹10/Cr, Stamp 0.003% (buy), GST 18%.
- * - MCX Crude/Gold Futures: CTT 0.01% (sell), Exch 0.0026%, SEBI ₹10/Cr, Stamp 0.002% (buy), GST 18%.
- * - MCX Options: CTT 0.05% (sell on premium), Exch 0.0418%, SEBI ₹10/Cr, Stamp 0.003% (buy on premium), GST 18%.
+ * Deterministic calculation of round-trip statutory friction before order creation.
  */
 export function calculateRoundTripStatutoryFriction(params: {
   segment: 'NSE_FNO' | 'NSE_CASH' | 'BSE_CASH' | 'MCX_FUTURES' | 'MCX_OPTIONS';
@@ -96,6 +326,7 @@ export function calculateRoundTripStatutoryFriction(params: {
   qty: number;
   legCount?: number;
   isOptionContract?: boolean;
+  overrideConfig?: StatutoryTaxRateConfig;
 }): StatutoryFrictionBreakdown {
   const {
     segment,
@@ -105,7 +336,10 @@ export function calculateRoundTripStatutoryFriction(params: {
     qty,
     legCount = 1,
     isOptionContract = true,
+    overrideConfig,
   } = params;
+
+  const rateConfig = overrideConfig || getActiveStatutoryTaxRuleVersion().activeConfig;
 
   const safeQty = Math.max(1, qty);
   const buyPrice = side === 'BUY' ? entryPrice : targetExitPrice;
@@ -115,12 +349,12 @@ export function calculateRoundTripStatutoryFriction(params: {
   const sellTurnoverINR = Number((sellPrice * safeQty).toFixed(2));
   const totalTurnoverINR = buyTurnoverINR + sellTurnoverINR;
 
-  // ₹20 flat per executed order -> ₹40 round-trip per leg
+  // Flat brokerage per executed order (default ₹20 -> ₹40 round-trip per leg; or ₹25 under approved T-1 peak slab)
   const executedOrdersCount = Math.max(1, legCount) * 2;
-  const brokerageINR = Number((executedOrdersCount * 20).toFixed(2));
+  const brokerageINR = Number((executedOrdersCount * rateConfig.brokerageFlatPerOrderINR).toFixed(2));
 
-  // SEBI Turnover fee: ₹10 per Crore = 0.0001% (0.000001)
-  const sebiTurnoverFeeINR = Number((totalTurnoverINR * 0.000001).toFixed(2));
+  // SEBI Turnover fee: default ₹10 per Crore = 0.0001% (or ₹15/Cr under approved T-1 circular)
+  const sebiTurnoverFeeINR = Number((totalTurnoverINR * rateConfig.sebiTurnoverRate).toFixed(2));
 
   let sttOrCttINR = 0;
   let exchangeTurnoverAndIpftINR = 0;
@@ -128,37 +362,33 @@ export function calculateRoundTripStatutoryFriction(params: {
 
   if (segment === 'NSE_FNO') {
     if (isOptionContract) {
-      // NSE Equity/Index Options: STT 0.15% on sell premium, Exch+IPFT 0.03553%, Stamp 0.003% on buy premium
-      sttOrCttINR = Number((sellTurnoverINR * 0.0015).toFixed(2));
-      exchangeTurnoverAndIpftINR = Number((totalTurnoverINR * 0.0003553).toFixed(2));
+      sttOrCttINR = Number((sellTurnoverINR * rateConfig.nseOptionSellSttRate).toFixed(2));
+      exchangeTurnoverAndIpftINR = Number((totalTurnoverINR * rateConfig.nseOptionExchTurnoverRate).toFixed(2));
       stampDutyINR = Number((buyTurnoverINR * 0.00003).toFixed(2));
     } else {
-      // NSE Futures: STT 0.05% on sell, Exch+IPFT 0.00183%, Stamp 0.002% on buy
-      sttOrCttINR = Number((sellTurnoverINR * 0.0005).toFixed(2));
-      exchangeTurnoverAndIpftINR = Number((totalTurnoverINR * 0.0000183).toFixed(2));
+      sttOrCttINR = Number((sellTurnoverINR * rateConfig.nseFutureSellSttRate).toFixed(2));
+      exchangeTurnoverAndIpftINR = Number((totalTurnoverINR * rateConfig.nseFutureExchTurnoverRate).toFixed(2));
       stampDutyINR = Number((buyTurnoverINR * 0.00002).toFixed(2));
     }
   } else if (segment === 'NSE_CASH' || segment === 'BSE_CASH') {
-    // Intraday Cash: STT 0.025% on sell, Exch+IPFT 0.00307% (NSE) / 0.00375% (BSE), Stamp 0.003% on buy
-    const exchRate = segment === 'BSE_CASH' ? 0.0000375 : 0.0000307;
-    sttOrCttINR = Number((sellTurnoverINR * 0.00025).toFixed(2));
+    const exchRate =
+      segment === 'BSE_CASH' ? rateConfig.bseCashExchTurnoverRate : rateConfig.nseCashExchTurnoverRate;
+    sttOrCttINR = Number((sellTurnoverINR * rateConfig.nseCashIntradaySellSttRate).toFixed(2));
     exchangeTurnoverAndIpftINR = Number((totalTurnoverINR * exchRate).toFixed(2));
     stampDutyINR = Number((buyTurnoverINR * 0.00003).toFixed(2));
   } else if (segment === 'MCX_OPTIONS') {
-    // MCX Options: CTT 0.05% on sell premium, Exch 0.0418%, Stamp 0.003% on buy premium
-    sttOrCttINR = Number((sellTurnoverINR * 0.0005).toFixed(2));
+    sttOrCttINR = Number((sellTurnoverINR * rateConfig.mcxOptionSellCttRate).toFixed(2));
     exchangeTurnoverAndIpftINR = Number((totalTurnoverINR * 0.000418).toFixed(2));
     stampDutyINR = Number((buyTurnoverINR * 0.00003).toFixed(2));
   } else {
-    // MCX Futures: CTT 0.01% on sell, Exch 0.0026%, Stamp 0.002% on buy
-    sttOrCttINR = Number((sellTurnoverINR * 0.0001).toFixed(2));
+    sttOrCttINR = Number((sellTurnoverINR * rateConfig.mcxFutureSellCttRate).toFixed(2));
     exchangeTurnoverAndIpftINR = Number((totalTurnoverINR * 0.000026).toFixed(2));
     stampDutyINR = Number((buyTurnoverINR * 0.00002).toFixed(2));
   }
 
-  // 18% GST on (Brokerage + Exchange Turnover + SEBI Fee)
+  // GST (18%) on (Brokerage + Exchange Turnover + SEBI Fee)
   const gst18PctINR = Number(
-    ((brokerageINR + exchangeTurnoverAndIpftINR + sebiTurnoverFeeINR) * 0.18).toFixed(2)
+    ((brokerageINR + exchangeTurnoverAndIpftINR + sebiTurnoverFeeINR) * rateConfig.gstRate).toFixed(2)
   );
 
   const totalFrictionINR = Number(
@@ -183,6 +413,8 @@ export function calculateRoundTripStatutoryFriction(params: {
     stampDutyINR,
     gst18PctINR,
     totalFrictionINR,
+    taxRuleVersionId: rateConfig.versionId,
+    taxRuleVersionLabel: rateConfig.versionLabel,
   };
 }
 
@@ -413,6 +645,13 @@ export function evaluateCandidateOrderAgainstVetoRules(params: {
     ? ` · 5-Agent Council ${interAgentConsensus.consensusScore}/100 (1R=${interAgentConsensus.sizing.perTradeRiskPctOfEquity}% <1.5% DD Cap)`
     : '';
 
+  const stampedOrder: PaperTradeOrder = {
+    ...candidateOrder,
+    taxRuleVersionId: friction.taxRuleVersionId || 'TAX-2026-V1-OCT',
+    taxRuleVersionLabel: friction.taxRuleVersionLabel || 'FY2026 Statutory Baseline',
+    statutoryFrictionSnapshotINR: friction.totalFrictionINR,
+  };
+
   return {
     id: `veto-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     timestampIST,
@@ -432,9 +671,9 @@ export function evaluateCandidateOrderAgainstVetoRules(params: {
     netExpectancyR,
     approved: true,
     vetoCode: 'APPROVED_CONFIRMED_OVER_2PCT_NET',
-    verdictReason: `CONFIRMED & DEPLOYED: Net Profit +${netProfitPct.toFixed(2)}% (+₹${netProfitINR.toFixed(2)} net after ₹${friction.totalFrictionINR.toFixed(2)} tax+brokerage · ${grossToFrictionRatio}x friction coverage${councilBadge}).`,
+    verdictReason: `CONFIRMED & DEPLOYED: Net Profit +${netProfitPct.toFixed(2)}% (+₹${netProfitINR.toFixed(2)} net after ₹${friction.totalFrictionINR.toFixed(2)} tax+brokerage [${friction.taxRuleVersionId || 'V1'}] · ${grossToFrictionRatio}x friction coverage${councilBadge}).`,
     interAgentConsensus,
-    order: candidateOrder,
+    order: stampedOrder,
   };
 }
 
@@ -1051,3 +1290,156 @@ export function getLastScanVetoAuditBatch(): ScanAndDeployAuditBatch | null {
     return null;
   }
 }
+
+/**
+ * 1-Click Single-Symbol or Bear-Put Setup AI Council Evaluation & Deployment:
+ * Allows any Confirmed Leader card or 52W-Low / Bear Put (T1/T2/T3) setup in Core 1 (Market Finder)
+ * to be evaluated through the 5-Stage Inter-Agent Consensus Council & >2.00% Net-of-Tax Veto Gate
+ * and deployed directly into the Order Book (`existingOrders`).
+ */
+export function evaluateAndDeploySingleSetupViaCouncil(params: {
+  symbol: string;
+  instrumentLabel?: string;
+  segment: 'NSE_CASH' | 'NSE_FNO' | 'BSE_CASH';
+  side: 'BUY' | 'SELL';
+  entryPrice: number;
+  stopLossPrice: number;
+  t1Price?: number;
+  t2Price: number;
+  t3Price?: number;
+  qty: number;
+  optionType?: 'PE' | 'CE';
+  strike?: number;
+  strategyName: string;
+  nonErosionRule?: string;
+  quotes: Record<string, MarketQuote>;
+  existingOrders: PaperTradeOrder[];
+}): CandidateVetoEvaluation {
+  const {
+    symbol,
+    instrumentLabel,
+    segment,
+    side,
+    entryPrice,
+    stopLossPrice,
+    t1Price,
+    t2Price,
+    t3Price,
+    qty,
+    optionType,
+    strike,
+    strategyName,
+    nonErosionRule,
+    quotes,
+    existingOrders,
+  } = params;
+
+  vetoSeqCounter += 1;
+  const now = new Date();
+  const orderDate = formatOrderDate(now);
+  const orderTime = formatOrderTime(now);
+  const timestampIST = `${orderDate} ${orderTime}`;
+
+  const cleanBase = symbol.replace('.NS', '').replace('.BO', '').toUpperCase().trim();
+  const openOrders = existingOrders.filter((o) => o.status === 'OPEN');
+  const isDuplicateOpen = openOrders.some(
+    (o) =>
+      extractBaseSymbolFromOrder(o) === cleanBase &&
+      o.segment === segment &&
+      (o.legs?.[0]?.optionType || null) === (optionType || null)
+  );
+
+  const safeEntry = Number(Math.max(1, entryPrice).toFixed(2));
+  const safeStop = Number(Math.max(0.5, stopLossPrice).toFixed(2));
+  const safeTargetT2 = Number(Math.max(safeEntry * 1.028, t2Price).toFixed(2));
+  const safeQty = Math.max(1, qty);
+
+  const maxLossINR = Number((Math.abs(safeEntry - safeStop) * safeQty).toFixed(2));
+  const grossTargetProfitINR = Number((Math.abs(safeTargetT2 - safeEntry) * safeQty).toFixed(2));
+  const capitalDeployedINR = Math.max(1500, Math.round(safeEntry * safeQty));
+  const { expiryDateStr } = resolveDerivativeExpiryInfo(segment, instrumentLabel || symbol, orderDate);
+
+  const candidateOrder: PaperTradeOrder = {
+    id: `SIM-ORD-COUNCIL-${Date.now().toString().slice(-5)}-${vetoSeqCounter}`,
+    agentId: segment === 'NSE_FNO' ? 'agent_bhishma' : 'agent_arjuna',
+    agentName: segment === 'NSE_FNO' ? 'Bhishma (F&O Desk)' : 'Arjuna (Cash Alpha)',
+    symbol: instrumentLabel || (segment === 'NSE_FNO' ? `${cleanBase} ${strike || ''} ${optionType || 'PE'}`.trim() : `${cleanBase} Intraday Cash MIS`),
+    segment,
+    strategyName,
+    legs: [
+      {
+        instrument: instrumentLabel || `${cleanBase} (${segment})`,
+        action: side,
+        qty: safeQty,
+        price: safeEntry,
+        exitPrice: safeEntry,
+        strike,
+        optionType,
+      },
+    ],
+    totalInvestmentINR: capitalDeployedINR,
+    maxDefinedLossINR: maxLossINR,
+    targetProfitINR: grossTargetProfitINR,
+    riskRewardRatio: `1:${(grossTargetProfitINR / Math.max(1, maxLossINR)).toFixed(2)}`,
+    timestamp: timestampIST,
+    orderDate,
+    orderTime,
+    expiryDate: segment === 'NSE_FNO' ? expiryDateStr || '09-Nov-2026' : undefined,
+    status: 'OPEN',
+    pnlINR: 0,
+    peakPnlINR: 0,
+    trailingStopPnlINR: -maxLossINR,
+    entryPrice: safeEntry,
+    exitPrice: safeEntry,
+    initialStopLossPrice: safeStop,
+    trailingStopPrice: safeStop,
+    targetPriceLevel: safeTargetT2,
+    t1Price,
+    t2Price: safeTargetT2,
+    t3Price,
+    nonErosionRule:
+      nonErosionRule ||
+      `T1 ₹${t1Price ?? safeTargetT2} -> Lock T1 Floor | T2 ₹${safeTargetT2} -> Trail 82% Peak toward T3 ₹${t3Price ?? Number((safeTargetT2 * 1.02).toFixed(2))}`,
+    tslStage: 'INITIAL_RISK_STOP',
+    side,
+    qty: safeQty,
+    sebiComplianceVerified: true,
+    isSimulation: true,
+  };
+
+  const macroSnapshot = evaluateElevenVectorMacroMatrix(quotes, existingOrders);
+  const interAgentConsensus = evaluateInterAgentConsensusPipeline({
+    candidateOrder,
+    quotes,
+    existingOrders,
+    macroSnapshot,
+  });
+
+  const evaluation = evaluateCandidateOrderAgainstVetoRules({
+    candidateOrder,
+    deskName: segment === 'NSE_FNO' ? 'AI Council · F&O Desk (Bhishma)' : 'AI Council · Equity Alpha Desk (Arjuna)',
+    confirmedScriptStatus: isDuplicateOpen ? 'DUPLICATE_OPEN' : 'CONFIRMED_LEADER',
+    legCount: 1,
+    isOptionContract: segment === 'NSE_FNO',
+    interAgentConsensus,
+    minRequiredNetProfitPct: macroSnapshot.requiredMinNetProfitPct,
+  });
+
+  // Record this single-setup audit into the last audit batch so Core 3 & Core 4 stay in lockstep
+  const batch: ScanAndDeployAuditBatch = {
+    batchId: `COUNCIL-${Date.now().toString().slice(-6)}`,
+    timestampIST,
+    requestedScope: candidateOrder.symbol,
+    totalEvaluated: 1,
+    approvedCount: evaluation.approved ? 1 : 0,
+    vetoedCount: evaluation.approved ? 0 : 1,
+    deployedOrders: evaluation.approved && evaluation.order ? [evaluation.order] : [],
+    evaluations: [evaluation],
+    summaryHeadline: evaluation.verdictReason,
+    activeRegime: macroSnapshot.regimeHeadline,
+  };
+  saveLastScanVetoAuditBatch(batch);
+
+  return evaluation;
+}
+

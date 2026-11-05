@@ -148,20 +148,28 @@ Under no circumstances should dummy, mock, or hardcoded static seed trades be in
      - **Stage 3 (`PROFIT_LOCK_75PCT`)**: `Peak P&L >= +2.2R+` -> Stop tightens to **75%–82% of High-Water-Mark Peak P&L**.
    - **Immediate Pullback Execution (`TRAILING_STOP_HIT`)**: On any tick where `livePnl` retraces to or below the active `trailingStopPnlINR` while in Stage 1–3, the engine immediately closes the position and books the locked profit into the realized ledger.
 
-7. **12-Vector Macro-Causal, 2026 US Mid-Term Elections & 3-Layer FII/DII/Pro vs. Retail Flow Engine (`src/services/macroCausalLearningEngine.ts`)**:
-   - Continuously evaluates **12 Live Vectors**: (1) Market Regime & VIX, (2) Live News RSS, (3) US Dollar (`DX-Y.NYB` & `INR=X`), (4) Global Markets (`^GSPC`, `^IXIC`, `^N225`, `^HSI`), (5) Domestic Govt/RBI/SEBI Policy Rules, (6) US Fed Rates (`^TNX` & `^IRX`), (7) US Jobs/NFP, (8) Gold (`GC=F`) & Silver (`SI=F`), (9) Brent Oil (`BZ=F` / `CL=F`) & Natural Gas (`NG=F`), (10) War & Geopolitical Escalation Index, (11) **3-Layer FII / DII / Pro vs. Retail (`Client`) Futures LSR & Cash Flow**, and (12) **2026 US Mid-Term Elections & Indo-US Sectoral Transmission (`vec_us_midterms`)**.
+7. **12-Vector Macro-Causal, Full-Cycle India Lok Sabha + US Primary/Mid-Term Elections & 3-Layer FII/DII/Pro vs. Retail Flow Engine (`src/services/macroCausalLearningEngine.ts`)**:
+   - Continuously evaluates **12 Live Vectors**: (1) Market Regime & VIX, (2) Live News RSS, (3) US Dollar (`DX-Y.NYB` & `INR=X`), (4) Global Markets (`^GSPC`, `^IXIC`, `^N225`, `^HSI`), (5) Domestic Govt/RBI/SEBI Policy Rules, (6) US Fed Rates (`^TNX` & `^IRX`), (7) US Jobs/NFP, (8) Gold (`GC=F`) & Silver (`SI=F`), (9) Brent Oil (`BZ=F` / `CL=F`) & Natural Gas (`NG=F`), (10) War & Geopolitical Escalation Index, (11) **3-Layer FII / DII / Pro vs. Retail (`Client`) Futures LSR & Cash Flow**, and (12) **Full-Cycle Global & Domestic Sovereign Elections (`vec_us_midterms`)** modeling **India Lok Sabha General & Key State Assembly Elections** (`INDIA_LIVE_CONTINUITY_TRACKING`, `INDIA_LOKSABHA_CONTINUITY_CAPEX`, `INDIA_MCC_PRE_POLL_PAUSE`, `INDIA_LOKSABHA_COALITION_POPULIST`) alongside **US Primary, Mid-Term & Presidential Elections** (`LIVE_DYNAMIC_TRACKING`, `US_PRIMARY_RHETORIC_VOLATILITY`, `GRIDLOCK_DIVIDED_CONGRESS`, `TARIFF_HAWK_SWEEP`, `FISCAL_STIMULUS_SWEEP`).
    - In `LIVE_EXCHANGE_FEED` mode, FII/DII Cash and Futures LSR numbers are dynamically derived on every tick from live NSE/FX/heavyweight price and breadth telemetry so zero numbers sit static.
 
 8. **5-Stage Inter-Agent Shared-Blackboard Consensus Council & `<= 1.50%` (`< 2.00%`) Drawdown Quarter-Kelly Sizer**:
-   - Every candidate order must pass the sequential 5-Stage Council (`Stage 1 Kuber Macro/War/Commodity Sentinel` $\rightarrow$ `Stage 2 Chanakya 3-Layer FII/DII & US Mid-Term Flow Detective` $\rightarrow$ `Stage 3 Arjuna/Bhishma Structure & Official Tuesday/Holiday Expiry` $\rightarrow$ `Stage 4 Vidura Adversarial Red-Team Critic & Sector Correlation Cap` $\rightarrow$ `Stage 5 Execution Governor`).
+   - Every candidate order (both automated and manual) must pass the sequential 5-Stage Council (`Stage 1 Kuber Macro/War/Commodity Sentinel` $\rightarrow$ `Stage 2 Chanakya 3-Layer FII/DII & India/US Election Flow Detective` $\rightarrow$ `Stage 3 Arjuna/Bhishma Structure & Official Tuesday/Holiday Expiry` $\rightarrow$ `Stage 4 Vidura Adversarial Red-Team Critic & Sector Correlation Cap` $\rightarrow$ `Stage 5 Execution Governor`).
    - Enforces a **98.50% Intraday Protected Capital Floor** (`Max Daily Drawdown <= 1.50%`, strictly `< 2.00%`). Per-trade `1R` stop risk scales between `0.20%` and `0.45%` of total equity via Quarter-Kelly $\times$ Volatility Target while deploying full working capital notional.
 
-9. **2026 Indian Statutory Tax + `> 2.00%` Net Profit Veto Gate & 3-State Anti-Whipsaw Shield (`src/services/statutoryVetoEngine.ts`)**:
-   - Pre-calculates round-trip 2026 STT/CTT, Exchange+IPFT, SEBI, Stamp Duty, 18% GST, and `₹20`/order flat brokerage. Vetoes any trade where `Gross Profit / Friction < 3.0x` or `Net Profit <= 2.00%` (`<= 2.50%` during shocks or post-loss recovery).
-   - **3-State Anti-Whipsaw Protocol**: (1) Locks **82% of peak unrealized profit** on open winners during macro/war/election shocks; (2) Parks freed capital from stopped-out losers in **100% Protected Cash** (blocking blind same-tick rotation); (3) Requires **3-tick persistence** + `> 2.50%` Net Profit before redeploying cash.
+9. **Calendarized T-1 Pre-Market Statutory Tax, SEBI & Brokerage Rule Radar + Before/After Order Ledger + `> 2.00%` Net Profit Veto Gate (`src/services/statutoryVetoEngine.ts`)**:
+   - **Never Miss a Regulatory or Brokerage Change**: Upcoming statutory tax, SEBI turnover fee, exchange tariff, and brokerage rule updates are calendarized in `getStatutoryTaxRuleCalendar()` and automatically flagged **`T-1 Day` before Go-Live** via a prominent Pre-Market Approval Banner in `4. Order Book`.
+   - **Mandatory Manual Pre-Market Approval**: The operator can inspect the exact Before vs. After rate deltas and click **Approve** or **Defer** prior to the `09:15 IST` market open.
+   - **Permanent Before/After Historical Order Ledger**: Every order is stamped with `taxRuleVersionId`, `taxRuleVersionLabel`, and `statutoryFrictionSnapshotINR` at execution time so trades placed **before** Go-Live retain their exact **Before** tax calculation and trades placed **after** approval use the **After** tax calculation.
+   - **Hard Veto Gate**: Vetoes any trade where `Gross Profit / Friction < 3.0x` or `Net Profit <= 2.00%` (`<= 2.50%` during shocks or post-loss recovery).
 
-10. **100% Dynamic Universe Discovery (Zero Static Scripts)**:
-    - `discoverDynamicEquityUniverse(quotes)` automatically ingests all 30+ tracked NSE/BSE equities plus any runtime `.NS`/`.BO` symbols. All 5 agents generate their `decisionScripts` 100% dynamically from `evaluateAdaptiveScriptLearningMatrix()`.
+10. **Dual-Mode 52W-Low Institutional Bottom Accumulation & Bear-Market Put (`PE`) F&O Scanner (`T1 / T2 / T3` + Non-Erosion Exit Plan) (`src/services/scriptLearningEngine.ts`)**:
+    - **Mode A (`BOTTOM_ACCUMULATION_LONG`)**: Scans for high-potential NSE equities near their 52-week low / cycle bottom with institutional delivery absorption, positive fundamental quality, and explicit `T1`, `T2`, `T3` targets.
+    - **Mode B (`BEAR_MARKET_PUT_FNO`)**: Scans for bearish Put (`PE`) F&O opportunities (Index NIFTY Puts and weak/headwind equity Puts) when the market or script is low/breaking down, with `T1`, `T2`, `T3` option premium targets.
+    - **4-Stage Non-Erosion Step-Ratchet Exit Plan**: (1) Initial hard stop (`-2.5%` cash / `-18%` option premium); (2) At `T1`, book `33%` and ratchet SL to `Cost + Statutory Friction`; (3) At `T2`, book `33%` and lock SL unconditionally at `T1`; (4) Trail final `34%` runner toward `T3` via `1.5x ATR` / `15-min VWAP`.
+
+11. **Plain-English 4-Core Naming & Auto-Updated User Guide (`USER_GUIDE_STRENGTHS_AND_LIMITATIONS.md`)**:
+    - The 4 Cores are named in plain English: **`1. Market Finder`**, **`2. Stress Lab`**, **`3. AI Council`**, and **`4. Order Book`**.
+    - `USER_GUIDE_STRENGTHS_AND_LIMITATIONS.md` (and Sub-Tab `06` in `4. Order Book`) must always be kept updated in lockstep with any architectural, tax, election, or strategy update.
 
 ---
 
@@ -171,8 +179,8 @@ Under no circumstances should dummy, mock, or hardcoded static seed trades be in
 - Comprehensive Institutional Quantitative Terminal for Indian Markets: **NSE/BSE Cash Equity**, **NSE F&O (Options & Futures)**, and **MCX Commodity Futures**.
 - Zero fake/dummy seed trades and zero static scripts; 100% deterministic mathematical execution.
 - Strict multi-barrier risk gating (`<= 1.50%` hard daily drawdown floor, `> 2.00%` net-of-tax profit gate, `>= 3.0x` friction coverage, 5-Stage Inter-Agent Consensus Council).
-- Dual execution routing: **Deterministic Paper Broker** (Simulation) and **Upstox Analytics v2 Gateway** (Live/Analytics).
-- Full Revert Ledger (`REV-001` – `REV-015`) maintained in `PROJECT_CHANGELOG_AND_REVERT_LEDGER.md` and `src/data/architectureRevertLedger.ts`.
+- Full-Cycle Global & Domestic Sovereign Elections (**India Lok Sabha / State Assembly + US Primary / Mid-Term / Presidential Elections**), Dual-Mode **52W-Low Bottom Accumulation + Bear-Market Put (`PE`) F&O (`T1/T2/T3` Non-Erosion)** Scanner, and **Calendarized T-1 Statutory Tax/Brokerage Radar with Before/After History**.
+- Full Revert Ledger (`REV-001` – `REV-017`) maintained in `PROJECT_CHANGELOG_AND_REVERT_LEDGER.md` and `src/data/architectureRevertLedger.ts`.
 
 ### 9.2 Log of Completed Items
 - [x] **Git Merge Conflict Resolution (`5a7a18e`)**: Resolved `GlobalSentiment.tsx` conflict; dynamic radar/benchmark breadth mode preserved.
@@ -190,15 +198,19 @@ Under no circumstances should dummy, mock, or hardcoded static seed trades be in
   - Wired `Scan & Deploy (All Desks)`, Option Chain modal, and right-hand Bot Cards through `evaluateCandidateOrderAgainstVetoRules()` enforcing `> 2.00%` Net Profit after 2026 STT/CTT/GST & ₹20/order brokerage and `>= 3.0x` friction coverage.
   - Pruned static fake logs and synthetic test simulator buttons (`SIM TSL LOCK`, `1-Click Simulate 82% Anti-Erosion Lock`, manual 5:00 PM button).
 - [x] **12-Vector Macro-Causal, 2026 US Mid-Term Elections, 3-Layer FII/DII Flow, 5-Stage Consensus Council, Brutal Stress-Test Lab & 100% Dynamic Universe Discovery (`REV-009` – `REV-015`) (`src/services/macroCausalLearningEngine.ts`, `src/services/scriptLearningEngine.ts`, `src/components/BrutalStressTestLab.tsx`, `src/components/MacroPolicyThesis.tsx`)**:
-  - Built the 12-Vector Macro-Causal Engine (including Vector #11 3-Layer FII/DII/Pro vs Retail LSR and Vector #12 **2026 US Mid-Term Elections & Indo-US Transmission Matrix**).
-  - Rewired the 5 agents into a sequential 5-Stage Shared-Blackboard Consensus Council with Vidura Red-Team Veto and `<= 1.50%` (`< 2.00%`) Hard Daily Drawdown Quarter-Kelly Sizer.
-  - Implemented the 3-State Asymmetric Shock & Anti-Whipsaw Cash Preservation Protocol (82% Profit-Lock on winners, 100% Protected Cash on stopped losers, 3-tick persistence + `> 2.50%` recovery hurdle).
-  - Eliminated all remaining static decision script templates (`REV-014`) and added `discoverDynamicEquityUniverse(quotes)` + live tick-driven FII/DII derivation.
+  - Built the 12-Vector Macro-Causal Engine, 5-Stage Consensus Council with Vidura Red-Team Veto, `<= 1.50%` Hard Daily Drawdown Quarter-Kelly Sizer, 3-State Asymmetric Shock Shield, and 100% dynamic script discovery.
+- [x] **Full-App Button Audit, Plain-English 4-Core Naming, Full-Cycle India Lok Sabha + US Primary/Mid-Term Elections, 52W-Low Bottom & Bear Put (`T1/T2/T3`) Scanner, T-1 Tax/Brokerage Calendar with Before/After History & User Guide (`REV-016` – `REV-017`)**:
+  - Renamed the 4 Cores to `1. Market Finder`, `2. Stress Lab`, `3. AI Council`, and `4. Order Book`.
+  - Wired all Risk Engine buttons, Header/Sidebar Emergency Circuit Breaker, Confirmed Leader cards, Equity Screener rows, and First-Principles manual setups directly to the canonical OMS and `> 2.00%` Net Profit + 5-Agent Veto Gate.
+  - Upgraded Vector #12 (`vec_us_midterms`) to simultaneously evaluate India Lok Sabha / State Assembly elections and US Primary / Mid-Term / Presidential elections.
+  - Built the Dual-Mode 52W-Low Institutional Bottom Accumulation & Bear-Market Put (`PE`) F&O Scanner (`evaluateBottomAccumulationAndBearPutMatrix`) with `T1 / T2 / T3` targets and 4-stage Non-Erosion Step-Ratchet exits.
+  - Implemented the Calendarized T-1 Pre-Market Statutory Tax, SEBI & Brokerage Rule Radar (`getStatutoryTaxRuleCalendar`) with manual pre-market approval and permanent Before/After order version stamping (`taxRuleVersionId`).
+  - Created `/USER_GUIDE_STRENGTHS_AND_LIMITATIONS.md` and Sub-Tab `06. User Guide & Strengths/Weaknesses` in `4. Order Book`.
 
 ### 9.3 Current Progress & Live System Status
 - **Type Safety & Build**: `compile_applet` and `lint_applet` (`tsc --noEmit`) pass with 0 errors across the entire codebase.
-- **Revert & Audit Ledger**: `REV-001` through `REV-015` are logged in both `PROJECT_CHANGELOG_AND_REVERT_LEDGER.md` and `src/data/architectureRevertLedger.ts` (accessible inside the app under Trade History -> Revert & Change Audit).
-- **10-Point Brutal Stress Audit**: Passing `10 / 10` checks in Core 2 (`BrutalStressTestLab.tsx`).
+- **Revert & Audit Ledger**: `REV-001` through `REV-017` are logged in both `PROJECT_CHANGELOG_AND_REVERT_LEDGER.md` and `src/data/architectureRevertLedger.ts` (accessible inside the app under `4. Order Book` -> `04. Architecture Revert Ledger`).
+- **10-Point Brutal Stress Audit**: Passing `10 / 10` checks in `2. Stress Lab` (`BrutalStressTestLab.tsx`).
 
 ### 9.4 Immediate Next Steps & Future Roadmap
 - [ ] **Live Upstox WebSocket Stream**: Wire streaming WebSocket feed in `src/services/useMarketWebSocket.ts` for sub-second order book updates.

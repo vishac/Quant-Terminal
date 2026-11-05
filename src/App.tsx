@@ -24,19 +24,21 @@ import { MultiUserDesk } from './components/MultiUserDesk';
 import { FirebaseAuthModal } from './components/FirebaseAuthModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Radio } from 'lucide-react';
+import { getStoredPaperTrades, persistPaperTrades } from './services/paperTradeService';
+import { formatOrderDate, formatOrderTime } from './utils/orderFormatters';
 
 // ---------------------------------------------------------------------------
 // Mobile bottom nav tab definitions — single source of truth, never repeated
 // ---------------------------------------------------------------------------
 
 const MOBILE_NAV_TABS: { id: ActiveTab; icon: string; label: string }[] = [
-  { id: 'equity_radar',      icon: 'public',            label: 'Core 1: Macro' },
-  { id: 'stress_test_lab',   icon: 'science',           label: 'Core 2: Lab'   },
-  { id: 'autonomous_agents', icon: 'group_work',        label: 'Core 3: Council' },
-  { id: 'trade_history',     icon: 'receipt_long',      label: 'Core 4: OMS'   },
-  { id: 'quant_bot',         icon: 'monitoring',        label: 'F&O Chain'     },
-  { id: 'risk_engine',       icon: 'security',          label: 'Risk'          },
-  { id: 'settings',          icon: 'settings',          label: 'Control'       },
+  { id: 'equity_radar',      icon: 'public',            label: '1. Finder'   },
+  { id: 'stress_test_lab',   icon: 'science',           label: '2. Stress'   },
+  { id: 'autonomous_agents', icon: 'group_work',        label: '3. Council'  },
+  { id: 'trade_history',     icon: 'receipt_long',      label: '4. Orders'   },
+  { id: 'quant_bot',         icon: 'monitoring',        label: 'F&O Chain'   },
+  { id: 'risk_engine',       icon: 'security',          label: 'Risk'        },
+  { id: 'settings',          icon: 'settings',          label: 'Control'     },
 ];
 
 // ---------------------------------------------------------------------------
@@ -179,12 +181,18 @@ function AppInner() {
       if (e.key === 'c' || e.key === 'C') setIsSidebarOpen((prev) => !prev);
     };
     const handleOpenGate = () => setGateOpen(true);
+    const handleNavigateTab = (e: Event) => {
+      const targetTab = (e as CustomEvent<ActiveTab>).detail;
+      if (targetTab) setActiveTab(targetTab);
+    };
 
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('jarvis:open-owner-gate', handleOpenGate);
+    window.addEventListener('jarvis:navigate-tab', handleNavigateTab);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('jarvis:open-owner-gate', handleOpenGate);
+      window.removeEventListener('jarvis:navigate-tab', handleNavigateTab);
     };
   }, []);
 
@@ -220,10 +228,33 @@ function AppInner() {
   };
 
   const handleExecuteCircuitBreaker = (tier: string) => {
+    const now = new Date();
+    const orderDate = formatOrderDate(now);
+    const orderTime = formatOrderTime(now);
+    const currentOrders = getStoredPaperTrades();
+    let squaredCount = 0;
+
+    const updatedOrders = currentOrders.map((o) => {
+      if (o.status !== 'OPEN') return o;
+      squaredCount += 1;
+      const entryP = o.entryPrice ?? o.legs?.[0]?.price ?? 100;
+      const exitP = o.exitPrice ?? o.legs?.[0]?.exitPrice ?? entryP;
+      return {
+        ...o,
+        status: 'SQUARED_OFF' as const,
+        exitPrice: exitP,
+        exitReason: `Emergency Circuit Breaker [${tier.toUpperCase()}] · Portfolio Delta Neutralized`,
+        orderDate: o.orderDate || orderDate,
+        orderTime,
+        timestamp: `${o.orderDate || orderDate} ${orderTime} (Circuit Breaker)`,
+      };
+    });
+
+    persistPaperTrades(updatedOrders);
     window.dispatchEvent(new CustomEvent('jarvis:circuit-breaker', { detail: { tier, timestamp: Date.now() } }));
     try { localStorage.setItem('jarvis_bots_armed_state', 'false'); } catch { /* ignore */ }
     setSystemAlertMessage(
-      `Statutory Circuit Breaker Routine [${tier.toUpperCase()}] executed. Portfolio delta neutralized across NSE/MCX.`,
+      `Statutory Circuit Breaker Routine [${tier.toUpperCase()}] executed: Squared off ${squaredCount} open position(s) and disarmed autonomous bots across NSE/BSE/MCX.`,
     );
     setTimeout(() => setSystemAlertMessage(null), 6000);
   };
@@ -311,26 +342,26 @@ function AppInner() {
                   {[
                     {
                       id: 'equity_radar' as ActiveTab,
-                      coreBadge: 'CORE 1 · 12-VECTOR MACRO, US MID-TERMS & FII/DII',
-                      title: 'Macro, US Mid-Terms, War & Sector Screener',
+                      coreBadge: '1. MARKET FINDER',
+                      title: 'Screener, 52W-Low Bottoms, Bear Puts & Elections',
                       matchTabs: ['equity_radar', 'deep_thesis'],
                     },
                     {
                       id: 'stress_test_lab' as ActiveTab,
-                      coreBadge: 'CORE 2 · BRUTAL STRESS-TEST LAB',
-                      title: '10-Point Audit & Bayesian Self-Learner',
+                      coreBadge: '2. STRESS LAB',
+                      title: 'War, India/US Elections & 10-Point Audit',
                       matchTabs: ['stress_test_lab', 'backtest_lab'],
                     },
                     {
                       id: 'autonomous_agents' as ActiveTab,
-                      coreBadge: 'CORE 3 · 5-AGENT CONSENSUS & F&O',
-                      title: 'Inter-Agent Council & Option Chain',
+                      coreBadge: '3. AI COUNCIL',
+                      title: '5-Agent Consensus Debate & NSE Option Chain',
                       matchTabs: ['autonomous_agents', 'quant_bot'],
                     },
                     {
                       id: 'trade_history' as ActiveTab,
-                      coreBadge: 'CORE 4 · ORDER BOOK & <1.5% DD GUARD',
-                      title: 'Canonical OMS, Anti-Whipsaw & Revert Ledger',
+                      coreBadge: '4. ORDER BOOK',
+                      title: 'Live Trades, <1.5% DD Guard, T-1 Tax & Guide',
                       matchTabs: ['trade_history', 'risk_engine', 'settings'],
                     },
                   ].map((core) => {

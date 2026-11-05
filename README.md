@@ -31,18 +31,28 @@
    - **`88/100` is the Minimum Execution Qualification Gate**: stocks scoring **`≥ 88/100`** are marked **`✓ EXEC QUALIFIED (≥88 · Tier 1 Alpha)`**, whereas stocks scoring **`80–87/100`** are marked **`WATCHLIST (80–87 · -X TO 88)`** awaiting intraday volume or momentum expansion.
    - All 45 NSE equities use audited stock-specific fundamentals (`ROCE`, `ROE`, `PAT YoY Growth`, `D/E`, `20D Avg Volume`, `Delivery %`, `RS Percentile`, `ATR %`, and `Sovereign Moat`) blended with live exchange ticks so no two stocks share artificial step-bucket scores.
 
-7. **12-Vector Macro-Causal, 2026 US Mid-Term Elections & 3-Layer FII/DII/Pro vs. Retail Flow Engine (`src/services/macroCausalLearningEngine.ts`)**:
-   - Continuously evaluates **12 Live Vectors**: (1) Market Regime & VIX, (2) Live News RSS, (3) US Dollar (`DX-Y.NYB` & `INR=X`), (4) Global Markets, (5) Domestic Govt/RBI/SEBI Policy Rules, (6) US Fed Rates (`^TNX` & `^IRX`), (7) US Jobs/NFP, (8) Gold (`GC=F`) & Silver (`SI=F`), (9) Brent Oil (`BZ=F` / `CL=F`) & Natural Gas (`NG=F`), (10) War & Geopolitical Escalation Index, (11) **3-Layer FII / DII / Pro vs. Retail (`Client`) Futures LSR & Cash Flow**, and (12) **2026 US Mid-Term Elections & Indo-US Sectoral Transmission (`vec_us_midterms`)**.
-   - In `LIVE_EXCHANGE_FEED` mode, FII/DII Cash and Futures LSR numbers are dynamically derived on every tick from live NSE/FX/heavyweight price and breadth telemetry so zero metrics sit static.
+7. **Plain-English 4-Core Operational Workflow (`REV-017`)**:
+   - **`1. Market Finder`** *(Screener, 52W-Low Bottoms, Bear Puts & Elections)*
+   - **`2. Stress Lab`** *(War, India/US Elections & 10-Point Audit)*
+   - **`3. AI Council`** *(5-Agent Consensus Debate & NSE Option Chain)*
+   - **`4. Order Book`** *(Live Trades, `<1.5%` DD Guard, T-1 Tax & Brokerage Calendar, User Guide & Revert Ledger)*
 
-8. **5-Stage Inter-Agent Shared-Blackboard Consensus Council & `<= 1.50%` (`< 2.00%`) Drawdown Quarter-Kelly Sizer**:
-   - Every candidate trade passes through a sequential 5-Stage Council (`Stage 1 Kuber Macro/War` $\rightarrow$ `Stage 2 Chanakya 3-Layer FII/DII & US Mid-Term Flow` $\rightarrow$ `Stage 3 Arjuna/Bhishma Structure & Official Tuesday/Holiday Expiry` $\rightarrow$ `Stage 4 Vidura Adversarial Red-Team Critic` $\rightarrow$ `Stage 5 Execution Governor`).
-   - Enforces a **98.50% Intraday Protected Capital Floor** (`Max Daily Drawdown <= 1.50%`, strictly `< 2.00%`). Per-trade `1R` stop risk scales between `0.20%` and `0.45%` of total equity via Quarter-Kelly $\times$ Volatility Target while deploying full working capital notional.
+8. **12-Vector Macro-Causal, Full-Cycle India Lok Sabha + US Primary/Mid-Term/Presidential Elections & 3-Layer FII/DII/Pro vs. Retail Flow Engine (`src/services/macroCausalLearningEngine.ts`)**:
+   - Continuously evaluates **12 Live Vectors**: (1) Market Regime & VIX, (2) Live News RSS, (3) US Dollar (`DX-Y.NYB` & `INR=X`), (4) Global Markets, (5) Domestic Govt/RBI/SEBI Policy Rules, (6) US Fed Rates (`^TNX` & `^IRX`), (7) US Jobs/NFP, (8) Gold (`GC=F`) & Silver (`SI=F`), (9) Brent Oil (`BZ=F` / `CL=F`) & Natural Gas (`NG=F`), (10) War & Geopolitical Escalation Index, (11) **3-Layer FII / DII / Pro vs. Retail (`Client`) Futures LSR & Cash Flow**, and (12) **Full-Cycle Global & Domestic Sovereign Elections (`vec_us_midterms`)** simultaneously modeling **India Lok Sabha General & Key State Assembly Elections** (`INDIA_LIVE_CONTINUITY_TRACKING`, `INDIA_LOKSABHA_CONTINUITY_CAPEX`, `INDIA_MCC_PRE_POLL_PAUSE`, `INDIA_LOKSABHA_COALITION_POPULIST`) alongside **US Primary, Mid-Term & Presidential Elections** (`LIVE_DYNAMIC_TRACKING`, `US_PRIMARY_RHETORIC_VOLATILITY`, `GRIDLOCK_DIVIDED_CONGRESS`, `TARIFF_HAWK_SWEEP`, `FISCAL_STIMULUS_SWEEP`).
 
-9. **2026 Indian Statutory Tax + `> 2.00%` Net Profit Veto Gate & 3-State Anti-Whipsaw Shield (`src/services/statutoryVetoEngine.ts`)**:
-   - Pre-calculates round-trip 2026 STT/CTT, Exchange+IPFT, SEBI, Stamp Duty, 18% GST, and `₹20`/order flat brokerage. Vetoes any trade with `Gross Profit / Friction < 3.0x` or `Net Profit <= 2.00%` (`<= 2.50%` during shocks or post-loss recovery).
-   - **3-State Anti-Whipsaw Protocol**: (1) Locks **82% of peak unrealized profit** on open winners during macro/war shocks; (2) Parks freed capital from stopped-out losers in **100% Protected Cash** (blocking blind same-tick rotation); (3) Requires **3-tick persistence** + `> 2.50%` Net Profit before redeploying cash.
+9. **Dual-Mode 52W-Low Institutional Bottom Accumulation & Bear-Market Put (`PE`) F&O Scanner with `T1 / T2 / T3` & Non-Erosion Ratchet (`src/services/scriptLearningEngine.ts`)**:
+   - **Mode A (`BOTTOM_ACCUMULATION_LONG`)**: Identifies high-potential NSE equities near their 52-week low / cycle bottom showing institutional delivery absorption and asymmetric rebound potential (`T1`, `T2`, `T3`).
+   - **Mode B (`BEAR_MARKET_PUT_FNO`)**: Identifies bearish Put (`PE`) F&O setups (Index NIFTY Puts and weak/headwind equity Puts) to profit when the market or script is low, with `T1`, `T2`, and `T3` option premium targets.
+   - **Non-Erosion Step-Ratchet Exit Plan**: (Stage 1) Hard initial stop (`-2.5%` cash / `-18%` option premium); (Stage 2) At `T1`, book `33%` and ratchet SL to `Cost + Statutory Friction`; (Stage 3) At `T2`, book `33%` and lock SL at `T1`; (Stage 4) Trail final `34%` runner toward `T3` with a `1.5x ATR` / `15-min VWAP` ratchet.
 
-10. **Interactive Brutal Stress-Test Lab & Revert Ledger (`REV-001` – `REV-015`)**:
-    - Core 2 (`src/components/BrutalStressTestLab.tsx`) provides 7 crisis/election presets, custom multi-vector sliders, a 2026 US Mid-Term Election stance selector, 1-click Reset to Live Feed, and a **Deterministic 10-Point Brutal Audit Scorecard**.
-    - All architectural changes (`REV-001` through `REV-015`) are documented with 1-step revert instructions in `PROJECT_CHANGELOG_AND_REVERT_LEDGER.md` and `src/data/architectureRevertLedger.ts`.
+10. **Calendarized T-1 Pre-Market Statutory Tax, SEBI & Brokerage Rule Radar + Before/After Order Ledger (`src/services/statutoryVetoEngine.ts`)**:
+    - Automatically stages upcoming statutory tax, SEBI turnover, exchange fee, and brokerage rules **`T-1 Day` before Go-Live** with a prominent pre-market alert banner so the operator can manually **Approve** or **Defer** the rule before `09:15 IST` market open.
+    - Permanently stamps `taxRuleVersionId` and `taxRuleVersionLabel` onto every executed order so historical trades preserve their exact **Before** statutory calculation while post-approval trades use the **After** calculation.
+
+11. **5-Stage Inter-Agent Consensus Council, Universal `> 2.00%` Net Profit Veto Gate & `<= 1.50%` (`< 2.00%`) Drawdown Quarter-Kelly Sizer**:
+    - Every automated and manual trade across all 4 Cores passes through the sequential 5-Stage Council and pre-trade statutory friction veto (`Net Profit > 2.00%`, `Gross/Friction >= 3.0x`, `Max Daily Drawdown <= 1.50%`).
+
+12. **Standalone & In-App User Guide + Complete Revert Ledger (`REV-001` – `REV-017`)**:
+    - See `USER_GUIDE_STRENGTHS_AND_LIMITATIONS.md` (and Sub-Tab `06` inside **`4. Order Book`**) for the operational workflow, strengths, and honest structural limitations.
+    - All architectural changes (`REV-001` through `REV-017`) are documented in `PROJECT_CHANGELOG_AND_REVERT_LEDGER.md` and `src/data/architectureRevertLedger.ts`.
+

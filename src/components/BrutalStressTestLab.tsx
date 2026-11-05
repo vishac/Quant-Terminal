@@ -232,7 +232,7 @@ export const BrutalStressTestLab: React.FC<BrutalStressTestLabProps> = ({
               10-Point Brutal Audit Score: {passedChecksCount} / {tenPointChecks.length} PASSED
             </span>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-2">
             {[
               {
                 key: 'LIVE_EXCHANGE_FEED',
@@ -241,39 +241,45 @@ export const BrutalStressTestLab: React.FC<BrutalStressTestLabProps> = ({
                 tone: 'emerald',
               },
               {
+                key: 'INDIA_LOKSABHA_US_PRIMARY_SHOCK',
+                title: '2. Lok Sabha + US Primary',
+                sub: 'Coalition Pivot + US Primary H-1B Vol',
+                tone: 'amber',
+              },
+              {
                 key: 'US_MIDTERM_TARIFF_YIELD_SHOCK',
-                title: '2. US Mid-Term Shock',
+                title: '3. US Mid-Term Shock',
                 sub: 'Tariff Sweep · H-1B · 10Y Yield Spike',
                 tone: 'amber',
               },
               {
                 key: 'WAR_HORMUZ_ESCALATION',
-                title: '3. Global War & Oil $115',
+                title: '4. Global War & Oil $115',
                 sub: 'War 92/100 · Oil +11.8% · Gold +4.2%',
                 tone: 'rose',
               },
               {
                 key: 'FED_HAWKISH_JOBS_STAGFLATION',
-                title: '4. Fed +50bps & Jobs Miss',
+                title: '5. Fed +50bps & Jobs Miss',
                 sub: 'NFP -110K · DXY +1.95% · IT/Pharma',
                 tone: 'amber',
               },
               {
                 key: 'FII_CAPITULATION_DII_CAPEX',
-                title: '5. FII Dump vs DII Capex',
+                title: '6. FII Dump vs DII Capex',
                 sub: 'FII -₹6,100Cr · DII +₹6,850Cr · Retail Trap',
                 tone: 'cyan',
               },
               {
                 key: 'GOVT_WINDFALL_SEBI_POLICY_SHOCK',
-                title: '6. Policy & Tax Tightening',
+                title: '7. Policy & Tax Tightening',
                 sub: 'Windfall Tax + SEBI Margin Hike',
                 tone: 'purple',
               },
               {
                 key: 'GLOBAL_RISK_ON_DEFLATION',
-                title: '7. Gridlock & Risk-On',
-                sub: 'Divided Congress · Brent -7.5% · Inflow',
+                title: '8. Continuity & Risk-On',
+                sub: 'Lok Sabha Continuity + US Gridlock',
                 tone: 'emerald',
               },
             ].map((item) => {
@@ -299,12 +305,33 @@ export const BrutalStressTestLab: React.FC<BrutalStressTestLabProps> = ({
           </div>
         </div>
 
-        {/* Interactive Multi-Vector Fine-Tuning Sliders + 2026 US Mid-Term Election Selector */}
-        <div className="mt-3 pt-3 border-t border-slate-800/80 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+        {/* Interactive Multi-Vector Fine-Tuning Sliders + India Lok Sabha & US Primary/Mid-Term Election Selectors */}
+        <div className="mt-3 pt-3 border-t border-slate-800/80 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5">
           <div className="bg-slate-900/70 border border-slate-800 rounded-lg p-2">
             <div className="flex justify-between text-[10px] text-slate-400">
-              <span>2026 US MID-TERMS</span>
-              <span className="font-bold text-cyan-300">VEC #12</span>
+              <span>INDIA LOK SABHA</span>
+              <span className="font-bold text-emerald-400">VEC #12A</span>
+            </div>
+            <select
+              value={stressConfig.indiaElectionOutcome || 'INDIA_LIVE_CONTINUITY_TRACKING'}
+              onChange={(e) =>
+                handleUpdateCustomSlider({
+                  indiaElectionOutcome: e.target.value as MacroStressOverrideConfig['indiaElectionOutcome'],
+                })
+              }
+              className="w-full mt-1.5 bg-slate-950 border border-slate-700 rounded px-1.5 py-1 text-[10px] text-white font-bold cursor-pointer"
+            >
+              <option value="INDIA_LIVE_CONTINUITY_TRACKING">Live Continuity Tracking</option>
+              <option value="INDIA_LOKSABHA_CONTINUITY_CAPEX">Lok Sabha Majority Capex</option>
+              <option value="INDIA_MCC_PRE_POLL_PAUSE">Pre-Poll MCC Tender Pause</option>
+              <option value="INDIA_LOKSABHA_COALITION_POPULIST">Coalition / Populist Pivot</option>
+            </select>
+          </div>
+
+          <div className="bg-slate-900/70 border border-slate-800 rounded-lg p-2">
+            <div className="flex justify-between text-[10px] text-slate-400">
+              <span>US PRIMARY / MID-TERM</span>
+              <span className="font-bold text-cyan-300">VEC #12B</span>
             </div>
             <select
               value={stressConfig.usMidtermElectionOutcome || 'LIVE_DYNAMIC_TRACKING'}
@@ -316,6 +343,7 @@ export const BrutalStressTestLab: React.FC<BrutalStressTestLabProps> = ({
               className="w-full mt-1.5 bg-slate-950 border border-slate-700 rounded px-1.5 py-1 text-[10px] text-white font-bold cursor-pointer"
             >
               <option value="LIVE_DYNAMIC_TRACKING">Live Yield/DXY Tracking</option>
+              <option value="US_PRIMARY_RHETORIC_VOLATILITY">US Primary H-1B/Drug Rhetoric</option>
               <option value="GRIDLOCK_DIVIDED_CONGRESS">Divided Congress Gridlock</option>
               <option value="TARIFF_HAWK_SWEEP">Tariff &amp; H-1B Hawk Sweep</option>
               <option value="FISCAL_STIMULUS_SWEEP">Fiscal &amp; Tech Capex Sweep</option>

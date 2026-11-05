@@ -19,22 +19,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const navItems: { id: ActiveTab; label: string; icon: React.ReactNode }[] = [
     { 
       id: 'equity_radar', 
-      label: 'Core 1 · Macro & Screener', 
+      label: '1. Market Finder', 
       icon: <span className="material-symbols-outlined text-[18px]">public</span> 
     },
     { 
       id: 'stress_test_lab', 
-      label: 'Core 2 · Brutal Stress Lab', 
+      label: '2. Stress Lab', 
       icon: <span className="material-symbols-outlined text-[18px]">science</span> 
     },
     { 
       id: 'autonomous_agents', 
-      label: 'Core 3 · 5-Agent Council', 
+      label: '3. AI Council', 
       icon: <span className="material-symbols-outlined text-[18px]">group_work</span> 
     },
     { 
       id: 'trade_history', 
-      label: 'Core 4 · OMS & Revert Audit', 
+      label: '4. Order Book & Guide', 
       icon: <span className="material-symbols-outlined text-[18px]">receipt_long</span> 
     },
     { 

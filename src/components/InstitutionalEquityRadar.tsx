@@ -5,6 +5,8 @@ import {
   QUANTITATIVE_STRATEGY_FRAMEWORK_WEIGHTS,
 } from '../data/institutionalEquityData';
 import { useLiveMarketData } from '../services/liveMarketService';
+import { getStoredPaperTrades, persistPaperTrades } from '../services/paperTradeService';
+import { evaluateAndDeploySingleSetupViaCouncil } from '../services/statutoryVetoEngine';
 import { MacroPolicyThesis } from './MacroPolicyThesis';
 import {
   TrendingUp,
@@ -161,6 +163,41 @@ export const InstitutionalEquityRadar: React.FC = () => {
     fetchLiveScreener(true);
   };
 
+  const handleDeployStockViaCouncil = (stock: InstitutionalStockPick) => {
+    const existingOrders = getStoredPaperTrades();
+    const ltp = Number((quotes[stock.symbol]?.price ?? stock.ltp ?? 100).toFixed(2));
+    const stopLoss = Number((stock.tacticalLevels.stopLoss || ltp * 0.9932).toFixed(2));
+    const t1 = Number((stock.tacticalLevels.target1.price || ltp * 1.022).toFixed(2));
+    const t2 = Number((stock.tacticalLevels.target2.price || ltp * 1.035).toFixed(2));
+    const t3 = Number((stock.tacticalLevels.target3.price || ltp * 1.055).toFixed(2));
+    const stopDist = Math.max(0.5, Math.abs(ltp - stopLoss));
+    const qty = Math.max(1, Math.floor(380 / stopDist));
+
+    const evaluation = evaluateAndDeploySingleSetupViaCouncil({
+      symbol: stock.ticker,
+      instrumentLabel: `${stock.ticker} Intraday Cash MIS`,
+      segment: 'NSE_CASH',
+      side: 'BUY',
+      entryPrice: ltp,
+      stopLossPrice: stopLoss,
+      t1Price: t1,
+      t2Price: t2,
+      t3Price: t3,
+      qty,
+      strategyName: `${stock.institutionalStrategy.modelName} (T1 ₹${t1} / T2 ₹${t2} / T3 ₹${t3})`,
+      quotes,
+      existingOrders,
+    });
+
+    if (evaluation.approved && evaluation.order) {
+      persistPaperTrades([evaluation.order, ...existingOrders]);
+      setToastMessage(`✅ DEPLOYED TO ORDER BOOK: ${evaluation.order.symbol} · ${evaluation.verdictReason}`);
+    } else {
+      setToastMessage(`🛡️ AI COUNCIL VETO: ${evaluation.verdictReason}`);
+    }
+    setTimeout(() => setToastMessage(null), 6000);
+  };
+
   // Active Universe (100% Live Screener Results)
   const currentUniverse = livePicks;
 
@@ -287,7 +324,7 @@ export const InstitutionalEquityRadar: React.FC = () => {
 
   return (
     <div className="flex flex-col gap-6 w-full font-mono text-slate-100">
-      {/* Unified Screener & Macro Thesis Sub-Tab Bar */}
+      {/* Unified Screener, 52W-Low/Bear-Put & Elections Sub-Tab Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 p-2 rounded-2xl bg-slate-900/70 border border-slate-800">
         <div className="flex flex-wrap items-center gap-1.5">
           <button
@@ -298,21 +335,21 @@ export const InstitutionalEquityRadar: React.FC = () => {
                 : 'text-slate-400 hover:text-white'
             }`}
           >
-            01. Live Universe &amp; Factor Screener
+            01. Live Breakout &amp; Factor Screener
           </button>
           <button
             onClick={() => setRadarWorkspaceTab('MACRO_THESIS')}
             className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
               radarWorkspaceTab === 'MACRO_THESIS'
-                ? 'bg-cyan-500 text-slate-950 shadow-[0_0_12px_rgba(0,240,255,0.3)]'
+                ? 'bg-emerald-500 text-slate-950 shadow-[0_0_12px_rgba(16,185,129,0.3)]'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
-            02. Macro Policy &amp; Sovereign Capex Thesis
+            02. 52W-Low Bottom Accumulation, Bear Put (T1/T2/T3) &amp; Elections (India + US)
           </button>
         </div>
         <span className="text-[11px] text-slate-400 px-2">
-          Survivorship-Bias-Free Universe · Close &gt; 200 SMA + Volume Expansion
+          100% Dynamic Universe · 1-Click AI Council Deploy (&gt;2.0% Net Gate)
         </span>
       </div>
 
@@ -958,16 +995,28 @@ export const InstitutionalEquityRadar: React.FC = () => {
 
                       {/* Action */}
                       <td className="py-3.5 px-3 text-center">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedStockId(stock.id);
-                            setViewMode('SPLIT_DOSSIER');
-                          }}
-                          className="px-2.5 py-1.5 rounded-lg bg-cyan-950/80 hover:bg-cyan-500 hover:text-slate-950 border border-cyan-500/40 text-cyan-300 text-[10px] font-bold uppercase transition-all cursor-pointer whitespace-nowrap"
-                        >
-                          Deep Dive
-                        </button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeployStockViaCouncil(stock);
+                            }}
+                            className="px-2.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-[10px] font-bold uppercase transition-all cursor-pointer whitespace-nowrap"
+                            title="Evaluate & deploy via 5-Agent Council (>2.0% Net Gate)"
+                          >
+                            Council Deploy
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedStockId(stock.id);
+                              setViewMode('SPLIT_DOSSIER');
+                            }}
+                            className="px-2.5 py-1.5 rounded-lg bg-cyan-950/80 hover:bg-cyan-500 hover:text-slate-950 border border-cyan-500/40 text-cyan-300 text-[10px] font-bold uppercase transition-all cursor-pointer whitespace-nowrap"
+                          >
+                            Deep Dive
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

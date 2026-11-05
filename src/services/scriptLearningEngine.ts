@@ -643,3 +643,341 @@ export function pruneLosingOrdersAndQuarantine(
     prunedCount,
   };
 }
+
+export type BottomOrBearSetupMode =
+  | 'BOTTOM_ACCUMULATION_LONG'
+  | 'BEAR_MARKET_PUT_FNO';
+
+export interface BottomAndBearPutSetup {
+  id: string;
+  symbol: string;
+  yahooSymbol: string;
+  name: string;
+  sector: string;
+  mode: BottomOrBearSetupMode;
+  modeLabel: string;
+  instrumentLabel: string;
+  segment: 'NSE_CASH' | 'NSE_FNO';
+  side: 'BUY' | 'SELL';
+  optionType?: 'PE' | 'CE';
+  strike?: number;
+  spotLtp: number;
+  changePct: number;
+  fiftyTwoWeekLow: number;
+  fiftyTwoWeekHigh: number;
+  distanceFrom52WLowPct: number;
+  drawdownFrom52WHighPct: number;
+  accumulationOrPutScore: number; // 0 to 100
+  entryPrice: number;
+  stopLossPrice: number;
+  t1Price: number;
+  t2Price: number;
+  t3Price: number;
+  recommendedQty: number;
+  capitalRequiredINR: number;
+  maxRisk1RINR: number;
+  grossTargetAtT2INR: number;
+  expectedNetYieldAtT2Pct: number;
+  nonErosionExitPlan: {
+    stage0HardStop: string;
+    stage1BreakevenLock: string;
+    stage2LockT1Floor: string;
+    stage3LockT2AndTrail82Pct: string;
+  };
+  electionAndMacroCatalyst: string;
+  rationale: string;
+}
+
+/**
+ * Dual-Mode 52-Week Low Institutional Bottom-Accumulation & Bear-Market Put F&O (`T1 / T2 / T3`) Scanner:
+ * - Mode A (`BOTTOM_ACCUMULATION_LONG`): Identifies fundamentally sound stocks trading near their 52-Week Low / cycle bottom
+ *   where institutional FII/DII delivery absorption and intraday support confirm bottom accumulation with multi-target T1, T2, T3 upside.
+ * - Mode B (`BEAR_MARKET_PUT_FNO`): Identifies weak scripts / market-low breakdowns where ATM/OTM Put (`PE`) F&O contracts
+ *   deliver asymmetric profit when the market or stock drops, with explicit T1, T2, T3 premium targets and Non-Erosion Step-Ratchet exits.
+ */
+export function evaluateBottomAccumulationAndBearPutMatrix(
+  quotes: Record<string, MarketQuote>,
+  orders: PaperTradeOrder[] = []
+): {
+  bottomAccumulationLongs: BottomAndBearPutSetup[];
+  bearMarketPutSetups: BottomAndBearPutSetup[];
+  marketLowRegimeSummary: string;
+} {
+  const macroSnapshot = evaluateElevenVectorMacroMatrix(quotes, orders);
+  const niftySpot = quotes['^NSEI']?.price && quotes['^NSEI'].price > 1000 ? quotes['^NSEI'].price : 23793.45;
+  const niftyChg = quotes['^NSEI']?.changePct ?? -0.18;
+  const vix = quotes['^INDIAVIX']?.price && quotes['^INDIAVIX'].price > 5 ? quotes['^INDIAVIX'].price : 14.6;
+  const dynamicUniverse = discoverDynamicEquityUniverse(quotes);
+
+  const bottomAccumulationLongs: BottomAndBearPutSetup[] = [];
+  const bearMarketPutSetups: BottomAndBearPutSetup[] = [];
+
+  for (const item of dynamicUniverse) {
+    const q = quotes[item.yahooSymbol];
+    const spotLtp = Number((q?.price && q.price > 0 ? q.price : 0).toFixed(2));
+    if (spotLtp <= 0) continue;
+
+    const rawChangePct = Number((q?.changePct ?? 0).toFixed(2));
+    const sectorCode = resolveSymbolSector(item.symbol);
+    const sectorFlow = macroSnapshot.participantFlow.sectorFlows[sectorCode];
+    const causalMult = sectorFlow?.causalMacroMultiplier ?? 0;
+    const effectiveChangePct =
+      macroSnapshot.mode === 'STRESS_TEST_SANDBOX'
+        ? Number((rawChangePct + causalMult * 1.5).toFixed(2))
+        : rawChangePct;
+
+    // Derive 52-Week Low & High from live quote or deterministic multi-month range envelope
+    const dayLow = q?.low && q.low > 0 ? q.low : spotLtp * 0.988;
+    const dayHigh = q?.high && q.high > 0 ? q.high : spotLtp * 1.012;
+    const est52WLow = Number(
+      (
+        q?.fiftyTwoWeekLow && q.fiftyTwoWeekLow > 0
+          ? q.fiftyTwoWeekLow
+          : dayLow * (effectiveChangePct < 0 ? 0.965 : 0.942)
+      ).toFixed(2)
+    );
+    const est52WHigh = Number(
+      (
+        q?.fiftyTwoWeekHigh && q.fiftyTwoWeekHigh > est52WLow
+          ? q.fiftyTwoWeekHigh
+          : dayHigh * 1.24
+      ).toFixed(2)
+    );
+
+    const distanceFrom52WLowPct = Number(
+      Math.max(0.4, ((spotLtp - est52WLow) / Math.max(1, est52WLow)) * 100).toFixed(2)
+    );
+    const drawdownFrom52WHighPct = Number(
+      Math.max(2.5, ((est52WHigh - spotLtp) / Math.max(1, est52WHigh)) * 100).toFixed(2)
+    );
+
+    const deliveryRatio = sectorFlow?.intradayVolumeDeliveryRatio ?? 1.45;
+    const isHardVetoSector = sectorFlow?.verdict === 'HARD_VETO_OUTFLOW';
+
+    // -------------------------------------------------------------------------
+    // MODE A: 52W-LOW INSTITUTIONAL BOTTOM ACCUMULATION (LONG GROWTH REVERSAL)
+    // -------------------------------------------------------------------------
+    // Criteria: Stock has corrected meaningfully from 52W High (drawdown >= 12%) or sits within 12% of 52W Low,
+    // AND shows institutional accumulation / positive sector flow (not a quarantined falling knife).
+    if (!isHardVetoSector && (distanceFrom52WLowPct <= 14.5 || drawdownFrom52WHighPct >= 14.0)) {
+      const entryPrice = spotLtp;
+      // Tight 0.68% stop loss so 1R <= ₹380 (<= 0.08% of ₹5L capital)
+      const stopLossPrice = Number((entryPrice * 0.9932).toFixed(2));
+      const stopDist = Math.max(0.5, Number((entryPrice - stopLossPrice).toFixed(2)));
+      const recommendedQty = Math.max(1, Math.floor(380 / stopDist));
+      const maxRisk1RINR = Number((stopDist * recommendedQty).toFixed(2));
+      const capitalRequiredINR = Math.round(entryPrice * recommendedQty);
+
+      // Multi-stage targets T1 (+2.25%), T2 (+3.45% -> clears >2.0% Net after tax), T3 (+5.40% structural mean reversion)
+      const t1Price = Number((entryPrice * 1.0225).toFixed(2));
+      const t2Price = Number((entryPrice * 1.0345).toFixed(2));
+      const t3Price = Number((entryPrice * 1.054).toFixed(2));
+      const grossTargetAtT2INR = Number(((t2Price - entryPrice) * recommendedQty).toFixed(2));
+      const expectedNetYieldAtT2Pct = Number((((grossTargetAtT2INR - 58) / Math.max(1000, capitalRequiredINR)) * 100).toFixed(2));
+
+      const bottomScore = Math.min(
+        98,
+        Math.max(
+          64,
+          Math.round(
+            72 +
+              (15 - Math.min(15, distanceFrom52WLowPct)) * 1.2 +
+              causalMult * 16 +
+              (deliveryRatio - 1.0) * 14 +
+              (effectiveChangePct >= -0.35 ? 6 : -4)
+          )
+        )
+      );
+
+      bottomAccumulationLongs.push({
+        id: `BOT-ACC-${item.symbol}`,
+        symbol: item.symbol,
+        yahooSymbol: item.yahooSymbol,
+        name: item.name,
+        sector: item.sector,
+        mode: 'BOTTOM_ACCUMULATION_LONG',
+        modeLabel: '52W-Low Bottom Accumulation · Long Reversal',
+        instrumentLabel: `${item.symbol} (NSE Cash Accumulation)`,
+        segment: 'NSE_CASH',
+        side: 'BUY',
+        spotLtp,
+        changePct: effectiveChangePct,
+        fiftyTwoWeekLow: est52WLow,
+        fiftyTwoWeekHigh: est52WHigh,
+        distanceFrom52WLowPct,
+        drawdownFrom52WHighPct,
+        accumulationOrPutScore: bottomScore,
+        entryPrice,
+        stopLossPrice,
+        t1Price,
+        t2Price,
+        t3Price,
+        recommendedQty,
+        capitalRequiredINR,
+        maxRisk1RINR,
+        grossTargetAtT2INR,
+        expectedNetYieldAtT2Pct,
+        nonErosionExitPlan: {
+          stage0HardStop: `Initial Hard Stop at ₹${stopLossPrice} (Max 1R Risk ₹${maxRisk1RINR.toFixed(0)} <= 0.08% Equity)`,
+          stage1BreakevenLock: `At +0.8R (+₹${Math.round(maxRisk1RINR * 0.8)}): Lock Stop at Cost + ₹55 Tax/Brokerage Floor`,
+          stage2LockT1Floor: `At T1 (₹${t1Price}): Book 40% & Ratchet Stop Floor to T1 (Zero Giveback)`,
+          stage3LockT2AndTrail82Pct: `At T2 (₹${t2Price}): Lock T2 Floor & Trail 82% of Peak P&L toward T3 (₹${t3Price})`,
+        },
+        electionAndMacroCatalyst:
+          sectorCode === 'DEFENSE_CAPEX' || sectorCode === 'CEMENT_INFRA'
+            ? 'India Lok Sabha Capex Continuity & Sovereign Orderbook Floor'
+            : sectorCode === 'PHARMA'
+            ? 'US Primary / Mid-Term Generic Drug Shortage & Biosecure Act Tailwinds'
+            : 'FII/DII Value Absorption Near 52-Week Structural Support',
+        rationale: `Trading ${distanceFrom52WLowPct}% above 52W Low (₹${est52WLow}, -${drawdownFrom52WHighPct}% off 52W High ₹${est52WHigh}) with ${deliveryRatio.toFixed(2)}x institutional delivery absorption. Structured for T1 ₹${t1Price} / T2 ₹${t2Price} / T3 ₹${t3Price}.`,
+      });
+    }
+
+    // -------------------------------------------------------------------------
+    // MODE B: BEAR-MARKET / WEAK-SCRIPT PUT (PE) F&O (PROFIT WHEN MARKET IS LOW)
+    // -------------------------------------------------------------------------
+    // Criteria: Script is weak/negative intraday OR in a macro/election headwind sector (IT under US Primary H-1B rhetoric,
+    // Paints/Aviation under Oil shock, Metals under China slowdown) where buying ATM/Slightly-OTM Put (PE) captures downside velocity.
+    if (effectiveChangePct < 0.25 || isHardVetoSector || niftyChg < 0) {
+      const step = spotLtp > 2000 ? 50 : spotLtp > 500 ? 20 : 10;
+      const putStrike = Math.round(spotLtp / step) * step;
+      // Deterministic Black-Scholes-style option premium proxy anchored to spotLtp & India VIX
+      const basePremiumPct = Math.max(0.018, (vix / 100) * 0.16);
+      const entryPremium = Number(Math.max(18, spotLtp * basePremiumPct).toFixed(2));
+      const stopPremium = Number((entryPremium * 0.82).toFixed(2)); // 18% option stop capped to <= ₹380 1R
+      const riskPerUnit = Math.max(1.5, Number((entryPremium - stopPremium).toFixed(2)));
+      const recommendedQty = Math.max(15, Math.min(150, Math.floor(385 / riskPerUnit)));
+      const maxRisk1RINR = Number((riskPerUnit * recommendedQty).toFixed(2));
+      const capitalRequiredINR = Math.max(9500, Math.round(entryPremium * recommendedQty));
+
+      // T1 (+28% premium expansion), T2 (+48% expansion -> >3.2% net after 2026 F&O STT), T3 (+78% breakdown flush)
+      const t1Price = Number((entryPremium * 1.28).toFixed(2));
+      const t2Price = Number((entryPremium * 1.48).toFixed(2));
+      const t3Price = Number((entryPremium * 1.78).toFixed(2));
+      const grossTargetAtT2INR = Number(((t2Price - entryPremium) * recommendedQty).toFixed(2));
+      const expectedNetYieldAtT2Pct = Number((((grossTargetAtT2INR - 68) / Math.max(1000, capitalRequiredINR)) * 100).toFixed(2));
+
+      const putScore = Math.min(
+        98,
+        Math.max(
+          62,
+          Math.round(
+            70 +
+              Math.max(0, -effectiveChangePct) * 12 +
+              (isHardVetoSector ? 16 : 0) +
+              Math.max(0, -causalMult) * 18 +
+              (distanceFrom52WLowPct <= 8 ? 8 : 0)
+          )
+        )
+      );
+
+      bearMarketPutSetups.push({
+        id: `BEAR-PUT-${item.symbol}`,
+        symbol: item.symbol,
+        yahooSymbol: item.yahooSymbol,
+        name: item.name,
+        sector: item.sector,
+        mode: 'BEAR_MARKET_PUT_FNO',
+        modeLabel: 'Bear-Market Put (PE) F&O · Profit on Downside',
+        instrumentLabel: `${item.symbol} ${putStrike} PE (NSE F&O)`,
+        segment: 'NSE_FNO',
+        side: 'BUY',
+        optionType: 'PE',
+        strike: putStrike,
+        spotLtp,
+        changePct: effectiveChangePct,
+        fiftyTwoWeekLow: est52WLow,
+        fiftyTwoWeekHigh: est52WHigh,
+        distanceFrom52WLowPct,
+        drawdownFrom52WHighPct,
+        accumulationOrPutScore: putScore,
+        entryPrice: entryPremium,
+        stopLossPrice: stopPremium,
+        t1Price,
+        t2Price,
+        t3Price,
+        recommendedQty,
+        capitalRequiredINR,
+        maxRisk1RINR,
+        grossTargetAtT2INR,
+        expectedNetYieldAtT2Pct,
+        nonErosionExitPlan: {
+          stage0HardStop: `Initial Option Stop at ₹${stopPremium} (Max 1R Risk ₹${maxRisk1RINR.toFixed(0)} · Zero Theta Bleed Hold)`,
+          stage1BreakevenLock: `At +0.8R (+₹${Math.round(maxRisk1RINR * 0.8)}): Move Stop to ₹${(entryPremium + 1.8).toFixed(2)} (Covers 2026 F&O STT + ₹40 Brok)`,
+          stage2LockT1Floor: `At T1 Premium (₹${t1Price}): Book 50% Lots & Lock Stop at T1 Floor`,
+          stage3LockT2AndTrail82Pct: `At T2 Premium (₹${t2Price}): Lock T2 & Trail 82% of Peak Gamma Surge toward T3 (₹${t3Price})`,
+        },
+        electionAndMacroCatalyst: isHardVetoSector
+          ? `12-Vector Macro/Election Headwind (${sectorCode}) + Institutional Short Buildup`
+          : `Intraday Breakdown (${effectiveChangePct >= 0 ? '+' : ''}${effectiveChangePct}%) Testing 52W Low Support (₹${est52WLow})`,
+        rationale: `Bearish Put F&O opportunity on ${item.symbol} (Spot ₹${spotLtp}, ${effectiveChangePct >= 0 ? '+' : ''}${effectiveChangePct}%): ${putStrike} PE @ ₹${entryPremium} targeting T1 ₹${t1Price} / T2 ₹${t2Price} / T3 ₹${t3Price} as downside delta accelerates.`,
+      });
+    }
+  }
+
+  // Also include Index NIFTY Bear Put F&O setup at the top of Mode B so users always have a liquid Index Put vehicle when the market is low
+  const niftyAtmPutStrike = Math.round(niftySpot / 50) * 50;
+  const niftyPutEntry = Number(Math.max(95, (niftySpot * (vix / 100) * 0.042)).toFixed(2));
+  const niftyPutStop = Number((niftyPutEntry - 14.5).toFixed(2));
+  const niftyPutQty = 25;
+  const niftyPutCapital = Math.round(niftyPutEntry * niftyPutQty);
+  const niftyPutT1 = Number((niftyPutEntry * 1.24).toFixed(2));
+  const niftyPutT2 = Number((niftyPutEntry * 1.44).toFixed(2));
+  const niftyPutT3 = Number((niftyPutEntry * 1.72).toFixed(2));
+  const niftyGrossT2 = Number(((niftyPutT2 - niftyPutEntry) * niftyPutQty).toFixed(2));
+
+  bearMarketPutSetups.unshift({
+    id: 'BEAR-PUT-NIFTY50',
+    symbol: 'NIFTY',
+    yahooSymbol: '^NSEI',
+    name: 'NIFTY 50 Index Put (PE)',
+    sector: 'Index F&O Hedge',
+    mode: 'BEAR_MARKET_PUT_FNO',
+    modeLabel: 'Index Bear Put (PE) · Downside Profit Engine',
+    instrumentLabel: `NIFTY ${niftyAtmPutStrike} PE (Weekly F&O)`,
+    segment: 'NSE_FNO',
+    side: 'BUY',
+    optionType: 'PE',
+    strike: niftyAtmPutStrike,
+    spotLtp: Number(niftySpot.toFixed(2)),
+    changePct: Number(niftyChg.toFixed(2)),
+    fiftyTwoWeekLow: Number((niftySpot * 0.89).toFixed(2)),
+    fiftyTwoWeekHigh: Number((niftySpot * 1.09).toFixed(2)),
+    distanceFrom52WLowPct: 11.2,
+    drawdownFrom52WHighPct: 8.4,
+    accumulationOrPutScore: niftyChg < 0 ? 94 : 84,
+    entryPrice: niftyPutEntry,
+    stopLossPrice: niftyPutStop,
+    t1Price: niftyPutT1,
+    t2Price: niftyPutT2,
+    t3Price: niftyPutT3,
+    recommendedQty: niftyPutQty,
+    capitalRequiredINR: niftyPutCapital,
+    maxRisk1RINR: Number(((niftyPutEntry - niftyPutStop) * niftyPutQty).toFixed(2)),
+    grossTargetAtT2INR: niftyGrossT2,
+    expectedNetYieldAtT2Pct: Number((((niftyGrossT2 - 65) / Math.max(1000, niftyPutCapital)) * 100).toFixed(2)),
+    nonErosionExitPlan: {
+      stage0HardStop: `Initial Stop at ₹${niftyPutStop} (Max 1R Risk ₹${(((niftyPutEntry - niftyPutStop) * niftyPutQty)).toFixed(0)} on 1 Lot = 25 Qty)`,
+      stage1BreakevenLock: `At +0.8R: Ratchet Stop to ₹${(niftyPutEntry + 2.5).toFixed(2)} (Covers 0.15% Sell STT + Brokerage)`,
+      stage2LockT1Floor: `At T1 (₹${niftyPutT1}): Lock T1 Floor so zero profit erodes on VIX mean-reversion`,
+      stage3LockT2AndTrail82Pct: `At T2 (₹${niftyPutT2}): Lock T2 & Trail 82% of Peak P&L toward T3 (₹${niftyPutT3})`,
+    },
+    electionAndMacroCatalyst: `India Lok Sabha / US Primary & Mid-Term Volatility + FII Index Put Hedging (VIX ${vix.toFixed(2)})`,
+    rationale: `Direct NIFTY ${niftyAtmPutStrike} PE downside profit setup when market is low/weak (${niftyChg >= 0 ? '+' : ''}${niftyChg.toFixed(2)}%). Targets T1 ₹${niftyPutT1}, T2 ₹${niftyPutT2}, T3 ₹${niftyPutT3} with strict 82% step-ratchet non-erosion protection.`,
+  });
+
+  bottomAccumulationLongs.sort((a, b) => b.accumulationOrPutScore - a.accumulationOrPutScore);
+  bearMarketPutSetups.sort((a, b) => b.accumulationOrPutScore - a.accumulationOrPutScore);
+
+  const marketLowRegimeSummary =
+    niftyChg < -0.25 || macroSnapshot.warEscalationIndex >= 55
+      ? `Bearish / Market-Low Volatility Active (NIFTY ${niftyChg >= 0 ? '+' : ''}${niftyChg.toFixed(2)}%, VIX ${vix.toFixed(2)}): Prioritize Mode B Bear Put (PE) F&O setups (T1/T2/T3) and selective Mode A 52W-Low Defensive Accumulation.`
+      : `Balanced / Accumulation Tape (NIFTY ${niftyChg >= 0 ? '+' : ''}${niftyChg.toFixed(2)}%, VIX ${vix.toFixed(2)}): Mode A 52W-Low Institutional Bottom-Accumulation leaders offer high R:R toward T1/T2/T3; keep Mode B Bear Puts ready for sector breakdowns.`;
+
+  return {
+    bottomAccumulationLongs: bottomAccumulationLongs.slice(0, 10),
+    bearMarketPutSetups: bearMarketPutSetups.slice(0, 10),
+    marketLowRegimeSummary,
+  };
+}
+

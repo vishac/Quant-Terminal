@@ -215,6 +215,13 @@ export interface PaperTradeOrder {
   exitReason?: string;
   entryPrice?: number;
   exitPrice?: number;
+  t1Price?: number;
+  t2Price?: number;
+  t3Price?: number;
+  nonErosionRule?: string;
+  taxRuleVersionId?: string;
+  taxRuleVersionLabel?: string;
+  statutoryFrictionSnapshotINR?: number;
   side?: 'BUY' | 'SELL';
   qty?: number;
   sebiComplianceVerified: boolean;

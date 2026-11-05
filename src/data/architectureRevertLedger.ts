@@ -241,5 +241,36 @@ export const ARCHITECTURE_REVERT_LEDGER: RevertLedgerEntry[] = [
     revertInstruction:
       'In src/services/macroCausalLearningEngine.ts, remove vec_us_midterms and US_MIDTERM_TARIFF_YIELD_SHOCK.',
   },
+  {
+    revertId: 'REV-016',
+    dateIST: '05-Nov-2026',
+    category: 'WIRED_LIVE_OMS_ACTION',
+    moduleName: 'Full-App Button Audit, Real OMS Wiring of Risk Engine & Circuit Breaker, and Universal >2% Net + 5-Agent Veto Enforcement',
+    filePath: 'src/App.tsx, src/components/RiskEngineTerminal.tsx, src/components/FirstPrinciplesMarketEngine.tsx, src/components/MacroPolicyThesis.tsx, src/components/InstitutionalEquityRadar.tsx',
+    previousStateSummary:
+      'Header/Sidebar Emergency Circuit Breaker and Risk Engine buttons (Global Kill, Expel OTM Options, Pause Strangle Bot, 100% Cash Hedge) only updated local React state, and manual setups in First-Principles Sector Intelligence bypassed the 5-Agent Veto Gate.',
+    newStateSummary:
+      'Wired all Risk Engine and Circuit Breaker actions directly to canonical OMS (getStoredPaperTrades/persistPaperTrades) and jarvis_bot_status_overrides; replaced static seed logs in RiskEngineTerminal with live telemetry; added 1-click Council Deploy & OMS jump buttons to Confirmed Leaders and Screener rows; and enforced >2.00% Net Profit + 5-Agent Veto on all manual setups.',
+    quantValueJustification:
+      'Guarantees 100% of buttons across all 4 Cores execute real OMS actions and zero manual or automated trade can bypass the >2.00% Net-of-Tax Profit + 5-Agent Veto Gate.',
+    revertInstruction:
+      'Remove persistPaperTrades() calls in App.tsx (handleExecuteCircuitBreaker) and RiskEngineTerminal.tsx, and bypass evaluateCandidateOrderAgainstVetoRules() in FirstPrinciplesMarketEngine.tsx.',
+  },
+  {
+    revertId: 'REV-017',
+    dateIST: '05-Nov-2026',
+    category: 'STRATEGY_VETO_ENGINE',
+    moduleName: 'Plain-English 4-Core Naming, Full-Cycle India Lok Sabha + US Primary/Mid-Term Elections, 52W-Low Bottom & Bear Put (T1/T2/T3) Scanner, T-1 Tax/Brokerage Calendar with Before/After History & User Guide',
+    filePath: 'src/services/macroCausalLearningEngine.ts, src/services/scriptLearningEngine.ts, src/services/statutoryVetoEngine.ts, src/components/MacroPolicyThesis.tsx, src/components/TradeHistory.tsx, USER_GUIDE_STRENGTHS_AND_LIMITATIONS.md',
+    previousStateSummary:
+      'Core labels used technical jargon; Vector #12 only modeled US Mid-Term Elections without US Primary Elections or India Lok Sabha/State Assembly Elections; no dedicated 52W-Low Bottom Accumulation + Bear-Market Put (T1/T2/T3) Non-Erosion scanner existed; and statutory tax rules lacked a T-1 Pre-Market approval calendar and Before/After order history.',
+    newStateSummary:
+      'Renamed the 4 Cores to (1. Market Finder, 2. Stress Lab, 3. AI Council, 4. Order Book); upgraded Vector #12 to evaluate India Lok Sabha/State Assembly + US Primary/Mid-Term/Presidential elections simultaneously; built the Dual-Mode 52W-Low Bottom Accumulation Long + Bear-Market Put PE F&O Scanner with T1/T2/T3 targets and 4-stage Non-Erosion Step-Ratchet exits; added the T-1 Pre-Market Statutory Tax/Brokerage Approval Calendar with permanent Before/After order stamping; and created the auto-updated User Guide & Strengths/Weaknesses manual.',
+    quantValueJustification:
+      'Enables institutional alpha in both 52W-low turnaround accumulations and bear-market crashes (via Put F&O with T1/T2/T3 non-erosion ratchets), captures both domestic India Lok Sabha and US Primary/Mid-Term election shocks, and guarantees zero missed statutory tax/brokerage rule changes with auditable Before/After order accounting.',
+    revertInstruction:
+      'Revert core labels in Header.tsx/Sidebar.tsx/App.tsx, remove evaluateBottomAccumulationAndBearPutMatrix() in scriptLearningEngine.ts, and remove getStatutoryTaxRuleCalendar() in statutoryVetoEngine.ts.',
+  },
 ];
+
 

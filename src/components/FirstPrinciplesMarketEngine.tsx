@@ -38,6 +38,11 @@ import {
   type InstitutionalStockSetupBlueprint,
 } from '../utils/institutionalSetupBlueprint';
 import type { ActionableStockImpact } from '../server/globalMarketImpactEngine';
+import { evaluateCandidateOrderAgainstVetoRules } from '../services/statutoryVetoEngine';
+import {
+  evaluateElevenVectorMacroMatrix,
+  evaluateInterAgentConsensusPipeline,
+} from '../services/macroCausalLearningEngine';
 import { getStoredPaperTrades, persistPaperTrades } from '../services/paperTradeService';
 import { formatOrderDate, formatOrderTime } from '../utils/orderFormatters';
 import { AutonomousSchedulerHub } from './AutonomousSchedulerHub';
@@ -311,12 +316,36 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
     };
 
     const existing = getStoredPaperTrades();
-    const updatedOrders = [newOrder, ...existing];
+    const macroSnapshot = evaluateElevenVectorMacroMatrix(quotes, existing);
+    const interAgentConsensus = evaluateInterAgentConsensusPipeline({
+      candidateOrder: newOrder,
+      quotes,
+      existingOrders: existing,
+      macroSnapshot,
+    });
+    const vetoEvaluation = evaluateCandidateOrderAgainstVetoRules({
+      candidateOrder: newOrder,
+      deskName: 'First-Principles Sector Intelligence Desk',
+      confirmedScriptStatus: 'CONFIRMED_LEADER',
+      legCount: 1,
+      isOptionContract: bp.instrumentMode === 'NSE_OPTION',
+      interAgentConsensus,
+      minRequiredNetProfitPct: macroSnapshot.requiredMinNetProfitPct,
+    });
+
+    if (!vetoEvaluation.approved || !vetoEvaluation.order) {
+      setActiveSetupContext(null);
+      setFeedbackNotice(`🛡️ AI COUNCIL & >2% NET VETO GATE: ${vetoEvaluation.verdictReason}`);
+      setTimeout(() => setFeedbackNotice(null), 7000);
+      return;
+    }
+
+    const updatedOrders = [vetoEvaluation.order, ...existing];
     persistPaperTrades(updatedOrders);
     setSessionOrders(updatedOrders);
     setActiveSetupContext(null);
     setFeedbackNotice(
-      `⚡ Deployed ${bp.contractSymbol} (${bp.side} Qty ${bp.quantity} @ ₹${bp.instrumentEntryPrice.toLocaleString('en-IN')}) to Live Session Order Book & ROI Ledger.`,
+      `⚡ Approved by 5-Agent Council & >2.0% Net Gate: Deployed ${bp.contractSymbol} (${bp.side} Qty ${bp.quantity} @ ₹${bp.instrumentEntryPrice.toLocaleString('en-IN')}) to Order Book.`,
     );
     setTimeout(() => setFeedbackNotice(null), 6000);
   };

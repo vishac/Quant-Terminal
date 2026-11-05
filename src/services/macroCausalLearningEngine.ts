@@ -27,9 +27,16 @@ export type NseSectorCode =
 
 export type UsMidtermElectionStance =
   | 'LIVE_DYNAMIC_TRACKING'
+  | 'US_PRIMARY_RHETORIC_VOLATILITY'
   | 'GRIDLOCK_DIVIDED_CONGRESS'
   | 'TARIFF_HAWK_SWEEP'
   | 'FISCAL_STIMULUS_SWEEP';
+
+export type IndiaElectionStance =
+  | 'INDIA_LIVE_CONTINUITY_TRACKING'
+  | 'INDIA_LOKSABHA_CONTINUITY_CAPEX'
+  | 'INDIA_MCC_PRE_POLL_PAUSE'
+  | 'INDIA_LOKSABHA_COALITION_POPULIST';
 
 export interface MacroStressOverrideConfig {
   mode: 'LIVE_EXCHANGE_FEED' | 'STRESS_TEST_SANDBOX';
@@ -38,6 +45,7 @@ export interface MacroStressOverrideConfig {
     | 'WAR_HORMUZ_ESCALATION'
     | 'FED_HAWKISH_JOBS_STAGFLATION'
     | 'US_MIDTERM_TARIFF_YIELD_SHOCK'
+    | 'INDIA_LOKSABHA_US_PRIMARY_SHOCK'
     | 'FII_CAPITULATION_DII_CAPEX'
     | 'GOVT_WINDFALL_SEBI_POLICY_SHOCK'
     | 'GLOBAL_RISK_ON_DEFLATION'
@@ -56,6 +64,7 @@ export interface MacroStressOverrideConfig {
   globalEquityOverrideChangePct: number | null;
   govtPolicyStance: 'PRO_CAPEX_PLI_BOOST' | 'NEUTRAL_CONTINUITY' | 'WINDFALL_TAX_SEBI_TIGHTENING';
   usMidtermElectionOutcome?: UsMidtermElectionStance;
+  indiaElectionOutcome?: IndiaElectionStance;
   fiiCashNetCrINR: number;           // e.g. -5200 Cr to +4500 Cr
   diiCashNetCrINR: number;           // e.g. +4800 Cr
   fiiIndexFuturesLSR: number;        // 15% (heavy short) to 75% (heavy long)
@@ -274,6 +283,7 @@ export const DEFAULT_LIVE_MACRO_CONFIG: MacroStressOverrideConfig = {
   globalEquityOverrideChangePct: null,
   govtPolicyStance: 'PRO_CAPEX_PLI_BOOST',
   usMidtermElectionOutcome: 'LIVE_DYNAMIC_TRACKING',
+  indiaElectionOutcome: 'INDIA_LIVE_CONTINUITY_TRACKING',
   fiiCashNetCrINR: -840,
   diiCashNetCrINR: 2150,
   fiiIndexFuturesLSR: 48,
@@ -300,6 +310,7 @@ export const BRUTAL_STRESS_PRESETS: Record<string, MacroStressOverrideConfig> = 
     globalEquityOverrideChangePct: -3.1,
     govtPolicyStance: 'NEUTRAL_CONTINUITY',
     usMidtermElectionOutcome: 'LIVE_DYNAMIC_TRACKING',
+    indiaElectionOutcome: 'INDIA_LIVE_CONTINUITY_TRACKING',
     fiiCashNetCrINR: -5420,
     diiCashNetCrINR: 3890,
     fiiIndexFuturesLSR: 21,
@@ -323,6 +334,7 @@ export const BRUTAL_STRESS_PRESETS: Record<string, MacroStressOverrideConfig> = 
     globalEquityOverrideChangePct: -2.65,
     govtPolicyStance: 'NEUTRAL_CONTINUITY',
     usMidtermElectionOutcome: 'LIVE_DYNAMIC_TRACKING',
+    indiaElectionOutcome: 'INDIA_LIVE_CONTINUITY_TRACKING',
     fiiCashNetCrINR: -4680,
     diiCashNetCrINR: 3120,
     fiiIndexFuturesLSR: 26,
@@ -332,7 +344,7 @@ export const BRUTAL_STRESS_PRESETS: Record<string, MacroStressOverrideConfig> = 
   US_MIDTERM_TARIFF_YIELD_SHOCK: {
     mode: 'STRESS_TEST_SANDBOX',
     presetId: 'US_MIDTERM_TARIFF_YIELD_SHOCK',
-    presetLabel: '2026 US Mid-Term Election: Tariff Sweep, H-1B Tightening & 10Y Yield Spike',
+    presetLabel: 'US Primary / Mid-Term Election: Tariff Sweep, H-1B Tightening & 10Y Yield Spike',
     warEscalationIndex: 38,
     fedRateShockBps: 35,
     usJobsNfpSurpriseK: 22,
@@ -346,11 +358,36 @@ export const BRUTAL_STRESS_PRESETS: Record<string, MacroStressOverrideConfig> = 
     globalEquityOverrideChangePct: -1.45,
     govtPolicyStance: 'PRO_CAPEX_PLI_BOOST',
     usMidtermElectionOutcome: 'TARIFF_HAWK_SWEEP',
+    indiaElectionOutcome: 'INDIA_LOKSABHA_CONTINUITY_CAPEX',
     fiiCashNetCrINR: -3950,
     diiCashNetCrINR: 4620,
     fiiIndexFuturesLSR: 31,
     proIndexFuturesLSR: 44,
     clientRetailIndexFuturesLSR: 66,
+  },
+  INDIA_LOKSABHA_US_PRIMARY_SHOCK: {
+    mode: 'STRESS_TEST_SANDBOX',
+    presetId: 'INDIA_LOKSABHA_US_PRIMARY_SHOCK',
+    presetLabel: 'India Lok Sabha Poll Volatility + US Primary H-1B/Tariff Rhetoric',
+    warEscalationIndex: 28,
+    fedRateShockBps: 20,
+    usJobsNfpSurpriseK: -15,
+    usUnemploymentRatePct: 4.3,
+    dxyOverrideChangePct: 0.85,
+    usdinrOverrideChangePct: 0.38,
+    brentOilOverrideChangePct: 1.2,
+    natGasOverrideChangePct: 1.5,
+    goldOverrideChangePct: 1.4,
+    silverOverrideChangePct: 1.6,
+    globalEquityOverrideChangePct: -0.95,
+    govtPolicyStance: 'NEUTRAL_CONTINUITY',
+    usMidtermElectionOutcome: 'US_PRIMARY_RHETORIC_VOLATILITY',
+    indiaElectionOutcome: 'INDIA_LOKSABHA_COALITION_POPULIST',
+    fiiCashNetCrINR: -3480,
+    diiCashNetCrINR: 4920,
+    fiiIndexFuturesLSR: 33,
+    proIndexFuturesLSR: 48,
+    clientRetailIndexFuturesLSR: 65,
   },
   FII_CAPITULATION_DII_CAPEX: {
     mode: 'STRESS_TEST_SANDBOX',
@@ -649,7 +686,7 @@ export function evaluateElevenVectorMacroMatrix(
     )
   );
 
-  // Vector 12: 2026 US Mid-Term Elections & Indo-US Trade/Tariff/Yield Regime
+  // Vector 12: Full-Cycle Sovereign Elections (India Lok Sabha/State + US Primary, Mid-Term & Presidential)
   const usMidtermStance: UsMidtermElectionStance =
     cfg.usMidtermElectionOutcome || 'LIVE_DYNAMIC_TRACKING';
   const effectiveMidtermStance: Exclude<UsMidtermElectionStance, 'LIVE_DYNAMIC_TRACKING'> =
@@ -661,12 +698,50 @@ export function evaluateElevenVectorMacroMatrix(
       ? 'FISCAL_STIMULUS_SWEEP'
       : 'GRIDLOCK_DIVIDED_CONGRESS';
 
-  const v12MidtermScore =
+  const indiaElectionStance: IndiaElectionStance =
+    cfg.indiaElectionOutcome || 'INDIA_LIVE_CONTINUITY_TRACKING';
+  const effectiveIndiaStance: Exclude<IndiaElectionStance, 'INDIA_LIVE_CONTINUITY_TRACKING'> =
+    indiaElectionStance !== 'INDIA_LIVE_CONTINUITY_TRACKING'
+      ? indiaElectionStance
+      : diiCapexBasketChg >= 0.15
+      ? 'INDIA_LOKSABHA_CONTINUITY_CAPEX'
+      : niftyChg <= -0.85
+      ? 'INDIA_MCC_PRE_POLL_PAUSE'
+      : 'INDIA_LOKSABHA_CONTINUITY_CAPEX';
+
+  const usScorePart =
     effectiveMidtermStance === 'GRIDLOCK_DIVIDED_CONGRESS'
-      ? Math.min(90, Math.round(48 + nasdaqChg * 12 - Math.max(0, us10yYield - 4.3) * 25))
+      ? Math.min(50, Math.round(28 + nasdaqChg * 8 - Math.max(0, us10yYield - 4.3) * 15))
       : effectiveMidtermStance === 'FISCAL_STIMULUS_SWEEP'
-      ? Math.min(92, Math.round(58 + sp500Chg * 14))
-      : Math.max(-88, Math.round(-46 - dxyChg * 18 - (us10yYield - 4.25) * 30));
+      ? Math.min(52, Math.round(34 + sp500Chg * 9))
+      : effectiveMidtermStance === 'US_PRIMARY_RHETORIC_VOLATILITY'
+      ? Math.round(-16 - Math.max(0, dxyChg) * 10)
+      : Math.max(-52, Math.round(-28 - dxyChg * 12 - (us10yYield - 4.25) * 18));
+
+  const indiaScorePart =
+    effectiveIndiaStance === 'INDIA_LOKSABHA_CONTINUITY_CAPEX'
+      ? Math.min(48, Math.round(26 + diiCapexBasketChg * 10))
+      : effectiveIndiaStance === 'INDIA_LOKSABHA_COALITION_POPULIST'
+      ? 8
+      : -18;
+
+  const v12MidtermScore = Math.max(-95, Math.min(95, usScorePart + indiaScorePart));
+
+  const usElectionShortLabel =
+    effectiveMidtermStance === 'TARIFF_HAWK_SWEEP'
+      ? 'US TARIFF/YIELD HAWK'
+      : effectiveMidtermStance === 'US_PRIMARY_RHETORIC_VOLATILITY'
+      ? 'US PRIMARY H-1B/DRUG RHETORIC'
+      : effectiveMidtermStance === 'FISCAL_STIMULUS_SWEEP'
+      ? 'US TECH/CAPEX BOOM'
+      : 'US DIVIDED GRIDLOCK';
+
+  const indiaElectionShortLabel =
+    effectiveIndiaStance === 'INDIA_LOKSABHA_CONTINUITY_CAPEX'
+      ? 'INDIA LOK SABHA CAPEX'
+      : effectiveIndiaStance === 'INDIA_LOKSABHA_COALITION_POPULIST'
+      ? 'INDIA RURAL/COALITION PIVOT'
+      : 'INDIA MCC PRE-POLL WAIT';
 
   const vectors: VectorSignalItem[] = [
     {
@@ -855,13 +930,8 @@ export function evaluateElevenVectorMacroMatrix(
     {
       id: 'vec_us_midterms',
       vectorNumber: 12,
-      name: '2026 US Mid-Term Elections & Trade Policy',
-      liveValueText:
-        effectiveMidtermStance === 'TARIFF_HAWK_SWEEP'
-          ? 'TARIFF & YIELD HAWK'
-          : effectiveMidtermStance === 'FISCAL_STIMULUS_SWEEP'
-          ? 'US TECH/CAPEX BOOM'
-          : 'DIVIDED CONGRESS GRIDLOCK',
+      name: 'India (Lok Sabha/State) & US (Primary/Mid-Term/Gen) Elections',
+      liveValueText: `${indiaElectionShortLabel} · ${usElectionShortLabel}`,
       changeText: `10Y ${us10yYield.toFixed(2)}% · DXY ${dxyChg >= 0 ? '+' : ''}${dxyChg.toFixed(2)}%`,
       score: v12MidtermScore,
       status:
@@ -871,18 +941,24 @@ export function evaluateElevenVectorMacroMatrix(
           ? 'HEADWIND'
           : 'TAILWIND',
       causalImpactSummary:
-        effectiveMidtermStance === 'TARIFF_HAWK_SWEEP'
-          ? 'US Mid-Term Tariff & Deficit Sweep: Universal Section 301/232 tariff risk + H-1B visa wage floor pressure + 10Y Treasury yield spike vetoes Metals & FII-heavy Banks; favors Indian Defence (INDUS-X) & US Biosecure Act Pharma.'
+        effectiveMidtermStance === 'US_PRIMARY_RHETORIC_VOLATILITY'
+          ? `US Primary Campaign Rhetoric + ${indiaElectionShortLabel}: Early US primary debate pressure on H-1B visas & drug pricing triggers selective FII rotation out of high-multiple IT into complex Pharma (CIPLA, SUNPHARMA), while India election positioning favors ${effectiveIndiaStance === 'INDIA_LOKSABHA_COALITION_POPULIST' ? 'Rural Consumption & Retail (TRENT, TITAN)' : 'Sovereign Capex & Defence (HAL, BEL, LT)'}.`
+          : effectiveMidtermStance === 'TARIFF_HAWK_SWEEP'
+          ? `US Tariff/Yield Sweep + ${indiaElectionShortLabel}: Section 301/232 tariff risk + H-1B wage floor hike + 10Y yield spike vetoes Base Metals & FII-heavy Banks; favors Indian Defence (INDUS-X) & US Biosecure Pharma.`
           : effectiveMidtermStance === 'FISCAL_STIMULUS_SWEEP'
-          ? 'Pro-Growth US Mid-Term Sweep: US enterprise AI/Cloud spend & Indo-US defense co-production boost TCS, INFY, HAL, BEL & Sun/Cipla.'
-          : 'Divided US Congress Gridlock: Prevents extreme US fiscal deficit blowout, caps 10Y Treasury yields, and unlocks Fortune-500 IT outsourcing & US generic Pharma approvals.',
+          ? `US Pro-Growth Sweep + ${indiaElectionShortLabel}: US enterprise AI/Cloud spend & Indo-US defense co-production boost TCS, INFY, HAL, BEL & Sun/Cipla.`
+          : `India Lok Sabha Capex Continuity + Divided US Congress Gridlock: Caps US 10Y yields while sustaining India Sovereign Capex (HAL, BEL, LT) & US IT/Pharma outsourcing.`,
       beneficiarySectors:
         effectiveMidtermStance === 'TARIFF_HAWK_SWEEP'
           ? ['DEFENSE_CAPEX', 'PHARMA', 'ENERGY_UPSTREAM']
+          : effectiveMidtermStance === 'US_PRIMARY_RHETORIC_VOLATILITY'
+          ? ['PHARMA', 'DEFENSE_CAPEX', 'RETAIL_TELECOM']
           : ['IT', 'PHARMA', 'DEFENSE_CAPEX'],
       vetoedSectors:
         effectiveMidtermStance === 'TARIFF_HAWK_SWEEP'
           ? ['METALS', 'CEMENT_INFRA']
+          : effectiveIndiaStance === 'INDIA_MCC_PRE_POLL_PAUSE'
+          ? ['CEMENT_INFRA']
           : [],
     },
   ];
@@ -908,23 +984,51 @@ export function evaluateElevenVectorMacroMatrix(
     let macroMult = 0.15;
 
     if (sec.code === 'DEFENSE_CAPEX') {
-      diiScore += cfg.govtPolicyStance === 'PRO_CAPEX_PLI_BOOST' ? 45 : 20;
-      // Indo-US INDUS-X / GE-F404 co-production tailwind across US Mid-Terms
-      fiiScore += effectiveMidtermStance === 'TARIFF_HAWK_SWEEP' ? 18 : 12;
-      macroMult = warIndex >= 50 ? 0.85 : cfg.govtPolicyStance === 'PRO_CAPEX_PLI_BOOST' ? 0.78 : 0.45;
+      diiScore +=
+        effectiveIndiaStance === 'INDIA_LOKSABHA_CONTINUITY_CAPEX' || cfg.govtPolicyStance === 'PRO_CAPEX_PLI_BOOST'
+          ? 48
+          : effectiveIndiaStance === 'INDIA_MCC_PRE_POLL_PAUSE'
+          ? 12
+          : 25;
+      // Indo-US INDUS-X / GE-F404 co-production tailwind across US Primaries & Mid-Terms
+      fiiScore += effectiveMidtermStance === 'TARIFF_HAWK_SWEEP' ? 18 : 14;
+      macroMult =
+        warIndex >= 50
+          ? 0.85
+          : effectiveIndiaStance === 'INDIA_LOKSABHA_CONTINUITY_CAPEX'
+          ? 0.80
+          : 0.45;
     } else if (sec.code === 'PHARMA') {
       // US Biosecure Act China+1 CDMO & generic drug shortage tailwinds
-      fiiScore += dxyChg >= 0.3 ? 42 : 26;
-      diiScore += 25;
-      macroMult = dxyChg >= 0.3 || warIndex >= 50 || effectiveMidtermStance === 'TARIFF_HAWK_SWEEP' ? 0.84 : 0.58;
+      fiiScore += dxyChg >= 0.3 ? 42 : 28;
+      diiScore += 26;
+      macroMult =
+        dxyChg >= 0.3 ||
+        warIndex >= 50 ||
+        effectiveMidtermStance === 'TARIFF_HAWK_SWEEP' ||
+        effectiveMidtermStance === 'US_PRIMARY_RHETORIC_VOLATILITY'
+          ? 0.84
+          : 0.58;
     } else if (sec.code === 'IT') {
-      if (effectiveMidtermStance === 'TARIFF_HAWK_SWEEP') {
-        // H-1B visa wage floor & outsourcing rhetoric offsets part of USD/INR tailwind
-        fiiScore += usdinrChg >= 0.4 ? 12 : -15;
-        macroMult = usdinrChg >= 0.5 ? 0.35 : -0.15;
+      if (
+        effectiveMidtermStance === 'TARIFF_HAWK_SWEEP' ||
+        effectiveMidtermStance === 'US_PRIMARY_RHETORIC_VOLATILITY'
+      ) {
+        // US Primary / Mid-Term H-1B visa wage floor & outsourcing rhetoric offsets part of USD/INR tailwind
+        fiiScore += usdinrChg >= 0.4 ? 10 : -18;
+        macroMult = usdinrChg >= 0.5 ? 0.30 : -0.15;
       } else {
         fiiScore += usdinrChg >= 0.25 && nasdaqChg >= -1.0 ? 42 : 18;
         macroMult = dxyChg >= 0.4 || effectiveMidtermStance === 'GRIDLOCK_DIVIDED_CONGRESS' ? 0.74 : 0.45;
+      }
+    } else if (sec.code === 'RETAIL_TELECOM') {
+      if (effectiveIndiaStance === 'INDIA_LOKSABHA_COALITION_POPULIST') {
+        diiScore += 42;
+        fiiScore += 22;
+        macroMult = 0.72;
+      } else {
+        diiScore += 18;
+        macroMult = 0.35;
       }
     } else if (sec.code === 'ENERGY_UPSTREAM') {
       fiiScore += brentChg >= 1.5 ? 48 : 10;

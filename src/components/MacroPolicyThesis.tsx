@@ -4,32 +4,44 @@ import {
   Award,
   Cpu,
   ShieldCheck,
-  Sliders,
-  Share2,
   Zap,
   Globe,
   TrendingUp,
   TrendingDown,
   AlertTriangle,
   Radio,
-  Scale,
+  Target,
+  ArrowUpRight,
+  Flag,
 } from 'lucide-react';
 import { useLiveMarketData } from '../services/liveMarketService';
-import { getStoredPaperTrades } from '../services/paperTradeService';
+import { getStoredPaperTrades, persistPaperTrades } from '../services/paperTradeService';
 import {
   evaluateElevenVectorMacroMatrix,
   loadMacroStressConfig,
   saveMacroStressConfig,
   UsMidtermElectionStance,
+  IndiaElectionStance,
   resolveSymbolSector,
 } from '../services/macroCausalLearningEngine';
-import { evaluateAdaptiveScriptLearningMatrix } from '../services/scriptLearningEngine';
+import {
+  evaluateAdaptiveScriptLearningMatrix,
+  evaluateBottomAccumulationAndBearPutMatrix,
+  BottomAndBearPutSetup,
+} from '../services/scriptLearningEngine';
+import { evaluateAndDeploySingleSetupViaCouncil } from '../services/statutoryVetoEngine';
 
 export const MacroPolicyThesis: React.FC = () => {
   const { quotes, lastUpdated } = useLiveMarketData(5000);
   const [orders, setOrders] = useState(() => getStoredPaperTrades());
   const [stressConfig, setStressConfig] = useState(() => loadMacroStressConfig());
-  const [modelWeightToast, setModelWeightToast] = useState<string | null>(null);
+  const [modelWeightToast, setModelWeightToast] = useState<{
+    message: string;
+    isError?: boolean;
+  } | null>(null);
+  const [scannerFilterMode, setScannerFilterMode] = useState<
+    'DUAL_VIEW' | 'BOTTOM_LONG_ONLY' | 'BEAR_PUT_ONLY'
+  >('DUAL_VIEW');
 
   useEffect(() => {
     const syncOrders = () => setOrders(getStoredPaperTrades());
@@ -49,6 +61,11 @@ export const MacroPolicyThesis: React.FC = () => {
 
   const learningMatrix = useMemo(
     () => evaluateAdaptiveScriptLearningMatrix(quotes, orders),
+    [quotes, orders]
+  );
+
+  const bottomAndBearMatrix = useMemo(
+    () => evaluateBottomAccumulationAndBearPutMatrix(quotes, orders),
     [quotes, orders]
   );
 
@@ -83,7 +100,7 @@ export const MacroPolicyThesis: React.FC = () => {
   const neutralPct = Math.round((neutralCount / totalVecs) * 100);
   const bearishPct = Math.max(0, 100 - bullishPct - neutralPct);
 
-  const usMidtermVec = macro12.vectors.find((v) => v.id === 'vec_us_midterms');
+  const electionVec = macro12.vectors.find((v) => v.id === 'vec_us_midterms');
   const us10yYield = quotes['^TNX']?.price ?? 4.28;
   const dxyPrice = quotes['DX-Y.NYB']?.price ?? 104.35;
   const dxyChg = quotes['DX-Y.NYB']?.changePct ?? 0.22;
@@ -93,53 +110,189 @@ export const MacroPolicyThesis: React.FC = () => {
 
   const activeMidtermStance: UsMidtermElectionStance =
     stressConfig.usMidtermElectionOutcome || 'LIVE_DYNAMIC_TRACKING';
+  const activeIndiaElectionStance: IndiaElectionStance =
+    stressConfig.indiaElectionOutcome || 'INDIA_LIVE_CONTINUITY_TRACKING';
 
   const handleSelectMidtermStance = (stance: UsMidtermElectionStance) => {
+    const isLiveBoth =
+      stance === 'LIVE_DYNAMIC_TRACKING' &&
+      activeIndiaElectionStance === 'INDIA_LIVE_CONTINUITY_TRACKING';
     const nextConfig = {
       ...stressConfig,
       usMidtermElectionOutcome: stance,
-      mode:
-        stance === 'LIVE_DYNAMIC_TRACKING'
-          ? ('LIVE_EXCHANGE_FEED' as const)
-          : ('STRESS_TEST_SANDBOX' as const),
+      mode: isLiveBoth ? ('LIVE_EXCHANGE_FEED' as const) : ('STRESS_TEST_SANDBOX' as const),
       presetId:
         stance === 'TARIFF_HAWK_SWEEP'
           ? ('US_MIDTERM_TARIFF_YIELD_SHOCK' as const)
+          : stance === 'US_PRIMARY_RHETORIC_VOLATILITY'
+          ? ('INDIA_LOKSABHA_US_PRIMARY_SHOCK' as const)
           : ('CUSTOM_SHOCK' as const),
       presetLabel:
         stance === 'TARIFF_HAWK_SWEEP'
-          ? '2026 US Mid-Term Tariff & Yield Spike Sweep'
+          ? 'US Election Tariff & Yield Spike Sweep'
+          : stance === 'US_PRIMARY_RHETORIC_VOLATILITY'
+          ? 'US Primary Election H-1B & Drug Pricing Rhetoric Volatility'
           : stance === 'GRIDLOCK_DIVIDED_CONGRESS'
-          ? '2026 US Mid-Term Divided Congress Gridlock'
+          ? 'US Divided Congress Gridlock'
           : stance === 'FISCAL_STIMULUS_SWEEP'
-          ? '2026 US Mid-Term Pro-Tech & Fiscal Capex Sweep'
+          ? 'US Pro-Tech & Fiscal Capex Sweep'
           : 'Live Exchange Telemetry (/api/market-data)',
     };
     setStressConfig(nextConfig);
     saveMacroStressConfig(nextConfig);
-    setModelWeightToast(
-      `2026 US Mid-Term Vector updated to [${stance.replace(/_/g, ' ')}] across all 4 Core Desks. Top Leaders: ${topLiveLeaders
+    setModelWeightToast({
+      message: `US Primary / Mid-Term / General Election Vector updated to [${stance.replace(/_/g, ' ')}]. Active Leaders: ${topLiveLeaders
         .map((l) => l.symbol)
-        .join(', ')}.`
-    );
+        .join(', ')}.`,
+    });
     setTimeout(() => setModelWeightToast(null), 5000);
+  };
+
+  const handleSelectIndiaElectionStance = (indiaStance: IndiaElectionStance) => {
+    const isLiveBoth =
+      indiaStance === 'INDIA_LIVE_CONTINUITY_TRACKING' &&
+      activeMidtermStance === 'LIVE_DYNAMIC_TRACKING';
+    const nextConfig = {
+      ...stressConfig,
+      indiaElectionOutcome: indiaStance,
+      mode: isLiveBoth ? ('LIVE_EXCHANGE_FEED' as const) : ('STRESS_TEST_SANDBOX' as const),
+      presetId:
+        indiaStance === 'INDIA_LOKSABHA_COALITION_POPULIST'
+          ? ('INDIA_LOKSABHA_US_PRIMARY_SHOCK' as const)
+          : ('CUSTOM_SHOCK' as const),
+      presetLabel:
+        indiaStance === 'INDIA_LOKSABHA_CONTINUITY_CAPEX'
+          ? 'India Lok Sabha Majority Continuity (Capex + Defence Surge)'
+          : indiaStance === 'INDIA_MCC_PRE_POLL_PAUSE'
+          ? 'India Pre-Poll Model Code of Conduct (MCC) Tender Pause'
+          : indiaStance === 'INDIA_LOKSABHA_COALITION_POPULIST'
+          ? 'India Lok Sabha Coalition / Populist Rural Pivot'
+          : 'Live Domestic Sovereign Continuity Tracking',
+    };
+    setStressConfig(nextConfig);
+    saveMacroStressConfig(nextConfig);
+    setModelWeightToast({
+      message: `India Lok Sabha & State Election Vector updated to [${indiaStance.replace(/_/g, ' ')}]. Sectoral FII/DII flows recalibrated.`,
+    });
+    setTimeout(() => setModelWeightToast(null), 5000);
+  };
+
+  const handleDeploySetupViaCouncil = (setup: BottomAndBearPutSetup) => {
+    const currentOrders = getStoredPaperTrades();
+    const evaluation = evaluateAndDeploySingleSetupViaCouncil({
+      symbol: setup.symbol,
+      instrumentLabel: setup.instrumentLabel,
+      segment: setup.segment,
+      side: setup.side,
+      entryPrice: setup.entryPrice,
+      stopLossPrice: setup.stopLossPrice,
+      t1Price: setup.t1Price,
+      t2Price: setup.t2Price,
+      t3Price: setup.t3Price,
+      qty: setup.recommendedQty,
+      optionType: setup.optionType,
+      strike: setup.strike,
+      strategyName: `${setup.modeLabel} (T1 ₹${setup.t1Price} / T2 ₹${setup.t2Price} / T3 ₹${setup.t3Price})`,
+      nonErosionRule: `${setup.nonErosionExitPlan.stage2LockT1Floor} · ${setup.nonErosionExitPlan.stage3LockT2AndTrail82Pct}`,
+      quotes,
+      existingOrders: currentOrders,
+    });
+
+    if (evaluation.approved && evaluation.order) {
+      const updated = [evaluation.order, ...currentOrders];
+      persistPaperTrades(updated);
+      setOrders(updated);
+      setModelWeightToast({
+        message: `✅ DEPLOYED TO ORDER BOOK: ${evaluation.order.symbol} · ${evaluation.verdictReason}`,
+      });
+    } else {
+      setModelWeightToast({
+        message: `🛡️ AI COUNCIL VETO: ${evaluation.verdictReason}`,
+        isError: true,
+      });
+    }
+    setTimeout(() => setModelWeightToast(null), 6500);
+  };
+
+  const handleDeployConfirmedLeader = (leader: {
+    symbol: string;
+    ltp: number;
+    phaseLabel: string;
+  }) => {
+    const currentOrders = getStoredPaperTrades();
+    const price = Number(leader.ltp.toFixed(2));
+    const stopLoss = Number((price * 0.9932).toFixed(2));
+    const t1 = Number((price * 1.021).toFixed(2));
+    const t2 = Number((price * 1.0325).toFixed(2));
+    const t3 = Number((price * 1.048).toFixed(2));
+    const stopDist = Math.max(0.5, Number((price - stopLoss).toFixed(2)));
+    const qty = Math.max(1, Math.floor(380 / stopDist));
+
+    const evaluation = evaluateAndDeploySingleSetupViaCouncil({
+      symbol: leader.symbol,
+      instrumentLabel: `${leader.symbol} Intraday Cash MIS`,
+      segment: 'NSE_CASH',
+      side: 'BUY',
+      entryPrice: price,
+      stopLossPrice: stopLoss,
+      t1Price: t1,
+      t2Price: t2,
+      t3Price: t3,
+      qty,
+      strategyName: `Confirmed Leader (${leader.phaseLabel}) · T1 ₹${t1} / T2 ₹${t2} / T3 ₹${t3}`,
+      quotes,
+      existingOrders: currentOrders,
+    });
+
+    if (evaluation.approved && evaluation.order) {
+      const updated = [evaluation.order, ...currentOrders];
+      persistPaperTrades(updated);
+      setOrders(updated);
+      setModelWeightToast({
+        message: `✅ DEPLOYED CONFIRMED LEADER: ${evaluation.order.symbol} · ${evaluation.verdictReason}`,
+      });
+    } else {
+      setModelWeightToast({
+        message: `🛡️ AI COUNCIL VETO: ${evaluation.verdictReason}`,
+        isError: true,
+      });
+    }
+    setTimeout(() => setModelWeightToast(null), 6500);
+  };
+
+  const handleJumpToOrderBook = () => {
+    window.dispatchEvent(new CustomEvent('jarvis:navigate-tab', { detail: 'trade_history' }));
   };
 
   return (
     <div className="w-full space-y-6 font-mono text-slate-100 pb-10">
       {/* Toast Feedback Banner */}
       {modelWeightToast && (
-        <div className="p-3.5 rounded-xl bg-cyan-950/80 border border-cyan-400/50 text-cyan-200 text-xs flex items-center justify-between gap-2 shadow-lg">
+        <div
+          className={`p-3.5 rounded-xl border text-xs flex items-center justify-between gap-2 shadow-lg ${
+            modelWeightToast.isError
+              ? 'bg-rose-950/90 border-rose-400/50 text-rose-200'
+              : 'bg-cyan-950/90 border-cyan-400/50 text-cyan-200'
+          }`}
+        >
           <div className="flex items-center gap-2">
             <Radio className="w-4 h-4 text-cyan-400 animate-pulse shrink-0" />
-            <span>{modelWeightToast}</span>
+            <span>{modelWeightToast.message}</span>
           </div>
-          <button
-            onClick={() => setModelWeightToast(null)}
-            className="text-[11px] text-cyan-300 hover:text-white underline"
-          >
-            Dismiss
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={handleJumpToOrderBook}
+              className="px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 border border-cyan-500/40 text-cyan-300 text-[10px] font-bold cursor-pointer"
+            >
+              Open Order Book →
+            </button>
+            <button
+              onClick={() => setModelWeightToast(null)}
+              className="text-[11px] text-slate-300 hover:text-white underline cursor-pointer"
+            >
+              Dismiss
+            </button>
+          </div>
         </div>
       )}
 
@@ -149,7 +302,7 @@ export const MacroPolicyThesis: React.FC = () => {
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <span className="px-2.5 py-0.5 rounded bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 text-[10px] font-bold uppercase tracking-wider">
-                100% DYNAMIC MACRO, POLICY &amp; 2026 US MID-TERM ENGINE
+                INDIA LOK SABHA + US PRIMARY &amp; MID-TERM ELECTIONS + 52W-LOW / BEAR PUT ENGINE
               </span>
               <span className="px-2.5 py-0.5 rounded bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 text-[10px] font-bold">
                 {Object.keys(quotes).length} LIVE STREAMS · {learningMatrix.length} EQUITIES SCANNED
@@ -159,7 +312,7 @@ export const MacroPolicyThesis: React.FC = () => {
               </span>
             </div>
             <h1 className="text-lg sm:text-xl font-bold text-white mt-2 font-sans">
-              Global Geopolitics, 2026 US Mid-Term Elections &amp; Union Sovereign Policy Matrix
+              Market Finder: India (Lok Sabha) &amp; US (Primary/Mid-Term) Elections + 52W-Low Bottom &amp; Bear Put F&amp;O Scanner
             </h1>
             <p className="text-xs text-slate-400 mt-1 font-sans">
               {macro12.regimeHeadline}
@@ -220,12 +373,12 @@ export const MacroPolicyThesis: React.FC = () => {
           </div>
 
           <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3">
-            <span className="text-[10px] text-slate-400 block">2026 US MID-TERMS</span>
-            <span className="text-sm text-amber-300 font-bold truncate block">
-              {usMidtermVec?.liveValueText || 'DIVIDED CONGRESS'}
+            <span className="text-[10px] text-slate-400 block">INDIA + US ELECTIONS</span>
+            <span className="text-xs text-amber-300 font-bold truncate block">
+              {electionVec?.liveValueText || 'INDIA + US LIVE'}
             </span>
             <span className="text-[10px] text-slate-500 block mt-0.5">
-              Vector Score: {usMidtermVec?.score ?? 48}
+              Vector #12 Score: {electionVec?.score ?? 54}
             </span>
           </div>
 
@@ -277,154 +430,423 @@ export const MacroPolicyThesis: React.FC = () => {
         </div>
       </div>
 
-      {/* NEW DEDICATED SECTION: 2026 US MID-TERM ELECTIONS & INDO-US TRANSMISSION ENGINE */}
-      <div className="w-full rounded-2xl bg-[#080d1a]/95 p-6 border border-amber-500/30 shadow-xl">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 mb-4 border-b border-slate-800">
+      {/* SECTION 1: DUAL-MODE 52-WEEK LOW INSTITUTIONAL BOTTOM ACCUMULATION & BEAR PUT F&O (T1 / T2 / T3) */}
+      <div className="w-full rounded-2xl bg-[#080d1a]/95 p-6 border border-emerald-500/35 shadow-xl space-y-5">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-4 border-b border-slate-800">
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="px-2.5 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[10px] font-bold uppercase">
+                DUAL-MODE MARKET-LOW PROFIT ENGINE
+              </span>
+              <span className="px-2.5 py-0.5 rounded bg-rose-500/20 border border-rose-500/40 text-rose-300 text-[10px] font-bold uppercase">
+                T1 · T2 · T3 TARGETS + 82% NON-EROSION EXIT RATCHET
+              </span>
+            </div>
+            <h2 className="text-base sm:text-lg font-bold text-white mt-1.5 font-sans">
+              52-Week Low Institutional Bottom-Accumulation &amp; Bear-Market Put (PE) F&amp;O Scanner
+            </h2>
+            <p className="text-xs text-slate-400 font-sans mt-0.5">
+              {bottomAndBearMatrix.marketLowRegimeSummary}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-950 border border-slate-800 shrink-0">
+            <button
+              onClick={() => setScannerFilterMode('DUAL_VIEW')}
+              className={`px-3 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer transition ${
+                scannerFilterMode === 'DUAL_VIEW'
+                  ? 'bg-cyan-500 text-slate-950'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Dual View (Both)
+            </button>
+            <button
+              onClick={() => setScannerFilterMode('BOTTOM_LONG_ONLY')}
+              className={`px-3 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer transition ${
+                scannerFilterMode === 'BOTTOM_LONG_ONLY'
+                  ? 'bg-emerald-500 text-slate-950'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Mode A: 52W-Low Accumulation ({bottomAndBearMatrix.bottomAccumulationLongs.length})
+            </button>
+            <button
+              onClick={() => setScannerFilterMode('BEAR_PUT_ONLY')}
+              className={`px-3 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer transition ${
+                scannerFilterMode === 'BEAR_PUT_ONLY'
+                  ? 'bg-rose-500 text-slate-950'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Mode B: Bear Put F&amp;O ({bottomAndBearMatrix.bearMarketPutSetups.length})
+            </button>
+          </div>
+        </div>
+
+        {/* Mode A: 52-Week Low Bottom Accumulation Cards */}
+        {(scannerFilterMode === 'DUAL_VIEW' || scannerFilterMode === 'BOTTOM_LONG_ONLY') && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-emerald-400" />
+                <span className="text-xs font-bold text-emerald-300 uppercase">
+                  Mode A: 52-Week Low Institutional Bottom Accumulation (High-Potential Reversal Longs with T1 / T2 / T3)
+                </span>
+              </div>
+              <span className="text-[10px] text-slate-400">
+                FII/DII Value Absorption Near Cycle Bottom
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {bottomAndBearMatrix.bottomAccumulationLongs.slice(0, 3).map((setup) => (
+                <div
+                  key={setup.id}
+                  className="rounded-2xl bg-slate-950/90 p-4 border border-emerald-500/35 flex flex-col justify-between space-y-3"
+                >
+                  <div className="space-y-2.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[10px] font-bold">
+                            52W-LOW ACCUMULATION · {setup.accumulationOrPutScore}/100
+                          </span>
+                          <span className="text-base font-bold text-white">{setup.symbol}</span>
+                        </div>
+                        <span className="text-[11px] text-slate-400 block mt-0.5 font-sans">
+                          {setup.name} · {setup.sector}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-sm font-bold text-emerald-400 tabular-nums block">
+                          Spot ₹{setup.spotLtp.toLocaleString('en-IN')}
+                        </span>
+                        <span className="text-[10px] text-cyan-300 block">
+                          +{setup.distanceFrom52WLowPct}% from 52W Low (₹{setup.fiftyTwoWeekLow})
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Entry, Stop & T1 / T2 / T3 Strip */}
+                    <div className="grid grid-cols-5 gap-1.5 text-center p-2 rounded-xl bg-slate-900/90 border border-slate-800 text-[10px]">
+                      <div>
+                        <span className="text-slate-400 block">ENTRY</span>
+                        <span className="font-bold text-white">₹{setup.entryPrice}</span>
+                      </div>
+                      <div>
+                        <span className="text-rose-400 block">HARD SL</span>
+                        <span className="font-bold text-rose-300">₹{setup.stopLossPrice}</span>
+                      </div>
+                      <div>
+                        <span className="text-emerald-400 block">TARGET 1</span>
+                        <span className="font-bold text-emerald-300">₹{setup.t1Price}</span>
+                      </div>
+                      <div>
+                        <span className="text-cyan-400 block">TARGET 2</span>
+                        <span className="font-bold text-cyan-300">₹{setup.t2Price}</span>
+                      </div>
+                      <div>
+                        <span className="text-amber-400 block">TARGET 3</span>
+                        <span className="font-bold text-amber-300">₹{setup.t3Price}</span>
+                      </div>
+                    </div>
+
+                    {/* Non-Erosion Exit Plan */}
+                    <div className="p-2.5 rounded-xl bg-[#060b16] border border-slate-800/90 space-y-1 text-[10px] font-sans">
+                      <div className="font-mono font-bold text-cyan-300 uppercase flex items-center justify-between">
+                        <span>Non-Erosion Exit Plan (Qty: {setup.recommendedQty})</span>
+                        <span className="text-emerald-400">Net @ T2: +{setup.expectedNetYieldAtT2Pct}%</span>
+                      </div>
+                      <div className="text-slate-300">• {setup.nonErosionExitPlan.stage1BreakevenLock}</div>
+                      <div className="text-emerald-300">• {setup.nonErosionExitPlan.stage2LockT1Floor}</div>
+                      <div className="text-cyan-300">• {setup.nonErosionExitPlan.stage3LockT2AndTrail82Pct}</div>
+                    </div>
+
+                    <p className="text-[11px] text-slate-400 leading-relaxed font-sans">
+                      {setup.rationale}
+                    </p>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-800 flex items-center gap-2">
+                    <button
+                      onClick={() => handleDeploySetupViaCouncil(setup)}
+                      className="flex-1 py-2 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-[11px] uppercase tracking-wider cursor-pointer transition flex items-center justify-center gap-1.5 shadow-[0_0_12px_rgba(16,185,129,0.25)]"
+                    >
+                      <Zap className="w-3.5 h-3.5" />
+                      <span>Deploy via AI Council (&gt;2% Net)</span>
+                    </button>
+                    <button
+                      onClick={handleJumpToOrderBook}
+                      className="py-2 px-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-cyan-300 text-[10px] font-bold cursor-pointer transition"
+                      title="Open Order Book"
+                    >
+                      <ArrowUpRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Mode B: Bear-Market / Weak-Script Put (PE) F&O Cards */}
+        {(scannerFilterMode === 'DUAL_VIEW' || scannerFilterMode === 'BEAR_PUT_ONLY') && (
+          <div className="space-y-3 pt-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <TrendingDown className="w-4 h-4 text-rose-400" />
+                <span className="text-xs font-bold text-rose-300 uppercase">
+                  Mode B: Bear-Market &amp; Weak-Script Put (PE) F&amp;O Setups (Profit When Market Is Low · T1 / T2 / T3)
+                </span>
+              </div>
+              <span className="text-[10px] text-slate-400">
+                Downside Delta &amp; Gamma Expansion with Zero Profit Giveback
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {bottomAndBearMatrix.bearMarketPutSetups.slice(0, 3).map((setup) => (
+                <div
+                  key={setup.id}
+                  className="rounded-2xl bg-slate-950/90 p-4 border border-rose-500/35 flex flex-col justify-between space-y-3"
+                >
+                  <div className="space-y-2.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="px-2 py-0.5 rounded bg-rose-500/20 border border-rose-500/40 text-rose-300 text-[10px] font-bold">
+                            BEAR PUT (PE) F&amp;O · {setup.accumulationOrPutScore}/100
+                          </span>
+                          <span className="text-sm font-bold text-white">{setup.instrumentLabel}</span>
+                        </div>
+                        <span className="text-[11px] text-slate-400 block mt-0.5 font-sans">
+                          Underlying Spot: ₹{setup.spotLtp.toLocaleString('en-IN')} ({setup.changePct >= 0 ? '+' : ''}
+                          {setup.changePct}%) · {setup.sector}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-sm font-bold text-amber-300 tabular-nums block">
+                          PE Entry ₹{setup.entryPrice}
+                        </span>
+                        <span className="text-[10px] text-rose-300 block">
+                          Lot/Qty: {setup.recommendedQty}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Option Premium Entry, Stop & T1 / T2 / T3 Strip */}
+                    <div className="grid grid-cols-5 gap-1.5 text-center p-2 rounded-xl bg-slate-900/90 border border-slate-800 text-[10px]">
+                      <div>
+                        <span className="text-slate-400 block">PE ENTRY</span>
+                        <span className="font-bold text-white">₹{setup.entryPrice}</span>
+                      </div>
+                      <div>
+                        <span className="text-rose-400 block">STOP SL</span>
+                        <span className="font-bold text-rose-300">₹{setup.stopLossPrice}</span>
+                      </div>
+                      <div>
+                        <span className="text-emerald-400 block">TARGET 1</span>
+                        <span className="font-bold text-emerald-300">₹{setup.t1Price}</span>
+                      </div>
+                      <div>
+                        <span className="text-cyan-400 block">TARGET 2</span>
+                        <span className="font-bold text-cyan-300">₹{setup.t2Price}</span>
+                      </div>
+                      <div>
+                        <span className="text-amber-400 block">TARGET 3</span>
+                        <span className="font-bold text-amber-300">₹{setup.t3Price}</span>
+                      </div>
+                    </div>
+
+                    {/* Non-Erosion Exit Plan */}
+                    <div className="p-2.5 rounded-xl bg-[#060b16] border border-slate-800/90 space-y-1 text-[10px] font-sans">
+                      <div className="font-mono font-bold text-amber-300 uppercase flex items-center justify-between">
+                        <span>Put F&amp;O Non-Erosion Exit Plan</span>
+                        <span className="text-emerald-400">Net @ T2: +{setup.expectedNetYieldAtT2Pct}%</span>
+                      </div>
+                      <div className="text-slate-300">• {setup.nonErosionExitPlan.stage1BreakevenLock}</div>
+                      <div className="text-emerald-300">• {setup.nonErosionExitPlan.stage2LockT1Floor}</div>
+                      <div className="text-cyan-300">• {setup.nonErosionExitPlan.stage3LockT2AndTrail82Pct}</div>
+                    </div>
+
+                    <p className="text-[11px] text-slate-400 leading-relaxed font-sans">
+                      {setup.rationale}
+                    </p>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-800 flex items-center gap-2">
+                    <button
+                      onClick={() => handleDeploySetupViaCouncil(setup)}
+                      className="flex-1 py-2 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[11px] uppercase tracking-wider cursor-pointer transition flex items-center justify-center gap-1.5 shadow-[0_0_12px_rgba(245,158,11,0.25)]"
+                    >
+                      <Zap className="w-3.5 h-3.5" />
+                      <span>Deploy Put (PE) via Council</span>
+                    </button>
+                    <button
+                      onClick={handleJumpToOrderBook}
+                      className="py-2 px-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-cyan-300 text-[10px] font-bold cursor-pointer transition"
+                      title="Open Order Book"
+                    >
+                      <ArrowUpRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* SECTION 2: FULL-CYCLE INDIA (LOK SABHA) & US (PRIMARY + MID-TERM + GENERAL) ELECTIONS ENGINE */}
+      <div className="w-full rounded-2xl bg-[#080d1a]/95 p-6 border border-amber-500/30 shadow-xl space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-800">
           <div className="flex items-center gap-2">
             <Globe className="w-5 h-5 text-amber-400" />
             <div>
               <h2 className="text-base font-bold text-white font-sans">
-                Vector #12: 2026 US Mid-Term Elections &amp; Indo-US Sectoral Transmission Matrix
+                Vector #12: Full-Cycle India (Lok Sabha &amp; State) + US (Primary, Mid-Term &amp; General) Elections Matrix
               </h2>
               <p className="text-xs text-slate-400 font-sans">
-                Real-time transmission of US Congressional composition, Section 301/232 tariffs, H-1B visa policy, US Biosecure Act, and 10Y Treasury yields into NSE/BSE equities.
+                Simultaneous transmission of India Lok Sabha Capex/MCC/Coalition regimes and US Primary H-1B/Drug-Pricing debates + Congressional Mid-Term outcomes into NSE/BSE equities.
               </p>
             </div>
           </div>
           <span className="px-2.5 py-1 rounded-lg bg-amber-950/60 border border-amber-500/40 text-amber-300 text-[10px] font-bold uppercase shrink-0">
-            ACTIVE STANCE: {usMidtermVec?.liveValueText}
+            ACTIVE: {electionVec?.liveValueText}
           </span>
         </div>
 
-        {/* Interactive US Mid-Term Regime Selector */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
-          {[
-            {
-              stance: 'LIVE_DYNAMIC_TRACKING' as UsMidtermElectionStance,
-              title: '1. Live Yield & DXY Auto-Tracking',
-              desc: `Derives US Mid-Term risk from live ^TNX (${us10yYield.toFixed(2)}%), DXY (${dxyChg >= 0 ? '+' : ''}${dxyChg.toFixed(2)}%) & NASDAQ (${nasdaqChg >= 0 ? '+' : ''}${nasdaqChg.toFixed(2)}%)`,
-              badge: 'AUTO LIVE',
-            },
-            {
-              stance: 'GRIDLOCK_DIVIDED_CONGRESS' as UsMidtermElectionStance,
-              title: '2. Divided Congress Gridlock',
-              desc: 'Blocks extreme US fiscal deficits & corporate tax hikes; stabilizes 10Y yields; unlocks IT & Pharma budgets.',
-              badge: 'IT & PHARMA TAILWIND',
-            },
-            {
-              stance: 'TARIFF_HAWK_SWEEP' as UsMidtermElectionStance,
-              title: '3. Tariff & H-1B Hawk Sweep',
-              desc: 'Universal 10–20% tariffs + H-1B wage floor hike + 10Y yield spike. Vetoes Metals & FII Banks; boosts Defence & Biosecure Pharma.',
-              badge: 'METALS & BANKS VETO',
-            },
-            {
-              stance: 'FISCAL_STIMULUS_SWEEP' as UsMidtermElectionStance,
-              title: '4. Pro-Tech & Deregulation Sweep',
-              desc: 'Accelerates US enterprise AI/Cloud spend & INDUS-X defense co-production. Strong tailwind for TCS, INFY, HAL, BEL.',
-              badge: 'RISK-ON BOOM',
-            },
-          ].map((opt) => {
-            const isSelected = activeMidtermStance === opt.stance;
-            return (
-              <button
-                key={opt.stance}
-                onClick={() => handleSelectMidtermStance(opt.stance)}
-                className={`p-3.5 rounded-xl border text-left transition cursor-pointer ${
-                  isSelected
-                    ? 'bg-amber-950/40 border-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.2)]'
-                    : 'bg-slate-950/70 border-slate-800 hover:border-slate-700'
-                }`}
-              >
-                <div className="flex items-center justify-between gap-2 mb-1">
-                  <span className="text-[10px] px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-amber-300 font-bold">
-                    {opt.badge}
-                  </span>
-                  {isSelected && <span className="w-2 h-2 rounded-full bg-amber-400" />}
-                </div>
-                <div className="text-xs font-bold text-white mt-1 font-sans">{opt.title}</div>
-                <p className="text-[11px] text-slate-400 mt-1 leading-relaxed font-sans">{opt.desc}</p>
-              </button>
-            );
-          })}
+        {/* Sub-Panel A: India Lok Sabha & Key State Assembly Election Stance Selector */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold text-emerald-300 uppercase flex items-center gap-1.5">
+              <Flag className="w-3.5 h-3.5 text-emerald-400" />
+              <span>1. India Elections (Lok Sabha General &amp; Key State Polls — Active At Any Point In Time)</span>
+            </span>
+            <span className="text-[10px] text-slate-400">Select Regime to Re-Score All 32+ Scripts</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            {[
+              {
+                stance: 'INDIA_LIVE_CONTINUITY_TRACKING' as IndiaElectionStance,
+                title: '1. Live Sovereign Continuity Tracking',
+                desc: 'Tracks live Union Budget Capex execution, Defence indigenisation, and RBI liquidity outside pre-poll freezes.',
+                badge: 'LIVE DEFAULT',
+              },
+              {
+                stance: 'INDIA_LOKSABHA_CONTINUITY_CAPEX' as IndiaElectionStance,
+                title: '2. Lok Sabha Stable Majority Continuity',
+                desc: 'Strong tailwind for HAL, BEL, LT, NTPC, POLYCAB, SBIN, ICICIBANK as sovereign infrastructure & defence orders accelerate.',
+                badge: 'DEFENCE & INFRA BOOM',
+              },
+              {
+                stance: 'INDIA_MCC_PRE_POLL_PAUSE' as IndiaElectionStance,
+                title: '3. Pre-Poll Model Code (MCC) Pause',
+                desc: '60-day pre-election tender pause slows fresh EPC/PSU awards; rotates capital into defensive Pharma & Consumption.',
+                badge: 'PSU TENDER PAUSE',
+              },
+              {
+                stance: 'INDIA_LOKSABHA_COALITION_POPULIST' as IndiaElectionStance,
+                title: '4. Hung / Coalition Populist Pivot',
+                desc: 'Fiscal deficit expansion + rural transfer shift: vetoes high-beta PSU Capex & Banks; boosts defensive FMCG/Pharma & Bear Puts.',
+                badge: 'CAPEX VETO · DEFENSIVE',
+              },
+            ].map((opt) => {
+              const isSelected = activeIndiaElectionStance === opt.stance;
+              return (
+                <button
+                  key={opt.stance}
+                  onClick={() => handleSelectIndiaElectionStance(opt.stance)}
+                  className={`p-3.5 rounded-xl border text-left transition cursor-pointer ${
+                    isSelected
+                      ? 'bg-emerald-950/40 border-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.2)]'
+                      : 'bg-slate-950/70 border-slate-800 hover:border-slate-700'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-emerald-300 font-bold">
+                      {opt.badge}
+                    </span>
+                    {isSelected && <span className="w-2 h-2 rounded-full bg-emerald-400" />}
+                  </div>
+                  <div className="text-xs font-bold text-white mt-1 font-sans">{opt.title}</div>
+                  <p className="text-[11px] text-slate-400 mt-1 leading-relaxed font-sans">{opt.desc}</p>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
-        {/* 4-Channel US Mid-Term to India Sector Impact Breakdown */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
-          <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800">
-            <span className="text-[10px] text-cyan-300 font-bold uppercase block">
-              CHANNEL 1 · US BIOSECURE ACT &amp; FDA GENERICS
+        {/* Sub-Panel B: US Primary, Mid-Term & General Election Stance Selector */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold text-amber-300 uppercase flex items-center gap-1.5">
+              <Globe className="w-3.5 h-3.5 text-amber-400" />
+              <span>2. US Elections (US Primary Debates, 2026 Mid-Terms &amp; Presidential Cycle)</span>
             </span>
-            <span className="text-sm font-bold text-white mt-1 block font-sans">
-              Export Pharma (CIPLA, SUNPHARMA, DRREDDY)
-            </span>
-            <p className="text-[11px] text-slate-400 mt-1 leading-relaxed font-sans">
-              Bipartisan US Mid-Term support for the Biosecure Act accelerates China+1 CDMO substitution toward Indian sterile &amp; API leaders, boosted by USD/INR at ₹{usdinrPrice.toFixed(2)}.
-            </p>
-            <div className="mt-2 text-[11px] font-bold text-emerald-400">
-              Sector Verdict: {macro12.participantFlow.sectorFlows.PHARMA.verdict.replace(/_/g, ' ')} (Conviction +{macro12.participantFlow.sectorFlows.PHARMA.netSectorConviction})
-            </div>
+            <span className="text-[10px] text-slate-400">Includes US Primary Rhetoric &amp; Mid-Term Gridlock/Tariffs</span>
           </div>
-
-          <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800">
-            <span className="text-[10px] text-amber-300 font-bold uppercase block">
-              CHANNEL 2 · H-1B VISA &amp; US BFSI TECH SPEND
-            </span>
-            <span className="text-sm font-bold text-white mt-1 block font-sans">
-              IT Exporters (TCS, INFY, HCLTECH)
-            </span>
-            <p className="text-[11px] text-slate-400 mt-1 leading-relaxed font-sans">
-              Divided Congress gridlock removes corporate tax uncertainty for Fortune-500 IT budgets, whereas a Tariff/H-1B Hawk sweep pressures onsite wage margins.
-            </p>
-            <div
-              className={`mt-2 text-[11px] font-bold ${
-                macro12.participantFlow.sectorFlows.IT.netSectorConviction >= 15
-                  ? 'text-emerald-400'
-                  : 'text-rose-400'
-              }`}
-            >
-              Sector Verdict: {macro12.participantFlow.sectorFlows.IT.verdict.replace(/_/g, ' ')} (Conviction {macro12.participantFlow.sectorFlows.IT.netSectorConviction >= 0 ? '+' : ''}{macro12.participantFlow.sectorFlows.IT.netSectorConviction})
-            </div>
-          </div>
-
-          <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800">
-            <span className="text-[10px] text-emerald-300 font-bold uppercase block">
-              CHANNEL 3 · INDUS-X &amp; GE-F404 CO-PRODUCTION
-            </span>
-            <span className="text-sm font-bold text-white mt-1 block font-sans">
-              Defence &amp; Aerospace (HAL, BEL, SOLARINDS)
-            </span>
-            <p className="text-[11px] text-slate-400 mt-1 leading-relaxed font-sans">
-              Indo-US strategic defense pacts (jet engine transfer &amp; NATO ammunition supply chain) enjoy bipartisan Congressional backing regardless of US Mid-Term swing.
-            </p>
-            <div className="mt-2 text-[11px] font-bold text-emerald-400">
-              Sector Verdict: {macro12.participantFlow.sectorFlows.DEFENSE_CAPEX.verdict.replace(/_/g, ' ')} (Conviction +{macro12.participantFlow.sectorFlows.DEFENSE_CAPEX.netSectorConviction})
-            </div>
-          </div>
-
-          <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800">
-            <span className="text-[10px] text-rose-300 font-bold uppercase block">
-              CHANNEL 4 · SECTION 232 TARIFFS &amp; 10Y YIELDS
-            </span>
-            <span className="text-sm font-bold text-white mt-1 block font-sans">
-              Metals &amp; Rate-Sensitive Banks (TATASTEEL, HDFCBANK)
-            </span>
-            <p className="text-[11px] text-slate-400 mt-1 leading-relaxed font-sans">
-              US fiscal deficit expansion pushing 10Y yields ({us10yYield.toFixed(2)}%) &amp; Section 232 steel/aluminum tariffs trigger FII outflows from EM financials and base metals.
-            </p>
-            <div
-              className={`mt-2 text-[11px] font-bold ${
-                macro12.participantFlow.sectorFlows.METALS.verdict === 'HARD_VETO_OUTFLOW'
-                  ? 'text-rose-400'
-                  : 'text-amber-300'
-              }`}
-            >
-              Metals Verdict: {macro12.participantFlow.sectorFlows.METALS.verdict.replace(/_/g, ' ')} · Banks: {macro12.participantFlow.sectorFlows.BANKING.verdict.replace(/_/g, ' ')}
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+            {[
+              {
+                stance: 'LIVE_DYNAMIC_TRACKING' as UsMidtermElectionStance,
+                title: '1. Live Yield & DXY Auto-Track',
+                desc: `Derives US election risk from live ^TNX (${us10yYield.toFixed(2)}%), DXY (${dxyChg >= 0 ? '+' : ''}${dxyChg.toFixed(2)}%) & NASDAQ (${nasdaqChg >= 0 ? '+' : ''}${nasdaqChg.toFixed(2)}%)`,
+                badge: 'AUTO LIVE',
+              },
+              {
+                stance: 'US_PRIMARY_RHETORIC_VOLATILITY' as UsMidtermElectionStance,
+                title: '2. US Primary Campaign Rhetoric',
+                desc: 'Primary debate spikes on H-1B visa quotas, border tariffs & Medicare drug pricing create IT headwinds while boosting Domestic Defence.',
+                badge: 'US PRIMARY VOL',
+              },
+              {
+                stance: 'GRIDLOCK_DIVIDED_CONGRESS' as UsMidtermElectionStance,
+                title: '3. Divided Congress Gridlock',
+                desc: 'Blocks extreme US fiscal deficits & corporate tax hikes; stabilizes 10Y yields; unlocks IT & Pharma budgets.',
+                badge: 'IT & PHARMA TAILWIND',
+              },
+              {
+                stance: 'TARIFF_HAWK_SWEEP' as UsMidtermElectionStance,
+                title: '4. Tariff & H-1B Hawk Sweep',
+                desc: 'Universal 10–20% tariffs + H-1B wage floor hike + 10Y yield spike. Vetoes Metals & FII Banks; boosts Defence & Biosecure Pharma.',
+                badge: 'METALS & BANKS VETO',
+              },
+              {
+                stance: 'FISCAL_STIMULUS_SWEEP' as UsMidtermElectionStance,
+                title: '5. Pro-Tech & Deregulation Sweep',
+                desc: 'Accelerates US enterprise AI/Cloud spend & INDUS-X defense co-production. Strong tailwind for TCS, INFY, HAL, BEL.',
+                badge: 'RISK-ON BOOM',
+              },
+            ].map((opt) => {
+              const isSelected = activeMidtermStance === opt.stance;
+              return (
+                <button
+                  key={opt.stance}
+                  onClick={() => handleSelectMidtermStance(opt.stance)}
+                  className={`p-3 rounded-xl border text-left transition cursor-pointer ${
+                    isSelected
+                      ? 'bg-amber-950/40 border-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.2)]'
+                      : 'bg-slate-950/70 border-slate-800 hover:border-slate-700'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-amber-300 font-bold">
+                      {opt.badge}
+                    </span>
+                    {isSelected && <span className="w-2 h-2 rounded-full bg-amber-400" />}
+                  </div>
+                  <div className="text-xs font-bold text-white mt-1 font-sans">{opt.title}</div>
+                  <p className="text-[11px] text-slate-400 mt-1 leading-relaxed font-sans">{opt.desc}</p>
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
 
-      {/* Dynamic 12-Vector Sentiment Convergence Bar (Zero Static 88% Hardcoding) */}
+      {/* Dynamic 12-Vector Sentiment Convergence Bar */}
       <div className="w-full rounded-2xl bg-[#080d1a]/95 p-6 border border-cyan-500/20 shadow-xl">
         <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-800">
           <div className="flex items-center gap-2">
@@ -478,13 +900,13 @@ export const MacroPolicyThesis: React.FC = () => {
         </div>
       </div>
 
-      {/* Dynamic Institutional Bot Logic Stack: Live Top 3 Confirmed Leaders vs Quarantined Losers */}
+      {/* Dynamic Institutional Bot Logic Stack: Live Top 3 Confirmed Leaders with 1-Click Deploy */}
       <div className="w-full flex flex-col space-y-4">
         <div className="flex items-center justify-between px-1">
           <div className="flex items-center gap-2">
             <Cpu className="w-5 h-5 text-emerald-400" />
             <span className="text-base text-slate-100 font-bold font-sans">
-              Dynamic Institutional Bot Logic Stack (Live Ranked Leaders vs Quarantined Losers)
+              Top 3 Confirmed Institutional Leaders (1-Click AI Council Deploy)
             </span>
           </div>
           <span className="text-xs text-cyan-300 font-bold">
@@ -499,65 +921,84 @@ export const MacroPolicyThesis: React.FC = () => {
             return (
               <div
                 key={leader.symbol}
-                className="rounded-2xl bg-[#080d1a]/95 p-5 border border-emerald-500/30 shadow-xl space-y-3"
+                className="rounded-2xl bg-[#080d1a]/95 p-5 border border-emerald-500/30 shadow-xl flex flex-col justify-between space-y-3"
               >
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[10px] font-bold">
-                        #{idx + 1} CONFIRMED LEADER
+                <div className="space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[10px] font-bold">
+                          #{idx + 1} CONFIRMED LEADER
+                        </span>
+                        <span className="text-lg text-white font-bold">{leader.symbol}</span>
+                      </div>
+                      <span className="text-xs text-slate-400 font-sans block mt-0.5">
+                        {leader.name} // {leader.sector}
                       </span>
-                      <span className="text-lg text-white font-bold">{leader.symbol}</span>
                     </div>
-                    <span className="text-xs text-slate-400 font-sans block mt-0.5">
-                      {leader.name} // {leader.sector}
-                    </span>
+                    <div className="text-right">
+                      <span className="text-base font-bold text-emerald-400 tabular-nums block">
+                        ₹{leader.ltp.toLocaleString('en-IN')}
+                      </span>
+                      <span
+                        className={`text-xs font-bold tabular-nums ${
+                          leader.changePct >= 0 ? 'text-emerald-300' : 'text-rose-400'
+                        }`}
+                      >
+                        {leader.changePct >= 0 ? '+' : ''}
+                        {leader.changePct.toFixed(2)}% (Alpha {leader.relAlphaVsNifty >= 0 ? '+' : ''}
+                        {leader.relAlphaVsNifty.toFixed(2)}%)
+                      </span>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <span className="text-base font-bold text-emerald-400 tabular-nums block">
-                      ₹{leader.ltp.toLocaleString('en-IN')}
-                    </span>
-                    <span
-                      className={`text-xs font-bold tabular-nums ${
-                        leader.changePct >= 0 ? 'text-emerald-300' : 'text-rose-400'
-                      }`}
-                    >
-                      {leader.changePct >= 0 ? '+' : ''}
-                      {leader.changePct.toFixed(2)}% (Alpha {leader.relAlphaVsNifty >= 0 ? '+' : ''}
-                      {leader.relAlphaVsNifty.toFixed(2)}%)
-                    </span>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800">
+                      <span className="text-[10px] text-slate-400 block">LEARNED SCORE</span>
+                      <span className="text-sm text-cyan-300 font-bold">
+                        {leader.learnedScore} / 100
+                      </span>
+                      <span className="text-[10px] text-slate-500 block mt-0.5">
+                        Intraday Range: {leader.intradayRangePct}%
+                      </span>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800">
+                      <span className="text-[10px] text-slate-400 block">FII/DII CONVICTION</span>
+                      <span className="text-sm text-emerald-400 font-bold">
+                        {secFlow ? `${secFlow.netSectorConviction >= 0 ? '+' : ''}${secFlow.netSectorConviction}` : '+45'}
+                      </span>
+                      <span className="text-[10px] text-slate-500 block mt-0.5">
+                        Vol/Deliv: {secFlow?.intradayVolumeDeliveryRatio ?? 1.7}x
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-950/90 border border-slate-800">
+                    <div className="flex items-center gap-1.5 mb-1 text-cyan-300 text-[11px] font-bold">
+                      <Activity className="w-3.5 h-3.5" />
+                      <span>LIVE CAUSAL &amp; ELECTION RATIONALE</span>
+                    </div>
+                    <p className="text-[11px] text-slate-300 leading-relaxed font-sans">
+                      {leader.rationale}
+                    </p>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800">
-                    <span className="text-[10px] text-slate-400 block">LEARNED SCORE</span>
-                    <span className="text-sm text-cyan-300 font-bold">
-                      {leader.learnedScore} / 100
-                    </span>
-                    <span className="text-[10px] text-slate-500 block mt-0.5">
-                      Intraday Range: {leader.intradayRangePct}%
-                    </span>
-                  </div>
-                  <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800">
-                    <span className="text-[10px] text-slate-400 block">FII/DII CONVICTION</span>
-                    <span className="text-sm text-emerald-400 font-bold">
-                      {secFlow ? `${secFlow.netSectorConviction >= 0 ? '+' : ''}${secFlow.netSectorConviction}` : '+45'}
-                    </span>
-                    <span className="text-[10px] text-slate-500 block mt-0.5">
-                      Vol/Deliv: {secFlow?.intradayVolumeDeliveryRatio ?? 1.7}x
-                    </span>
-                  </div>
-                </div>
-
-                <div className="p-3 rounded-xl bg-slate-950/90 border border-slate-800">
-                  <div className="flex items-center gap-1.5 mb-1 text-cyan-300 text-[11px] font-bold">
-                    <Activity className="w-3.5 h-3.5" />
-                    <span>LIVE CAUSAL &amp; US MID-TERM RATIONALE</span>
-                  </div>
-                  <p className="text-[11px] text-slate-300 leading-relaxed font-sans">
-                    {leader.rationale}
-                  </p>
+                <div className="pt-2 border-t border-slate-800 flex items-center gap-2">
+                  <button
+                    onClick={() => handleDeployConfirmedLeader(leader)}
+                    className="flex-1 py-2 px-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-[11px] uppercase tracking-wider cursor-pointer transition flex items-center justify-center gap-1.5 shadow-[0_0_12px_rgba(0,240,255,0.25)]"
+                  >
+                    <Zap className="w-3.5 h-3.5" />
+                    <span>Deploy via AI Council (&gt;2% Net)</span>
+                  </button>
+                  <button
+                    onClick={handleJumpToOrderBook}
+                    className="py-2 px-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-cyan-300 text-[10px] font-bold cursor-pointer transition"
+                    title="Open in Order Book"
+                  >
+                    <ArrowUpRight className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
             );
@@ -571,7 +1012,7 @@ export const MacroPolicyThesis: React.FC = () => {
               <span className="text-xs font-bold text-rose-300 uppercase flex items-center gap-1.5">
                 <AlertTriangle className="w-4 h-4 text-rose-400" />
                 <span>
-                  Quarantined &amp; Macro/Election-Vetoed Scripts (Automatically Blocked From Capital Deployment)
+                  Quarantined &amp; Macro/Election-Vetoed Scripts (Blocked From Long Deployment · Eligible for Mode B Bear Puts)
                 </span>
               </span>
               <span className="text-[10px] text-rose-300 font-bold">
@@ -599,66 +1040,6 @@ export const MacroPolicyThesis: React.FC = () => {
             </div>
           </div>
         )}
-      </div>
-
-      {/* Union Sovereign Policy Milestones (PLI 2.0, Green H2, PIL-5 Indigenisation) */}
-      <div className="w-full flex flex-col space-y-3">
-        <div className="flex items-center justify-between px-1">
-          <div className="flex items-center gap-2">
-            <Award className="w-5 h-5 text-cyan-400" />
-            <span className="text-base text-slate-100 font-bold font-sans">
-              Domestic Union Sovereign Policy Pillars (Vector #5 Anchors)
-            </span>
-          </div>
-          <span className="text-xs text-slate-400">FY2025–30 SOVEREIGN MANDATES</span>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="rounded-2xl bg-[#080d1a]/95 p-4 border border-cyan-500/20 shadow-xl">
-            <div className="flex items-center justify-between mb-1">
-              <span className="px-2 py-0.5 rounded bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 text-[10px] font-bold">
-                POL-PLI-02 · ₹76,000 Cr
-              </span>
-              <span className="text-[10px] text-emerald-400 font-bold">DIXON / TATA / LT</span>
-            </div>
-            <h3 className="text-sm text-white font-bold font-sans mt-1">
-              PLI 2.0 Semiconductor &amp; EMS Manufacturing
-            </h3>
-            <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed font-sans">
-              Sovereign capex subsidies insulating domestic EMS &amp; power-electronics leaders during global tariff shifts.
-            </p>
-          </div>
-
-          <div className="rounded-2xl bg-[#080d1a]/95 p-4 border border-emerald-500/20 shadow-xl">
-            <div className="flex items-center justify-between mb-1">
-              <span className="px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold">
-                PIL-05 DEFENCE · 92% DOMESTIC
-              </span>
-              <span className="text-[10px] text-emerald-400 font-bold">HAL / BEL / SOLARINDS</span>
-            </div>
-            <h3 className="text-sm text-white font-bold font-sans mt-1">
-              Positive Indigenisation List &amp; INDUS-X Co-Production
-            </h3>
-            <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed font-sans">
-              Import embargo on 509 defense subsystems paired with US GE-F404 fighter engine technology transfer.
-            </p>
-          </div>
-
-          <div className="rounded-2xl bg-[#080d1a]/95 p-4 border border-amber-500/20 shadow-xl">
-            <div className="flex items-center justify-between mb-1">
-              <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/30 text-amber-300 text-[10px] font-bold">
-                SEBI 2026 F&amp;O &amp; STT RULES
-              </span>
-              <span className="text-[10px] text-cyan-300 font-bold">&gt;{macro12.requiredMinNetProfitPct.toFixed(1)}% NET GATE</span>
-            </div>
-            <h3 className="text-sm text-white font-bold font-sans mt-1">
-              2026 Statutory Tax &amp; Peak-Margin Compliance
-            </h3>
-            <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed font-sans">
-              Every candidate setup deducts 2026 STT (0.15% Opt / 0.05% Fut), Stamp Duty, 18% GST &amp; ₹20/order before execution.
-            </p>
-          </div>
-        </div>
       </div>
     </div>
   );
