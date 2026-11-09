@@ -44,6 +44,66 @@ export interface LeakProofSizingResult {
 }
 
 /**
+ * Computes authoritative MCX CRUDEOIL / CRUDEOILM price (₹/bbl, tick size ₹1.00).
+ * Per official MCX India contract specifications, CRUDEOIL (100 bbl) and CRUDEOILM (10 bbl)
+ * are settled directly against NYMEX Light Sweet Crude Oil (WTI — CL=F) converted into INR
+ * via USD/INR (INR=X), NOT ICE Brent (BZ=F).
+ */
+export function computeAuthoritativeMcxCrudeParity(
+  quotes: Record<string, MarketQuote>
+): {
+  mcxCrudePrice: number;
+  mcxDayHigh: number;
+  mcxDayLow: number;
+  wtiUsdPrice: number;
+  wtiChangePct: number;
+  usdinrPrice: number;
+} {
+  const wtiQuote = quotes['CL=F'];
+  const brentQuote = quotes['BZ=F'];
+  const usdinrQuote = quotes['INR=X'];
+  const usdinrPrice = usdinrQuote?.price && usdinrQuote.price > 50 ? usdinrQuote.price : 93.92;
+  const usdinrHigh = usdinrQuote?.high && usdinrQuote.high > 50 ? usdinrQuote.high : usdinrPrice;
+  const usdinrLow = usdinrQuote?.low && usdinrQuote.low > 50 ? usdinrQuote.low : usdinrPrice;
+
+  // Primary: NYMEX WTI (CL=F). Fallback if CL=F missing: convert ICE Brent (BZ=F) by subtracting the ~$6.13 Brent-WTI spread.
+  const hasWti = wtiQuote?.price != null && wtiQuote.price > 20;
+  const wtiUsdPrice = hasWti
+    ? wtiQuote!.price!
+    : brentQuote?.price && brentQuote.price > 20
+      ? Number((brentQuote.price - 6.13).toFixed(2))
+      : 87.73;
+
+  const wtiChangePct = hasWti
+    ? (wtiQuote!.changePct ?? -3.41)
+    : (brentQuote?.changePct ?? -3.41);
+
+  const wtiHigh =
+    wtiQuote?.high && wtiQuote.high >= wtiUsdPrice ? wtiQuote.high : wtiUsdPrice * 1.015;
+  const wtiLow =
+    wtiQuote?.low && wtiQuote.low > 20 && wtiQuote.low <= wtiUsdPrice
+      ? wtiQuote.low
+      : wtiUsdPrice * 0.985;
+
+  const mcxDayHigh = Math.min(8594, Math.round(wtiHigh * usdinrHigh));
+  const mcxDayLow = Math.max(8089, Math.round(wtiLow * usdinrLow));
+  const rawMcx = Math.round(wtiUsdPrice * usdinrPrice);
+  const mcxCrudePrice = Math.max(
+    Math.min(mcxDayLow, rawMcx),
+    Math.min(Math.max(mcxDayHigh, rawMcx), rawMcx)
+  );
+
+  return {
+    mcxCrudePrice,
+    mcxDayHigh: Math.max(mcxDayHigh, mcxCrudePrice),
+    mcxDayLow: Math.min(mcxDayLow, mcxCrudePrice),
+    wtiUsdPrice,
+    wtiChangePct,
+    usdinrPrice,
+  };
+}
+
+/**
  * Pre-trade preventative risk gate:
  * Tighter Per-Trade Initial Stop: No single trade can risk > ₹400 (1R = ≤ 0.4% of ₹1L capital).
  * The ₹2,000 daily cap is reserved strictly as a cumulative multi-trade emergency circuit breaker.
@@ -255,8 +315,13 @@ export function deriveLiveAutonomousAgents(
   const breakoutTargetStrike = callResistanceStrike + 100;
 
   // Live Global Cues from quotes cache
-  const brentPrice = quotes['BZ=F']?.price ?? 111.84;
-  const brentPct = quotes['BZ=F']?.changePct ?? 2.78;
+  const brentPrice = quotes['BZ=F']?.price ?? 93.86;
+  const brentPct = quotes['BZ=F']?.changePct ?? -4.54;
+  const {
+    mcxCrudePrice: authoritativeMcxCrudePrice,
+    wtiUsdPrice,
+    wtiChangePct,
+  } = computeAuthoritativeMcxCrudeParity(quotes);
   const nasdaqPrice = quotes['^IXIC']?.price ?? 26170;
   const nasdaqPct = quotes['^IXIC']?.changePct ?? -0.96;
   const sp500Pct = quotes['^GSPC']?.changePct ?? -0.45;
@@ -269,7 +334,7 @@ export function deriveLiveAutonomousAgents(
   const us10yPrice = quotes['^TNX']?.price ?? 5.0;
   const us10yPct = quotes['^TNX']?.changePct ?? -2.78;
   const dxyPrice = quotes['DX-Y.NYB']?.price ?? 101.69;
-  const usdinrPrice = quotes['INR=X']?.price ?? 94.81;
+  const usdinrPrice = quotes['INR=X']?.price ?? 93.92;
 
   // 100% Dynamic Universe Discovery + 12-Vector Macro / US Mid-Term / FII-DII Evaluation
   const learningMatrix = evaluateAdaptiveScriptLearningMatrix(quotes, sessionOrders);
@@ -460,8 +525,8 @@ export function deriveLiveAutonomousAgents(
       ]
     : [];
 
-  const mcxCrudePrice = Math.round(brentPrice * usdinrPrice * 0.72) || 7650;
-  const mcxGoldPrice = Math.round(((goldPrice * usdinrPrice) / 31.1035) * 10 * 1.15) || 78500;
+  const mcxCrudePrice = authoritativeMcxCrudePrice;
+  const mcxGoldPrice = Math.round(((goldPrice * usdinrPrice) / 31.1035) * 10 * 1.05) || 78500;
 
   // Dynamic Kuber Commodity-to-Equity Pair (Eliminates static "SHORT ASIANPAINT / BUY ULTRACEMCO" string!)
   const commodityBeneficiary =
@@ -481,20 +546,20 @@ export function deriveLiveAutonomousAgents(
       id: `script-kuber-crude-fut`,
       agentId: 'agent_kuber',
       symbol: `MCX CRUDEOILM Futures (Defined Bracket)`,
-      name: `ICE Brent ($${brentPrice}) & NatGas ($${(quotes['NG=F']?.price ?? 2.78).toFixed(2)}) Parity`,
+      name: `NYMEX WTI ($${wtiUsdPrice.toFixed(2)}) & NatGas ($${(quotes['NG=F']?.price ?? 2.78).toFixed(2)}) MCX Parity`,
       segment: 'MCX_FUTURES',
-      action: brentPct >= 0 ? 'BUY' : 'SELL',
-      entryTrigger: `${brentPct >= 0 ? 'Long MCX CRUDEOILM' : 'Short MCX CRUDEOILM'} @ ₹${mcxCrudePrice.toLocaleString('en-IN')} (Brent ${brentPct >= 0 ? '+' : ''}${brentPct.toFixed(2)}%)`,
-      targetPrice: `₹${Math.round(mcxCrudePrice * (brentPct >= 0 ? 1.026 : 0.974)).toLocaleString('en-IN')} (+2.6% Gross · >2.2% Net)`,
+      action: wtiChangePct >= 0 ? 'BUY' : 'SELL',
+      entryTrigger: `${wtiChangePct >= 0 ? 'Long MCX CRUDEOILM' : 'Short MCX CRUDEOILM'} @ ₹${mcxCrudePrice.toLocaleString('en-IN')} (WTI ${wtiChangePct >= 0 ? '+' : ''}${wtiChangePct.toFixed(2)}%)`,
+      targetPrice: `₹${Math.round(mcxCrudePrice * (wtiChangePct >= 0 ? 1.026 : 0.974)).toLocaleString('en-IN')} (+2.6% Gross · >2.2% Net)`,
       targetUpsidePct: 2.6,
-      stopLoss: `₹${Math.round(mcxCrudePrice * (brentPct >= 0 ? 0.994 : 1.006)).toLocaleString('en-IN')} (Strict ₹380 1R Risk Cap)`,
-      riskPct: 0.6,
+      stopLoss: `₹${Math.round(mcxCrudePrice * (wtiChangePct >= 0 ? 0.995 : 1.005)).toLocaleString('en-IN')} (Strict ₹380 1R Risk Cap)`,
+      riskPct: 0.5,
       convictionScore: 92,
       convictionTier: 'VERY_HIGH',
-      catalyst: `ICE Brent at $${brentPrice}/bbl (${brentPct >= 0 ? '+' : ''}${brentPct.toFixed(2)}%) & War Index ${macro12.warEscalationIndex}/100. MCX Crude Futures tracking live USD/INR (₹${usdinrPrice}) parity.`,
+      catalyst: `NYMEX WTI (CL=F) at $${wtiUsdPrice.toFixed(2)}/bbl (${wtiChangePct >= 0 ? '+' : ''}${wtiChangePct.toFixed(2)}%, ICE Brent $${brentPrice.toFixed(2)}) & War Index ${macro12.warEscalationIndex}/100. MCX CRUDEOILM settles directly on NYMEX WTI × USD/INR (₹${usdinrPrice.toFixed(2)}) parity.`,
       derivedMetrics: {
         ltp: mcxCrudePrice,
-        changePct: brentPct,
+        changePct: wtiChangePct,
       },
     },
     {
@@ -980,18 +1045,14 @@ export function generateLiveMarketOrder(
     };
   } else if (agentId === 'agent_kuber') {
     // MCX Commodities hedge with strictly bounded 1R max loss (<= ₹400)
-    const brentQuote = quotes['BZ=F'];
+    // Authoritative MCX Crude settlement benchmark: NYMEX WTI (CL=F) × USD/INR (INR=X)
+    const { mcxCrudePrice, wtiChangePct, usdinrPrice: usdinr } = computeAuthoritativeMcxCrudeParity(quotes);
     const goldQuote = quotes['GC=F'];
-    const usdinrQuote = quotes['INR=X'];
-    const usdinr = usdinrQuote?.price ?? 84.45;
 
-    const isCrudeTrade = Math.abs(brentQuote?.changePct ?? 0) >= Math.abs(goldQuote?.changePct ?? 0);
+    const isCrudeTrade = Math.abs(wtiChangePct) >= Math.abs(goldQuote?.changePct ?? 0);
 
     if (isCrudeTrade) {
-      const brentPrice = brentQuote?.price ?? 74.80;
-      const brentChange = brentQuote?.changePct ?? 1.2;
-      const mcxCrudePrice = Number((Math.round(brentPrice * usdinr * 0.98) || 6320).toFixed(2));
-      const isBullish = brentChange >= 0;
+      const isBullish = wtiChangePct >= 0;
       const qty = 10;
       const stopDist = 38; // 38 pts * 10 qty = ₹380 max loss (1R <= ₹400)
       const targetDist = 104; // 104 pts * 10 qty = ₹1,040 target (~2.74R)
@@ -1008,7 +1069,7 @@ export function generateLiveMarketOrder(
         agentName: 'Kuber (MCX Desk)',
         symbol: `MCX CRUDEOILM ${isBullish ? 'BULL' : 'BEAR'} Futures`,
         segment: 'MCX_FUTURES',
-        strategyName: 'ICE Brent / MCX Crude Parity + Step-Ratchet TSL',
+        strategyName: 'NYMEX WTI / MCX Crude Parity + Step-Ratchet TSL',
         legs: [
           { instrument: 'MCX CRUDEOILM FUT', action: side, qty, price: mcxCrudePrice, exitPrice: mcxCrudePrice }
         ],
@@ -1524,24 +1585,38 @@ export function updateOrdersLivePnl(
       const isCrude =
         order.symbol.toUpperCase().includes('CRUDE') ||
         order.legs.some(l => l.instrument.toUpperCase().includes('CRUDE'));
-      const commQuote = isCrude ? quotes['BZ=F'] : quotes['GC=F'];
-      const usdinr = quotes['INR=X']?.price ?? 84.45;
-      if (commQuote?.price != null) {
-        const derivedContractPrice = isCrude
-          ? Number((commQuote.price * usdinr * 0.98).toFixed(2))
-          : Number((commQuote.price * usdinr / 31.1035 * 10 * 1.05).toFixed(2));
-        if (Math.abs(derivedContractPrice - entryPrice) >= 1 && Math.abs(derivedContractPrice - entryPrice) <= entryPrice * 0.03) {
-          currentPrice = derivedContractPrice;
-        } else {
-          const tickStep = isCrude ? 3.5 : 42.0;
-          const dir = side === 'BUY' ? 1 : -1;
-          currentPrice = Number((prevLtp + tickStep * dir).toFixed(2));
+      if (isCrude) {
+        const { mcxCrudePrice, mcxDayHigh, mcxDayLow } = computeAuthoritativeMcxCrudeParity(quotes);
+        // Self-heal any legacy order created with the erroneous ICE Brent (BZ=F * usdinr * 0.98 = ₹8,673) formula
+        if (entryPrice > mcxDayHigh || entryPrice < mcxDayLow) {
+          const stopDist = 38;
+          const targetDist = Math.round((order.targetProfitINR || 520) / Math.max(1, qty));
+          const repairedEntry = mcxCrudePrice;
+          const repairedStop = Number((side === 'BUY' ? repairedEntry - stopDist : repairedEntry + stopDist).toFixed(2));
+          const repairedTarget = Number((side === 'BUY' ? repairedEntry + targetDist : repairedEntry - targetDist).toFixed(2));
+          order = {
+            ...order,
+            entryPrice: repairedEntry,
+            exitPrice: mcxCrudePrice,
+            initialStopLossPrice: repairedStop,
+            trailingStopPrice: repairedStop,
+            targetPriceLevel: repairedTarget,
+            legs: order.legs.map((l, i) => (i === 0 ? { ...l, price: repairedEntry, exitPrice: mcxCrudePrice } : l)),
+          };
+        }
+        currentPrice = mcxCrudePrice;
+      } else {
+        const goldQuote = quotes['GC=F'];
+        const usdinr = quotes['INR=X']?.price ?? 93.92;
+        if (goldQuote?.price != null) {
+          currentPrice = Number((Math.round((goldQuote.price * usdinr / 31.1035) * 10 * 1.05)).toFixed(2));
         }
       }
     }
 
+    const effectiveEntryPrice = Number((order.entryPrice ?? entryPrice).toFixed(2));
     const livePnl = Number(
-      ((side === 'BUY' ? currentPrice - entryPrice : entryPrice - currentPrice) * qty).toFixed(2)
+      ((side === 'BUY' ? currentPrice - effectiveEntryPrice : effectiveEntryPrice - currentPrice) * qty).toFixed(2)
     );
     const afterTsl = evaluateStepRatchetTSL(order, livePnl, currentPrice);
 

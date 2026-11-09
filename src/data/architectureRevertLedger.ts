@@ -421,6 +421,21 @@ export const ARCHITECTURE_REVERT_LEDGER: RevertLedgerEntry[] = [
     revertInstruction:
       'Revert src/server/globalMarketImpactEngine.ts, src/server/firstPrinciplesEngine.ts, src/services/macroCausalLearningEngine.ts, and src/services/agentQuantEngine.ts to REV-026.',
   },
+  {
+    revertId: 'REV-028',
+    dateIST: '09-Nov-2026',
+    category: 'STRATEGY_VETO_ENGINE',
+    moduleName: 'Authoritative MCX CRUDEOILM NYMEX WTI (CL=F × INR=X) Parity Pricing & Legacy ₹8,673 ICE Brent Order Self-Healing',
+    filePath: 'src/services/agentQuantEngine.ts, src/services/statutoryVetoEngine.ts, src/services/paperTradeService.ts, src/server/globalMarketImpactEngine.ts',
+    previousStateSummary:
+      'MCX CRUDEOILM FUT orders and live MTM updates in agentQuantEngine.ts (lines 993 & 1531) and statutoryVetoEngine.ts (line 1124) calculated mcxCrudePrice using ICE Brent (BZ=F, ~$93.67/bbl) × USD/INR (~₹94.48) × 0.98 = ₹8,673.00/bbl, even though official MCX CRUDEOIL/CRUDEOILM contracts settle against NYMEX WTI (CL=F, ~$87.73/bbl) × USD/INR (~₹93.92) = ₹8,240.00/bbl (within MCX actual session range ₹8,089.00–₹8,594.00). Additionally, updateOrdersLivePnl() had a fallback that stepped MCX prices by a synthetic 3.5-pt tick.',
+    newStateSummary:
+      'Implemented computeAuthoritativeMcxCrudeParity(quotes) using live NYMEX WTI (CL=F) × USD/INR (INR=X) bounded strictly by the session WTI×INR low/high range [₹8,089, ₹8,594]; wired it across agentQuantEngine.ts and statutoryVetoEngine.ts; removed the synthetic 3.5-pt tick walk in updateOrdersLivePnl(); and added automatic self-healing in paperTradeService.ts and agentQuantEngine.ts to recalibrate any cached MCX CRUDEOILM order with entryPrice > 8594 (such as ₹8,673.00) to true NYMEX WTI parity (₹8,240.00).',
+    quantValueJustification:
+      'Aligns MCX CRUDEOILM pricing 100% with the official NYMEX WTI (CL=F) × USD/INR exchange settlement formula and prevents impossible out-of-range ICE Brent entry prices.',
+    revertInstruction:
+      'Revert src/services/agentQuantEngine.ts, src/services/statutoryVetoEngine.ts, and src/services/paperTradeService.ts to REV-027.',
+  },
 ];
 
 

@@ -228,3 +228,15 @@ This document records every surgical UI/module pruning action, static data remov
   4. **Expanded 250+ Symbol Sector Classifier & 100% Live 12-Vector Macro Matrix (`src/services/macroCausalLearningEngine.ts`, `src/services/agentQuantEngine.ts`)**: Expanded `resolveSymbolSector()` to 250+ NSE symbols plus company-name keyword fallback across all 9 `NseSectorCode` categories, updated `topEquitySymbol` in `agentQuantEngine.ts` to scan all `.NS` equities in `quotes`, and derived `warIndex`, `v2Score`, `v5PolicyScore`, `v7JobsScore`, `fiiHeavyweightBasketChg`, and `diiCapexBasketChg` 100% dynamically from live NSE breadth, sector baskets, and macro ticks when `isPureLiveFeed` is active.
 - **How to Revert**: Revert `src/server/globalMarketImpactEngine.ts`, `src/server/firstPrinciplesEngine.ts`, `src/services/macroCausalLearningEngine.ts`, and `src/services/agentQuantEngine.ts` to `REV-026`.
 
+### `REV-028` — Authoritative MCX `CRUDEOILM` NYMEX WTI (`CL=F × INR=X`) Parity Pricing & Legacy `₹8,673` ICE Brent Order Self-Healing
+- **Files Modified**: `src/services/agentQuantEngine.ts`, `src/services/statutoryVetoEngine.ts`, `src/services/paperTradeService.ts`, `src/server/globalMarketImpactEngine.ts`
+- **Root Cause Identified**:
+  - Official MCX `CRUDEOIL` (100 bbl) and `CRUDEOILM` (10 bbl) contracts settle against **NYMEX Light Sweet Crude Oil (WTI — `CL=F`) × `USD/INR` (`INR=X`)**, **not** ICE Brent (`BZ=F`).
+  - `src/services/agentQuantEngine.ts` (lines 993 & 1531) and `src/services/statutoryVetoEngine.ts` (line 1124) previously used `Math.round(brentPrice * usdinr * 0.98)` where `brentPrice` was **ICE Brent (`BZ=F` = `$93.67/bbl`)**, which traded at a `+$6.13/bbl` premium over **NYMEX WTI (`CL=F` = `$87.73/bbl`)**. That multiplied `$93.67 × ₹94.48 × 0.98 = ₹8,673.00/bbl`, exceeding MCX's actual `09-Nov-2026` intraday high of `₹8,594.00` (actual live MCX price: `₹8,230–₹8,246/bbl`).
+- **New Behavior**:
+  1. **Authoritative NYMEX WTI (`CL=F`) × `USD/INR` (`INR=X`) Parity (`computeAuthoritativeMcxCrudeParity`)**: Computes `Math.round(wtiUsdPrice * usdinrPrice)` (`$87.73 × ₹93.92 = ₹8,240.00/bbl`), strictly bounded within the session WTI×INR range (`₹8,089–₹8,594`).
+  2. **Removed Synthetic `3.5`-Point Tick Drift in `updateOrdersLivePnl`**: Live MTM for `MCX_FUTURES` now directly tracks `computeAuthoritativeMcxCrudeParity(quotes)`.
+  3. **Automatic Self-Healing of Legacy `₹8,673` Orders**: `sanitizeAndDedupeOrders()` in `paperTradeService.ts` and `updateOrdersLivePnl()` in `agentQuantEngine.ts` automatically detect any stored `MCX CRUDEOILM` order with `entryPrice > 8594` and recalibrate its entry, stop, target, and MTM price to true NYMEX WTI parity (`₹8,240.00`).
+- **How to Revert**: Revert `src/services/agentQuantEngine.ts`, `src/services/statutoryVetoEngine.ts`, and `src/services/paperTradeService.ts` to `REV-027`.
+
+

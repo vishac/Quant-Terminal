@@ -18,6 +18,7 @@ import {
   InterAgentConsensusEvaluation,
   ElevenVectorMacroSnapshot,
 } from './macroCausalLearningEngine';
+import { computeAuthoritativeMcxCrudeParity } from './agentQuantEngine';
 
 export interface StatutoryTaxRateConfig {
   versionId: string;
@@ -1107,22 +1108,24 @@ export function executeIntelligentScanAndDeploy(
   }
 
   // ============================================================================
+  // ============================================================================
   // DESK 4: MCX COMMODITIES (KUBER — CRUDEOILM / GOLDM PARITY BREAKOUT)
   // ============================================================================
   if (scope === 'ALL' || scope === 'MCX') {
     vetoSeqCounter += 1;
-    const brentQuote = quotes['BZ=F'];
     const goldQuote = quotes['GC=F'];
-    const usdinr = quotes['INR=X']?.price ?? 84.45;
+    const {
+      mcxCrudePrice,
+      wtiChangePct,
+      usdinrPrice: usdinr,
+    } = computeAuthoritativeMcxCrudeParity(quotes);
 
-    const brentPrice = brentQuote?.price ?? 74.8;
-    const brentChange =
+    const wtiChange =
       macroSnapshot.vectors.find((v) => v.id === 'vec_oil_natgas')?.score != null &&
       macroSnapshot.mode === 'STRESS_TEST_SANDBOX'
         ? -(macroSnapshot.vectors.find((v) => v.id === 'vec_oil_natgas')!.score / 7)
-        : brentQuote?.changePct ?? 1.25;
-    const mcxCrudePrice = Number((Math.round(brentPrice * usdinr * 0.98) || 6320).toFixed(2));
-    const isBullish = brentChange >= 0;
+        : wtiChangePct;
+    const isBullish = wtiChange >= 0;
     const crudeSym = `MCX CRUDEOILM ${isBullish ? 'BULL' : 'BEAR'} Futures`;
     const isCrudeAlreadyOpen =
       openFullSymbols.has(crudeSym.toUpperCase()) ||
@@ -1146,7 +1149,7 @@ export function executeIntelligentScanAndDeploy(
         agentName: 'Kuber (MCX Desk)',
         symbol: crudeSym,
         segment: 'MCX_FUTURES',
-        strategyName: `11-Vector ICE Brent / MCX Crude ${isBullish ? 'Long' : 'Short'} Parity (82% TSL)`,
+        strategyName: `11-Vector NYMEX WTI / MCX Crude ${isBullish ? 'Long' : 'Short'} Parity (82% TSL)`,
         legs: [
           {
             instrument: 'MCX CRUDEOILM FUT',
@@ -1190,7 +1193,7 @@ export function executeIntelligentScanAndDeploy(
       const mcxEval = evaluateCandidateOrderAgainstVetoRules({
         candidateOrder: mcxOrder,
         deskName: 'MCX Commodity Desk (Kuber)',
-        confirmedScriptStatus: Math.abs(brentChange) >= 0.15 ? 'CONFIRMED_LEADER' : 'UNCONFIRMED_OR_WEAK',
+        confirmedScriptStatus: Math.abs(wtiChange) >= 0.15 ? 'CONFIRMED_LEADER' : 'UNCONFIRMED_OR_WEAK',
         legCount: 1,
         isOptionContract: false,
         interAgentConsensus: mcxConsensus,

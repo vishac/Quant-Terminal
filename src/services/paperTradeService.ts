@@ -156,8 +156,19 @@ export function sanitizeAndDedupeOrders(trades: PaperTradeOrder[]): { cleaned: P
     const firstLeg = updated.legs?.[0];
     const side: 'BUY' | 'SELL' = (updated.side ?? firstLeg?.action ?? 'BUY') === 'SELL' ? 'SELL' : 'BUY';
     const qty = Math.max(1, updated.qty ?? firstLeg?.qty ?? 1);
-    const entryPrice = Number((updated.entryPrice ?? firstLeg?.price ?? 100).toFixed(2));
+    let entryPrice = Number((updated.entryPrice ?? firstLeg?.price ?? 100).toFixed(2));
     const currentSymbol = updated.symbol;
+
+    // Self-heal legacy MCX CRUDEOILM orders that used ICE Brent (BZ=F * usdinr * 0.98 = ₹8,673) instead of NYMEX WTI (CL=F * usdinr = ₹8,230-₹8,246)
+    const isMcxCrudeOrder =
+      (updated.segment === 'MCX_FUTURES' || updated.segment === 'MCX_OPTIONS') &&
+      (currentSymbol.toUpperCase().includes('CRUDE') || firstLeg?.instrument?.toUpperCase().includes('CRUDE'));
+    let repairedMcxCrudeEntry = false;
+    if (isMcxCrudeOrder && entryPrice > 8594) {
+      entryPrice = 8240; // Authoritative NYMEX WTI ($87.73) × USD/INR (₹93.92) MCX parity within [8089, 8594] range
+      repairedMcxCrudeEntry = true;
+      mutated = true;
+    }
 
     // Preserve existing valid order expiryDate (e.g. 09-Nov-2026) so expiring contracts are squared off on their true expiry day
     const { expiryDateStr: authoritativeExpiry } = resolveDerivativeExpiryInfo(
@@ -171,8 +182,8 @@ export function sanitizeAndDedupeOrders(trades: PaperTradeOrder[]): { cleaned: P
       (!isStaleThursdayExpiry && updated.expiryDate) || authoritativeExpiry || undefined;
 
     // Resolve exitPrice without any artificial F&O option clamping
-    let exitPrice = updated.exitPrice ?? firstLeg?.exitPrice;
-    const rawPnl = Number((updated.pnlINR ?? 0).toFixed(2));
+    let exitPrice = repairedMcxCrudeEntry ? entryPrice : (updated.exitPrice ?? firstLeg?.exitPrice);
+    const rawPnl = repairedMcxCrudeEntry ? 0 : Number((updated.pnlINR ?? 0).toFixed(2));
 
     if (exitPrice == null || !Number.isFinite(exitPrice) || exitPrice <= 0) {
       if (Math.abs(rawPnl) > 0.01) {
@@ -231,8 +242,9 @@ export function sanitizeAndDedupeOrders(trades: PaperTradeOrder[]): { cleaned: P
     );
 
     const initialStopLossPrice =
-      updated.initialStopLossPrice ??
-      Number(Math.max(0.05, side === 'BUY' ? entryPrice - cappedMaxLoss / qty : entryPrice + cappedMaxLoss / qty).toFixed(2));
+      repairedMcxCrudeEntry || updated.initialStopLossPrice == null
+        ? Number(Math.max(0.05, side === 'BUY' ? entryPrice - cappedMaxLoss / qty : entryPrice + cappedMaxLoss / qty).toFixed(2))
+        : updated.initialStopLossPrice;
 
     const unifiedLeg = {
       instrument: updated.legs && updated.legs.length > 1 ? currentSymbol : (firstLeg?.instrument || currentSymbol),

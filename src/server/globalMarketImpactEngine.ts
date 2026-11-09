@@ -757,8 +757,8 @@ const STOCK_PROFILES: StockProfile[] = [
   },
   {
     symbol: 'BZ=F',
-    bseCode: 'MCX-CRUDE',
-    name: 'MCX Crude Oil Futures (100 bbl)',
+    bseCode: 'ICE-BRENT',
+    name: 'ICE Brent Crude Oil Futures ($/bbl)',
     sector: 'Energy & Petrochemicals',
     assetClass: 'MCX',
     keywords: ['crude', 'oil', 'brent', 'energy', 'mcx', 'opec'],
