@@ -1,7 +1,11 @@
 import fs from 'fs';
 import path from 'path';
-import { quotesCache } from './marketData.ts';
-import { computeGlobalMarketImpact, type GlobalMarketImpactResponse } from './globalMarketImpactEngine.ts';
+import { quotesCache, classifySebiMarketCapTier } from './marketData.ts';
+import {
+  computeGlobalMarketImpact,
+  inferDynamicSectorAndMacroProfile,
+  type GlobalMarketImpactResponse,
+} from './globalMarketImpactEngine.ts';
 
 export interface FirstPrinciplePillar {
   id: 'MARKET_BASICS' | 'CROWD_EMOTIONS' | 'GOVT_AND_INSTITUTIONS' | 'GEOPOLITICS_AND_GLOBAL';
@@ -724,8 +728,8 @@ export async function computeFirstPrinciplesMarketIntelligence(forceRecalibrate 
   const us10y = getQuote('^TNX');
   const dxy = getQuote('DX-Y.NYB');
 
-  // Compute real NSE advance/decline breadth across all tracked Indian equities
-  const indianStockSymbols = [
+  // Compute real NSE advance/decline breadth across the entire live discovered NSE universe in quotesCache
+  const baseIndianSymbols = [
     'RELIANCE.NS', 'TCS.NS', 'HDFCBANK.NS', 'ICICIBANK.NS', 'INFY.NS',
     'SBIN.NS', 'BHARTIARTL.NS', 'ITC.NS', 'LT.NS', 'TATAMOTORS.NS',
     'AXISBANK.NS', 'KOTAKBANK.NS', 'M&M.NS', 'ADANIPORTS.NS', 'NTPC.NS',
@@ -733,6 +737,13 @@ export async function computeFirstPrinciplesMarketIntelligence(forceRecalibrate 
     'TATASTEEL.NS', 'HINDALCO.NS', 'SUNPHARMA.NS', 'CIPLA.NS',
     'ULTRACEMCO.NS', 'INDIACEM.NS',
   ];
+  const dynamicIndianSymbolsSet = new Set<string>(baseIndianSymbols);
+  for (const sym of Object.keys(quotesCache)) {
+    if (sym.endsWith('.NS') && (quotesCache[sym]?.price ?? 0) > 0) {
+      dynamicIndianSymbolsSet.add(sym);
+    }
+  }
+  const indianStockSymbols = Array.from(dynamicIndianSymbolsSet);
 
   let advancingStocks = 0;
   let decliningStocks = 0;
@@ -760,6 +771,64 @@ export async function computeFirstPrinciplesMarketIntelligence(forceRecalibrate 
     fearGreedIndex <= 78 ? 'GREED_AND_MOMENTUM' :
     'EXTREME_FOMO_EUPHORIA';
 
+  // Build 4 live behavioral & crowd traps dynamically from the top rising and falling NSE equities
+  const liveRisingEquities = globalImpact.risingStocks.filter((s) => s.symbol.endsWith('.NS'));
+  const liveFallingEquities = globalImpact.fallingStocks.filter((s) => s.symbol.endsWith('.NS'));
+  const topFall1 = liveFallingEquities[0];
+  const topFall2 = liveFallingEquities[1];
+  const topRise1 = liveRisingEquities[0];
+  const topRise2 = liveRisingEquities[1];
+
+  const dynamicEmotionalTraps: CrowdPsychologyState['emotionalTraps'] = [];
+  if (topFall1) {
+    dynamicEmotionalTraps.push({
+      symbol: topFall1.symbol,
+      name: topFall1.name,
+      price: topFall1.livePrice,
+      changePct: topFall1.changePct,
+      trapType: 'FUNDAMENTAL_MARGIN_TRAP',
+      crowdBehavior: `Retail traders see ${topFall1.symbol.replace('.NS', '')} down ${topFall1.changePct.toFixed(2)}% in ${topFall1.sector} and reflexively treat it as a cheap dip-buy without checking macro/sector headwinds.`,
+      smartMoneyReality: `${topFall1.primaryGlobalDriver} ${topFall1.fundamentalTransmissionReason}`,
+      actionableVerdict: `AVOID DIP BUYING / SHORT ON BOUNCE until price reclaims stop-invalidation level ₹${topFall1.tradeSetup.stopLoss.toLocaleString('en-IN')}.`,
+    });
+  }
+  if (topRise1) {
+    dynamicEmotionalTraps.push({
+      symbol: topRise1.symbol,
+      name: topRise1.name,
+      price: topRise1.livePrice,
+      changePct: topRise1.changePct,
+      trapType: 'INSTITUTIONAL_SILENT_ACCUMULATION',
+      crowdBehavior: `Retail hesitates to enter ${topRise1.symbol.replace('.NS', '')} (${topRise1.capCategory || 'NSE'}) after an initial +${topRise1.changePct.toFixed(2)}% move, anchored to yesterday's price.`,
+      smartMoneyReality: `${topRise1.primaryGlobalDriver} ${topRise1.fundamentalTransmissionReason}`,
+      actionableVerdict: `ACCUMULATE / BUY near ₹${topRise1.tradeSetup.entryPrice.toLocaleString('en-IN')} targeting ₹${topRise1.tradeSetup.target1.toLocaleString('en-IN')} (Stop ₹${topRise1.tradeSetup.stopLoss.toLocaleString('en-IN')}).`,
+    });
+  }
+  if (topFall2) {
+    dynamicEmotionalTraps.push({
+      symbol: topFall2.symbol,
+      name: topFall2.name,
+      price: topFall2.livePrice,
+      changePct: topFall2.changePct,
+      trapType: 'RETAIL_FOMO_CHASE_TRAP',
+      crowdBehavior: `Retail averages down on ${topFall2.symbol.replace('.NS', '')} (${topFall2.changePct.toFixed(2)}%, Alpha ${topFall2.relativeAlphaVsNifty >= 0 ? '+' : ''}${topFall2.relativeAlphaVsNifty.toFixed(2)}% vs NIFTY) hoping for an immediate mean-reversion bounce.`,
+      smartMoneyReality: `${topFall2.primaryGlobalDriver} ${topFall2.fundamentalTransmissionReason}`,
+      actionableVerdict: `EXIT LONGS / PREFER RELATIVE STRENGTH LEADERS until ${topFall2.symbol.replace('.NS', '')} clears ₹${topFall2.tradeSetup.stopLoss.toLocaleString('en-IN')}.`,
+    });
+  }
+  if (topRise2) {
+    dynamicEmotionalTraps.push({
+      symbol: topRise2.symbol,
+      name: topRise2.name,
+      price: topRise2.livePrice,
+      changePct: topRise2.changePct,
+      trapType: 'INSTITUTIONAL_SILENT_ACCUMULATION',
+      crowdBehavior: `Retail is distracted by headline index noise while institutional desks steadily accumulate ${topRise2.symbol.replace('.NS', '')} (+${topRise2.changePct.toFixed(2)}% in ${topRise2.sector}).`,
+      smartMoneyReality: `${topRise2.primaryGlobalDriver} ${topRise2.fundamentalTransmissionReason}`,
+      actionableVerdict: `BUY ON INTRADAY PULLBACKS toward ₹${topRise2.tradeSetup.entryPrice.toLocaleString('en-IN')} for target ₹${topRise2.tradeSetup.target1.toLocaleString('en-IN')}.`,
+    });
+  }
+
   const crowdPsychology: CrowdPsychologyState = {
     fearGreedIndex,
     regime: emotionRegime,
@@ -777,48 +846,7 @@ export async function computeFirstPrinciplesMarketIntelligence(forceRecalibrate 
     vixChangePct: vix.changePct,
     advancingStocks,
     decliningStocks,
-    emotionalTraps: [
-      {
-        symbol: 'ASIANPAINT.NS',
-        name: 'Asian Paints',
-        price: getQuote('ASIANPAINT.NS').price || 2219.5,
-        changePct: getQuote('ASIANPAINT.NS').changePct,
-        trapType: 'FUNDAMENTAL_MARGIN_TRAP',
-        crowdBehavior: 'Retail traders see the stock down and assume it is a "safe blue-chip dip buy" without checking raw material costs.',
-        smartMoneyReality: `Brent Crude is at $${brent.price?.toFixed(2) || '111.95'} (+${brent.changePct.toFixed(2)}%). Crude-derived TiO2 & solvent monomers account for ~55% of paint raw material costs — institutions are reducing exposure until crude stabilizes.`,
-        actionableVerdict: 'AVOID DIP BUYING / SHORT ON BOUNCE until Brent Crude cools below $95/bbl.',
-      },
-      {
-        symbol: 'CIPLA.NS',
-        name: 'Cipla Ltd',
-        price: getQuote('CIPLA.NS').price || 1344.2,
-        changePct: getQuote('CIPLA.NS').changePct,
-        trapType: 'INSTITUTIONAL_SILENT_ACCUMULATION',
-        crowdBehavior: 'Retail ignores defensive Pharma because it lacks flashy social-media hype during volatile global sessions.',
-        smartMoneyReality: `Up ${getQuote('CIPLA.NS').changePct >= 0 ? '+' : ''}${getQuote('CIPLA.NS').changePct.toFixed(2)}% today as mutual funds and FIIs park capital in inelastic healthcare earnings & USD export tailwinds (USD/INR ₹${usdinr.price?.toFixed(2) || '93.15'}).`,
-        actionableVerdict: 'ACCUMULATE / BUY for steady risk-adjusted upside.',
-      },
-      {
-        symbol: 'HDFCBANK.NS',
-        name: 'HDFC Bank',
-        price: getQuote('HDFCBANK.NS').price || 829.2,
-        changePct: getQuote('HDFCBANK.NS').changePct,
-        trapType: 'RETAIL_FOMO_CHASE_TRAP',
-        crowdBehavior: 'Retail repeatedly buys HDFC Bank expecting an immediate catch-up rally while global yields/FII outflows persist.',
-        smartMoneyReality: `Because HDFC Bank has the highest FII ownership in NIFTY, any global risk-off or FII ETF redemption hits it first (${getQuote('HDFCBANK.NS').changePct.toFixed(2)}%), whereas ICICI Bank (+${getQuote('ICICIBANK.NS').changePct.toFixed(2)}%) and SBI (+${getQuote('SBIN.NS').changePct.toFixed(2)}%) show superior relative strength.`,
-        actionableVerdict: 'PREFER ICICI BANK & SBI over HDFC Bank until FII selling subsides.',
-      },
-      {
-        symbol: 'ULTRACEMCO.NS',
-        name: 'UltraTech Cement',
-        price: getQuote('ULTRACEMCO.NS').price || 10945,
-        changePct: getQuote('ULTRACEMCO.NS').changePct,
-        trapType: 'INSTITUTIONAL_SILENT_ACCUMULATION',
-        crowdBehavior: 'Retail worries about broad market volatility and misses domestic infrastructure compounders.',
-        smartMoneyReality: `Holding strong at +${getQuote('ULTRACEMCO.NS').changePct.toFixed(2)}% on back of Government highway/housing capex and regional cement pricing discipline, zero US tariff exposure.`,
-        actionableVerdict: 'BUY ON INTRADAY PULLBACKS as a domestic capex leader.',
-      },
-    ],
+    emotionalTraps: dynamicEmotionalTraps,
   };
 
   // --------------------------------------------------------------------------
@@ -1127,37 +1155,56 @@ export async function computeFirstPrinciplesMarketIntelligence(forceRecalibrate 
 
   const buildStockPick = (sym: string, isBuy: boolean) => {
     const q = getQuote(sym);
-    const meta = STOCK_CATALOGUE[sym] || {
-      name: sym.replace('.NS', ''),
-      buyThesis: 'Institutional accumulation and positive relative strength.',
-      avoidThesis: 'Intraday distribution and relative weakness vs NIFTY.',
-    };
+    const rawQuote = quotesCache[sym];
+    const dynProfile = inferDynamicSectorAndMacroProfile(sym, rawQuote?.name);
+    const capCategory = classifySebiMarketCapTier(sym);
+    const meta = STOCK_CATALOGUE[sym];
     const price = q.price || 1000;
     const niftyChg = quotesCache['^NSEI']?.changePct ?? 0;
-    const rawQuote = quotesCache[sym];
+    const relAlpha = q.changePct - niftyChg;
+    const rupeeTurnoverCr = ((rawQuote?.volume || 0) * price) / 1e7;
     const intradaySpanPct =
       rawQuote?.high && rawQuote?.low && rawQuote.high > rawQuote.low && price > 0
         ? ((rawQuote.high - rawQuote.low) / price) * 100
         : Math.max(1.4, Math.abs(q.changePct) * 1.15);
     const atrPct = Math.max(1.2, Math.min(4.2, Number(intradaySpanPct.toFixed(2))));
     const stopDist = price * (Math.min(3.2, Math.max(1.1, atrPct * 0.9)) / 100);
-    const rsRank = Math.min(99, Math.max(45, Math.round(72 + q.changePct * 5.8 + (q.changePct - niftyChg) * 5.2)));
+    const rsRank = Math.min(99, Math.max(45, Math.round(72 + q.changePct * 5.8 + relAlpha * 5.2)));
     const dynamicMultiplier = Math.max(1.65, Math.min(3.30, Number((1.85 + ((rsRank - 75) / 25) * 0.45).toFixed(2))));
     const targetDist = stopDist * dynamicMultiplier;
     const expectedRoiPct = Number(((targetDist / price) * 100).toFixed(2));
     const changeFormatted = `${q.changePct >= 0 ? 'Up +' : 'Down '}${q.changePct.toFixed(2)}%`;
 
+    const dynamicThesis = isBuy
+      ? ` Institutional accumulation (${capCategory}, Alpha ${relAlpha >= 0 ? '+' : ''}${relAlpha.toFixed(2)}% vs NIFTY${rupeeTurnoverCr >= 1 ? `, ₹${rupeeTurnoverCr.toFixed(0)} Cr turnover` : ''}) in ${dynProfile.sector}.`
+      : ` Intraday supply pressure (${capCategory}, Alpha ${relAlpha >= 0 ? '+' : ''}${relAlpha.toFixed(2)}% vs NIFTY) in ${dynProfile.sector} — avoid dip-buying below VWAP.`;
+
     return {
       symbol: sym,
-      name: meta.name,
+      name: meta?.name || dynProfile.name || sym.replace('.NS', ''),
       price: Number(price.toFixed(2)),
       changePct: Number(q.changePct.toFixed(2)),
       entryPrice: Number(price.toFixed(2)),
       targetPrice: Number((isBuy ? price + targetDist : price - targetDist).toFixed(2)),
       stopLoss: Number((isBuy ? price - stopDist : price + stopDist).toFixed(2)),
       expectedRoiPct,
-      reason: `${changeFormatted} at ₹${price.toFixed(2)}; ${isBuy ? meta.buyThesis : meta.avoidThesis}`,
+      reason: `${changeFormatted} at ₹${price.toFixed(2)}; ${meta ? (isBuy ? meta.buyThesis : meta.avoidThesis) : dynamicThesis.trim()}`,
     };
+  };
+
+  // Map dynamic inferDynamicSectorAndMacroProfile sectors onto the 9 canonical sector rotation buckets
+  const mapProfileSectorToSectorId = (sectorLabel: string): string => {
+    const s = sectorLabel.toLowerCase();
+    if (s.includes('pharma') || s.includes('health')) return 'pharma';
+    if (s.includes('cement') || s.includes('infra') || s.includes('capital goods') || s.includes('epc') || s.includes('defence')) return 'cement_infra';
+    if (s.includes('bank') || s.includes('financial')) return 'corporate_psu_banks';
+    if (s.includes('power') || s.includes('upstream') || s.includes('energy') || s.includes('telecom')) return 'power_energy_upstream';
+    if (s.includes('retail') || s.includes('fmcg') || s.includes('discretionary') || s.includes('consum')) return 'fmcg_consumption';
+    if (s.includes('auto') || s.includes('ev')) return 'autos_mobility';
+    if (s.includes('metal') || s.includes('steel') || s.includes('mining')) return 'metals_mining';
+    if (s.includes('it ') || s.includes('technology') || s.includes('software')) return 'it_exports';
+    if (s.includes('paint') || s.includes('aviation') || s.includes('omc') || s.includes('refining') || s.includes('chemical')) return 'paints_aviation_omc';
+    return 'cement_infra';
   };
 
   const sectorDefinitions: Array<{
@@ -1233,15 +1280,15 @@ export async function computeFirstPrinciplesMarketIntelligence(forceRecalibrate 
     {
       sectorId: 'fmcg_consumption',
       sectorName: 'FMCG & Domestic Consumption',
-      symbols: ['ITC.NS', 'HINDUNILVR.NS', 'TITAN.NS'],
+      symbols: ['ITC.NS', 'HINDUNILVR.NS', 'TITAN.NS', 'TRENT.NS'],
       basicsScore: 45,
       emotionsScore: 48,
       policyScore: 52,
       geoScore: 40,
-      basicsReason: 'Stable staple cash flows (ITC), though palm oil/packaging input inflation caps gross margin expansion for HUL.',
-      emotionsReason: 'Neutral defensive positioning.',
-      policyReason: 'Rural welfare transfers support volume recovery, offset by food/fuel inflation.',
-      geoReason: 'Elevated crude & gold prices slightly pinch urban discretionary and packaging margins.',
+      basicsReason: 'Stable staple cash flows (ITC) and high-velocity retail store additions (Trent), balanced by input cost vigilance.',
+      emotionsReason: 'Selective institutional positioning in high-ROCE consumption leaders.',
+      policyReason: 'Rural welfare transfers and urban consumption support volume recovery.',
+      geoReason: 'Elevated crude & gold prices slightly pinch packaging and jewellery margins while apparel retail remains insulated.',
       dominantAgent: 'Agent Bhishma',
     },
     {
@@ -1304,6 +1351,18 @@ export async function computeFirstPrinciplesMarketIntelligence(forceRecalibrate 
     },
   ];
 
+  // Dynamically enrich each sector's symbol list with live discovered .NS stocks from quotesCache
+  for (const sym of indianStockSymbols) {
+    const q = quotesCache[sym];
+    if (!q || !q.price || q.price <= 0) continue;
+    const dynProf = inferDynamicSectorAndMacroProfile(sym, q.name);
+    const targetSecId = mapProfileSectorToSectorId(dynProf.sector);
+    const secDef = sectorDefinitions.find((s) => s.sectorId === targetSecId);
+    if (secDef && !secDef.symbols.includes(sym)) {
+      secDef.symbols.push(sym);
+    }
+  }
+
   // Weight scores using the self-learned agent weights + real-time price momentum
   const wVidura = (selfLearning.agents.find((a) => a.agentId === 'vidura')?.learnedTrustWeightPct || 25) / 100;
   const wChanakya = (selfLearning.agents.find((a) => a.agentId === 'chanakya')?.learnedTrustWeightPct || 25) / 100;
@@ -1312,18 +1371,21 @@ export async function computeFirstPrinciplesMarketIntelligence(forceRecalibrate 
   const wSum = wVidura + wChanakya + wBhishma + wArjuna;
 
   const sectorRotationMatrix: SectorGainLossItem[] = sectorDefinitions.map((sec) => {
-    const quotesInSec = sec.symbols.map((s) => getQuote(s));
+    const validSymbolsInSec = sec.symbols.filter((s) => (getQuote(s).price ?? 0) > 0);
+    const quotesInSec = validSymbolsInSec.map((s) => getQuote(s));
     const avgChange =
       quotesInSec.reduce((acc, q) => acc + q.changePct, 0) / Math.max(1, quotesInSec.length);
 
     // Partition sector constituents strictly by live direction (Zero overlap between Buy and Avoid!)
-    const gainingSymbolsInSec = sec.symbols
+    const gainingSymbolsInSec = validSymbolsInSec
       .filter((sym) => isStockGainingLive(sym))
-      .sort((a, b) => getQuote(b).changePct - getQuote(a).changePct);
+      .sort((a, b) => getQuote(b).changePct - getQuote(a).changePct)
+      .slice(0, 6);
 
-    const losingSymbolsInSec = sec.symbols
+    const losingSymbolsInSec = validSymbolsInSec
       .filter((sym) => !isStockGainingLive(sym))
-      .sort((a, b) => getQuote(a).changePct - getQuote(b).changePct);
+      .sort((a, b) => getQuote(a).changePct - getQuote(b).changePct)
+      .slice(0, 6);
 
     const structuralNet = Math.round(
       (sec.basicsScore * wBhishma +

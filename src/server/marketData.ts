@@ -982,7 +982,30 @@ export async function fetchDynamicZonesScreener(force = false) {
         .map((s: any) => ({ ...s, chartinkBucket: bucket }));
     };
 
-    const [largeBucket, midBucket, smallBucket, generalScan] = await Promise.all([
+    const runChartinkBearishClause = async (clause: string, limit = 18) => {
+      const res = await fetch('https://chartink.com/screener/process', {
+        method: 'POST',
+        headers: {
+          'X-CSRF-TOKEN': csrf,
+          Cookie: cookie,
+          'X-Requested-With': 'XMLHttpRequest',
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Referer: pageUrl,
+        },
+        body: new URLSearchParams({ scan_clause: clause }).toString(),
+      });
+      if (!res.ok) return [];
+      const json: any = await res.json();
+      const rawData = Array.isArray(json?.data) ? json.data : [];
+      return [...rawData]
+        .filter((s: any) => s && s.nsecode && Number(s.close) > 0 && Number(s.per_chg) < -0.35)
+        .sort((a: any, b: any) => (Number(a.per_chg) || 0) - (Number(b.per_chg) || 0))
+        .slice(0, limit);
+    };
+
+    const [largeBucket, midBucket, smallBucket, generalScan, bearishLaggards] = await Promise.all([
       runChartinkClause(
         '( {33489} ( latest close > latest sma( latest close , 200 ) and latest volume > 100000 and market cap >= 85000 ) )',
         'LARGE_CAP',
@@ -1003,7 +1026,43 @@ export async function fetchDynamicZonesScreener(force = false) {
         undefined,
         50
       ).catch(() => []),
+      runChartinkBearishClause(
+        '( {33489} ( latest close < 1 day ago close * 0.992 and latest volume > 150000 and market cap >= 3000 ) )',
+        18
+      ).catch(() => []),
     ]);
+
+    // Register discovered whole-NSE intraday losers into quotesCache so First-Principles & Global Impact
+    // surface dynamic falling stocks across the entire exchange (not just the 19 benchmark stocks)
+    for (const loser of bearishLaggards) {
+      const nsecode = String(loser.nsecode).toUpperCase().trim();
+      const sym = `${nsecode}.NS`;
+      const closeVal = Number(loser.close) || 0;
+      const chgPct = Number(loser.per_chg) || 0;
+      const volVal = Number(loser.volume) || 150000;
+      if (closeVal <= 0) continue;
+      const chgVal = Number(((closeVal * chgPct) / 100).toFixed(2));
+      const prevCloseVal = Number((closeVal - chgVal).toFixed(2));
+      const existing = quotesCache[sym];
+      const keepUpstox = existing && existing.source === UPSTOX_DATA_SOURCE && existing.price !== null;
+      if (!keepUpstox) {
+        quotesCache[sym] = {
+          symbol: sym,
+          name: loser.name || UPSTOX_EQUITY_NAMES[sym] || existing?.name || nsecode,
+          price: closeVal,
+          change: chgVal,
+          changePct: chgPct,
+          high: existing?.high ?? Number((closeVal * (1 + Math.abs(chgPct) * 0.009 + 0.005)).toFixed(2)),
+          low: existing?.low ?? Number((closeVal * 0.996).toFixed(2)),
+          prevClose: prevCloseVal,
+          fiftyTwoWeekHigh: existing?.fiftyTwoWeekHigh ?? null,
+          fiftyTwoWeekLow: existing?.fiftyTwoWeekLow ?? null,
+          volume: volVal,
+          timestamp: new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' }) + ' IST',
+          source: 'CHARTINK_LIVE_NSE',
+        };
+      }
+    }
 
     const combinedRaw = [...largeBucket, ...midBucket, ...smallBucket, ...generalScan];
     for (const stock of combinedRaw) {

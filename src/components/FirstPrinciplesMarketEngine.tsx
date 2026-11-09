@@ -951,6 +951,16 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
                 const livePrice = quotes[stock.symbol]?.price ?? stock.livePrice;
                 const livePct = quotes[stock.symbol]?.changePct ?? stock.changePct;
                 const isTracked = trackedPositions.some((p) => p.symbol === stock.symbol);
+                const isUsdCommodity = stock.symbol === 'BZ=F' || stock.symbol === 'GC=F';
+                const ccy = isUsdCommodity ? '$' : '₹';
+                const unitLabel =
+                  stock.symbol === 'BZ=F'
+                    ? 'bbl (MCX Lots)'
+                    : stock.symbol === 'GC=F'
+                      ? 'oz (MCX Lots)'
+                      : stock.assetClass === 'FNO'
+                        ? 'units (NSE F&O)'
+                        : 'shares';
 
                 return (
                   <div
@@ -959,8 +969,23 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <div className="text-xs text-emerald-400 font-medium">
-                          {stock.sector} · Conviction {stock.convictionScore}/100 · R:R {stock.tradeSetup.riskRewardRatio}
+                        <div className="flex flex-wrap items-center gap-1.5 text-xs text-emerald-400 font-medium">
+                          <span>
+                            {stock.sector} · Conviction {stock.convictionScore}/100 · R:R {stock.tradeSetup.riskRewardRatio}
+                          </span>
+                          {stock.capCategory && (
+                            <span
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${
+                                stock.capCategory === 'Large Cap'
+                                  ? 'bg-cyan-950/80 text-cyan-300 border-cyan-500/40'
+                                  : stock.capCategory === 'Mid Cap'
+                                    ? 'bg-indigo-950/80 text-indigo-300 border-indigo-500/40'
+                                    : 'bg-amber-950/80 text-amber-300 border-amber-500/40'
+                              }`}
+                            >
+                              {stock.capCategory}
+                            </span>
+                          )}
                         </div>
                         <h3 className="text-base font-bold text-white mt-0.5">
                           {stock.name} ({stock.symbol.replace('.NS', '')})
@@ -968,13 +993,20 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
                       </div>
                       <div className="text-right font-mono">
                         <div className="text-base font-bold text-white">
-                          ₹{livePrice.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                          {ccy}{livePrice.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                         </div>
                         <div className={`text-xs font-bold ${livePct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                           {livePct >= 0 ? '+' : ''}{livePct.toFixed(2)}%
                         </div>
                       </div>
                     </div>
+
+                    {stock.exclusiveIntel && stock.exclusiveIntel.isExclusive && (
+                      <div className="px-2.5 py-1.5 rounded-lg bg-amber-950/40 border border-amber-500/50 text-[11px] text-amber-200 flex items-center justify-between gap-2">
+                        <span className="font-bold text-amber-300">{stock.exclusiveIntel.badge}</span>
+                        <span className="truncate text-amber-100/90">{stock.exclusiveIntel.headline}</span>
+                      </div>
+                    )}
 
                     <div className="p-3 rounded-lg bg-slate-950 border border-slate-800/90 space-y-1.5 text-xs">
                       <div className="text-slate-200 font-semibold">
@@ -994,15 +1026,15 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
                     <div className="grid grid-cols-4 gap-2 p-2.5 rounded-lg bg-slate-950/70 border border-slate-800 text-center font-mono text-xs">
                       <div>
                         <div className="text-[10px] text-slate-400">Entry</div>
-                        <div className="font-bold text-white">₹{stock.tradeSetup.entryPrice.toLocaleString('en-IN')}</div>
+                        <div className="font-bold text-white">{ccy}{stock.tradeSetup.entryPrice.toLocaleString('en-IN')}</div>
                       </div>
                       <div>
                         <div className="text-[10px] text-emerald-400">Target 1</div>
-                        <div className="font-bold text-emerald-400">₹{stock.tradeSetup.target1.toLocaleString('en-IN')}</div>
+                        <div className="font-bold text-emerald-400">{ccy}{stock.tradeSetup.target1.toLocaleString('en-IN')}</div>
                       </div>
                       <div>
                         <div className="text-[10px] text-rose-400">Stop-Loss</div>
-                        <div className="font-bold text-rose-400">₹{stock.tradeSetup.stopLoss.toLocaleString('en-IN')}</div>
+                        <div className="font-bold text-rose-400">{ccy}{stock.tradeSetup.stopLoss.toLocaleString('en-IN')}</div>
                       </div>
                       <div>
                         <div className="text-[10px] text-cyan-400">Expected ROI</div>
@@ -1014,7 +1046,7 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
                       <span className="text-[11px] text-slate-400">
                         1% Risk Sizing on ₹{capitalBase.toLocaleString('en-IN')}:{' '}
                         <strong className="text-white font-mono">
-                          {Math.max(1, Math.round((capitalBase / 100000) * stock.tradeSetup.qtyPerOneLakhCapital))} shares
+                          {Math.max(1, Math.round((capitalBase / 100000) * stock.tradeSetup.qtyPerOneLakhCapital))} {unitLabel}
                         </strong>
                       </span>
                       <button
@@ -1070,6 +1102,16 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
                 const livePrice = quotes[stock.symbol]?.price ?? stock.livePrice;
                 const livePct = quotes[stock.symbol]?.changePct ?? stock.changePct;
                 const isTracked = trackedPositions.some((p) => p.symbol === stock.symbol);
+                const isUsdCommodity = stock.symbol === 'BZ=F' || stock.symbol === 'GC=F';
+                const ccy = isUsdCommodity ? '$' : '₹';
+                const unitLabel =
+                  stock.symbol === 'BZ=F'
+                    ? 'bbl (MCX Lots)'
+                    : stock.symbol === 'GC=F'
+                      ? 'oz (MCX Lots)'
+                      : stock.assetClass === 'FNO'
+                        ? 'units (NSE F&O)'
+                        : 'shares';
 
                 return (
                   <div
@@ -1078,8 +1120,23 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <div className="text-xs text-rose-400 font-medium">
-                          {stock.sector} · Headwind Score {stock.convictionScore}/100 · R:R {stock.tradeSetup.riskRewardRatio}
+                        <div className="flex flex-wrap items-center gap-1.5 text-xs text-rose-400 font-medium">
+                          <span>
+                            {stock.sector} · Headwind Score {stock.convictionScore}/100 · R:R {stock.tradeSetup.riskRewardRatio}
+                          </span>
+                          {stock.capCategory && (
+                            <span
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${
+                                stock.capCategory === 'Large Cap'
+                                  ? 'bg-cyan-950/80 text-cyan-300 border-cyan-500/40'
+                                  : stock.capCategory === 'Mid Cap'
+                                    ? 'bg-indigo-950/80 text-indigo-300 border-indigo-500/40'
+                                    : 'bg-amber-950/80 text-amber-300 border-amber-500/40'
+                              }`}
+                            >
+                              {stock.capCategory}
+                            </span>
+                          )}
                         </div>
                         <h3 className="text-base font-bold text-white mt-0.5">
                           {stock.name} ({stock.symbol.replace('.NS', '')})
@@ -1087,13 +1144,20 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
                       </div>
                       <div className="text-right font-mono">
                         <div className="text-base font-bold text-white">
-                          ₹{livePrice.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                          {ccy}{livePrice.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                         </div>
                         <div className={`text-xs font-bold ${livePct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                           {livePct >= 0 ? '+' : ''}{livePct.toFixed(2)}%
                         </div>
                       </div>
                     </div>
+
+                    {stock.exclusiveIntel && stock.exclusiveIntel.isExclusive && (
+                      <div className="px-2.5 py-1.5 rounded-lg bg-amber-950/40 border border-amber-500/50 text-[11px] text-amber-200 flex items-center justify-between gap-2">
+                        <span className="font-bold text-amber-300">{stock.exclusiveIntel.badge}</span>
+                        <span className="truncate text-amber-100/90">{stock.exclusiveIntel.headline}</span>
+                      </div>
+                    )}
 
                     <div className="p-3 rounded-lg bg-slate-950 border border-slate-800/90 space-y-1.5 text-xs">
                       <div className="text-slate-200 font-semibold">
@@ -1113,15 +1177,15 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
                     <div className="grid grid-cols-4 gap-2 p-2.5 rounded-lg bg-slate-950/70 border border-slate-800 text-center font-mono text-xs">
                       <div>
                         <div className="text-[10px] text-slate-400">Short / Exit</div>
-                        <div className="font-bold text-white">₹{stock.tradeSetup.entryPrice.toLocaleString('en-IN')}</div>
+                        <div className="font-bold text-white">{ccy}{stock.tradeSetup.entryPrice.toLocaleString('en-IN')}</div>
                       </div>
                       <div>
                         <div className="text-[10px] text-emerald-400">Downside Target</div>
-                        <div className="font-bold text-emerald-400">₹{stock.tradeSetup.target1.toLocaleString('en-IN')}</div>
+                        <div className="font-bold text-emerald-400">{ccy}{stock.tradeSetup.target1.toLocaleString('en-IN')}</div>
                       </div>
                       <div>
                         <div className="text-[10px] text-rose-400">Stop-Loss</div>
-                        <div className="font-bold text-rose-400">₹{stock.tradeSetup.stopLoss.toLocaleString('en-IN')}</div>
+                        <div className="font-bold text-rose-400">{ccy}{stock.tradeSetup.stopLoss.toLocaleString('en-IN')}</div>
                       </div>
                       <div>
                         <div className="text-[10px] text-cyan-400">Downside Move</div>
@@ -1133,7 +1197,7 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
                       <span className="text-[11px] text-slate-400">
                         1% Risk Sizing on ₹{capitalBase.toLocaleString('en-IN')}:{' '}
                         <strong className="text-white font-mono">
-                          {Math.max(1, Math.round((capitalBase / 100000) * stock.tradeSetup.qtyPerOneLakhCapital))} shares
+                          {Math.max(1, Math.round((capitalBase / 100000) * stock.tradeSetup.qtyPerOneLakhCapital))} {unitLabel}
                         </strong>
                       </span>
                       <button

@@ -376,6 +376,36 @@ export const ARCHITECTURE_REVERT_LEDGER: RevertLedgerEntry[] = [
     revertInstruction:
       'Revert the SPLIT_DOSSIER section in src/components/InstitutionalEquityRadar.tsx to REV-023.',
   },
+  {
+    revertId: 'REV-025',
+    dateIST: '09-Nov-2026',
+    category: 'STRATEGY_VETO_ENGINE',
+    moduleName: 'Full Dynamic Universe Discovery & Live Causal Synthesis for 04. First-Principles & 05. Global Macro Impact',
+    filePath: 'src/server/marketData.ts, src/server/globalMarketImpactEngine.ts, src/server/firstPrinciplesEngine.ts, src/components/FirstPrinciplesMarketEngine.tsx, src/components/GlobalMarketActionDesk.tsx',
+    previousStateSummary:
+      'computeGlobalMarketImpact() iterated solely over the hardcoded 19-symbol STOCK_PROFILES array, injected static company boilerplate strings for Global & Geopolitical Trigger and Market Basics & Policy Impact, clamped conviction scores to 96/100 via +12/+14 static boosts, and formatted USD/MCX commodity contracts (BZ=F, GC=F) with ₹ and shares.',
+    newStateSummary:
+      'Added a parallel bearish whole-NSE Chartink scan in fetchDynamicZonesScreener() so both breakout winners and intraday breakdowns populate quotesCache; expanded computeGlobalMarketImpact() and computeFirstPrinciplesState() to evaluate the entire dynamic universe (60-80+ discovered .NS stocks + benchmark contracts) via inferDynamicSectorAndMacroProfile(); synthesized Global & Geopolitical Trigger and Market Basics & Policy Impact dynamically from live sector sensitivity, macro indicators, and session price/volume/turnover telemetry; ranked Rising and Falling pools by cross-sectional percentile (64-97) while preserving static regulatory badges (exclusiveIntel) on benchmark stocks; and formatted currency ($ vs ₹), units (bbl / oz / units / shares), and SEBI/AMFI capCategory badges across FirstPrinciplesMarketEngine.tsx and GlobalMarketActionDesk.tsx.',
+    quantValueJustification:
+      'Replaces the hardcoded 19-stock restriction and static boilerplate strings in Tabs 04 and 05 with whole-NSE dynamic discovery, live macro-to-price causal synthesis, cross-sectional percentile ranking, and accurate commodity unit formatting.',
+    revertInstruction:
+      'Revert src/server/marketData.ts, src/server/globalMarketImpactEngine.ts, src/server/firstPrinciplesEngine.ts, src/components/FirstPrinciplesMarketEngine.tsx, and src/components/GlobalMarketActionDesk.tsx to REV-024.',
+  },
+  {
+    revertId: 'REV-026',
+    dateIST: '09-Nov-2026',
+    category: 'STRATEGY_VETO_ENGINE',
+    moduleName: 'Multi-Factor PSU Bank & Sub-Sector Causal Architecture, Stock-Specific Balance-Sheet Drivers & Strict Ordinal Score/ROI Separation',
+    filePath: 'src/server/globalMarketImpactEngine.ts',
+    previousStateSummary:
+      'All banking/financial stocks shared a single generic 1-line template in buildLiveGlobalAndGeoTrigger() ("US 10Y Treasury yield and Brent Crude ease imported inflation pressure...") and generic tape telemetry in buildLiveMarketBasicsAndPolicy(), while UNIONBANK, PNB, and INDIANB tied at Conviction 97/100, R:R 1:3.45, Expected ROI +12.08%, and repeated the same generic "buying in banks" RSS headline.',
+    newStateSummary:
+      'Separated Financial sub-sectors into PSU Banking & Sovereign Credit, Sovereign Power & Infra Finance, Capital Markets/Exchanges, NBFCs/Gold Finance, Insurance, and Private Banking; added PSU_BANK_SPECIFIC_EDGE covering the 5 true institutional drivers of Indian PSU banks (24%+ SLR Sovereign G-Sec Treasury MTM gains, low-FII float insulation + DII rotation, ₹11.11L Cr Union Budget capex consortium credit, decade-low Net NPAs + NCLT written-off recoveries boosting RoA >1.1%, and granular rural/semi-urban CASA + ~1.0x P/ABV re-rating) tailored per bank (SBIN, PNB, UNIONBANK, INDIANB, BANKBARODA, CANBK, BANKINDIA, MAHABANK); deduplicated sector RSS headlines; and enforced strict ordinal rank ceilings and un-clamped ATR payoff scaling so cards never tie at 97/100 or +12.08% Expected ROI.',
+    quantValueJustification:
+      'Replaces generic macro one-liners with authentic Indian institutional banking mechanics (SLR G-Sec MTM, FII/DII ownership structure, NCLT write-backs, RAM/Capex credit, CASA/P-ABV) and eliminates artificial 97/100 score and +12.08% ROI clamping.',
+    revertInstruction:
+      'Revert src/server/globalMarketImpactEngine.ts to REV-025.',
+  },
 ];
 
 

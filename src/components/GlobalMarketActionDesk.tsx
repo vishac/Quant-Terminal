@@ -932,6 +932,8 @@ export const GlobalMarketActionDesk: React.FC<GlobalMarketActionDeskProps> = ({
                       capitalMultiplier
                   );
                   const isExpanded = expandedStockSymbol === stock.symbol;
+                  const isUsdCommodity = stock.symbol === 'BZ=F' || stock.symbol === 'GC=F';
+                  const ccy = isUsdCommodity ? '$' : '₹';
 
                   return (
                     <div
@@ -946,11 +948,24 @@ export const GlobalMarketActionDesk: React.FC<GlobalMarketActionDeskProps> = ({
                               {stock.name}
                             </span>
                             <span className="text-xs text-emerald-300 font-bold">
-                              ({stock.symbol.replace('.NS', '')} · BSE {stock.bseCode})
+                              ({stock.symbol.replace('.NS', '')} · {stock.bseCode})
                             </span>
                             <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-300">
                               [{stock.assetClass}]
                             </span>
+                            {stock.capCategory && (
+                              <span
+                                className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${
+                                  stock.capCategory === 'Large Cap'
+                                    ? 'bg-cyan-950/80 text-cyan-300 border-cyan-500/40'
+                                    : stock.capCategory === 'Mid Cap'
+                                      ? 'bg-indigo-950/80 text-indigo-300 border-indigo-500/40'
+                                      : 'bg-amber-950/80 text-amber-300 border-amber-500/40'
+                                }`}
+                              >
+                                {stock.capCategory}
+                              </span>
+                            )}
                           </div>
                           <div className="text-[11px] text-slate-400 mt-0.5 tabular-nums">
                             {stock.sector} · Action: <strong className="text-emerald-400">{stock.actionBadge}</strong> · Conviction: <strong className="text-cyan-300">{stock.convictionScore}%</strong>
@@ -959,7 +974,7 @@ export const GlobalMarketActionDesk: React.FC<GlobalMarketActionDeskProps> = ({
 
                         <div className="text-right tabular-nums">
                           <div className="text-base font-extrabold text-white">
-                            ₹{livePrice.toLocaleString('en-IN')}
+                            {ccy}{livePrice.toLocaleString('en-IN')}
                           </div>
                           <div className="text-xs font-bold text-emerald-400 flex items-center justify-end gap-1">
                             <ArrowUpRight className="w-3.5 h-3.5" />
@@ -1078,24 +1093,24 @@ export const GlobalMarketActionDesk: React.FC<GlobalMarketActionDeskProps> = ({
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs bg-emerald-950/20 border border-emerald-500/20 rounded-lg p-2.5 tabular-nums">
                         <div>
                           <span className="text-[10px] text-slate-400 block">Buy Entry Zone</span>
-                          <span className="font-bold text-white">₹{livePrice.toLocaleString('en-IN')}</span>
+                          <span className="font-bold text-white">{ccy}{livePrice.toLocaleString('en-IN')}</span>
                         </div>
                         <div>
                           <span className="text-[10px] text-slate-400 block">Target 1 / Target 2</span>
                           <span className="font-bold text-emerald-400">
-                            ₹{stock.tradeSetup.target1.toLocaleString('en-IN')} (+{stock.tradeSetup.expectedRoiTarget1Pct}%)
+                            {ccy}{stock.tradeSetup.target1.toLocaleString('en-IN')} (+{stock.tradeSetup.expectedRoiTarget1Pct}%)
                           </span>
                         </div>
                         <div>
                           <span className="text-[10px] text-slate-400 block">Strict Stop-Loss</span>
                           <span className="font-bold text-rose-400">
-                            ₹{stock.tradeSetup.stopLoss.toLocaleString('en-IN')} (-{stock.tradeSetup.stopLossRiskPct}%)
+                            {ccy}{stock.tradeSetup.stopLoss.toLocaleString('en-IN')} (-{stock.tradeSetup.stopLossRiskPct}%)
                           </span>
                         </div>
                         <div>
                           <span className="text-[10px] text-slate-400 block">Position Size &amp; ROI</span>
                           <span className="font-bold text-cyan-300">
-                            {scaledQty} Qty → +₹{expectedRupeeProfit.toLocaleString('en-IN')}
+                            {scaledQty} {stock.symbol === 'BZ=F' ? 'bbl' : stock.symbol === 'GC=F' ? 'oz' : 'Qty'} → +₹{expectedRupeeProfit.toLocaleString('en-IN')}
                           </span>
                         </div>
                       </div>
@@ -1183,6 +1198,8 @@ export const GlobalMarketActionDesk: React.FC<GlobalMarketActionDeskProps> = ({
                       capitalMultiplier
                   );
                   const isExpanded = expandedStockSymbol === stock.symbol;
+                  const isUsdCommodity = stock.symbol === 'BZ=F' || stock.symbol === 'GC=F';
+                  const ccy = isUsdCommodity ? '$' : '₹';
 
                   return (
                     <div
@@ -1197,11 +1214,24 @@ export const GlobalMarketActionDesk: React.FC<GlobalMarketActionDeskProps> = ({
                               {stock.name}
                             </span>
                             <span className="text-xs text-rose-300 font-bold">
-                              ({stock.symbol.replace('.NS', '')} · BSE {stock.bseCode})
+                              ({stock.symbol.replace('.NS', '')} · {stock.bseCode})
                             </span>
                             <span className="text-[10px] font-bold uppercase tracking-wider text-amber-300">
                               [{stock.assetClass}]
                             </span>
+                            {stock.capCategory && (
+                              <span
+                                className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${
+                                  stock.capCategory === 'Large Cap'
+                                    ? 'bg-cyan-950/80 text-cyan-300 border-cyan-500/40'
+                                    : stock.capCategory === 'Mid Cap'
+                                      ? 'bg-indigo-950/80 text-indigo-300 border-indigo-500/40'
+                                      : 'bg-amber-950/80 text-amber-300 border-amber-500/40'
+                                }`}
+                              >
+                                {stock.capCategory}
+                              </span>
+                            )}
                           </div>
                           <div className="text-[11px] text-slate-400 mt-0.5 tabular-nums">
                             {stock.sector} · Action: <strong className="text-rose-400">{stock.actionBadge}</strong> · Conviction: <strong className="text-amber-300">{stock.convictionScore}%</strong>
@@ -1210,7 +1240,7 @@ export const GlobalMarketActionDesk: React.FC<GlobalMarketActionDeskProps> = ({
 
                         <div className="text-right tabular-nums">
                           <div className="text-base font-extrabold text-white">
-                            ₹{livePrice.toLocaleString('en-IN')}
+                            {ccy}{livePrice.toLocaleString('en-IN')}
                           </div>
                           <div className="text-xs font-bold text-rose-400 flex items-center justify-end gap-1">
                             <ArrowDownRight className="w-3.5 h-3.5" />
@@ -1329,24 +1359,24 @@ export const GlobalMarketActionDesk: React.FC<GlobalMarketActionDeskProps> = ({
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs bg-rose-950/20 border border-rose-500/20 rounded-lg p-2.5 tabular-nums">
                         <div>
                           <span className="text-[10px] text-slate-400 block">Short / Exit Level</span>
-                          <span className="font-bold text-white">₹{livePrice.toLocaleString('en-IN')}</span>
+                          <span className="font-bold text-white">{ccy}{livePrice.toLocaleString('en-IN')}</span>
                         </div>
                         <div>
                           <span className="text-[10px] text-slate-400 block">Downside Target</span>
                           <span className="font-bold text-rose-400">
-                            ₹{stock.tradeSetup.target1.toLocaleString('en-IN')} (-{stock.tradeSetup.expectedRoiTarget1Pct}%)
+                            {ccy}{stock.tradeSetup.target1.toLocaleString('en-IN')} (-{stock.tradeSetup.expectedRoiTarget1Pct}%)
                           </span>
                         </div>
                         <div>
                           <span className="text-[10px] text-slate-400 block">Invalidation Stop</span>
                           <span className="font-bold text-amber-300">
-                            ₹{stock.tradeSetup.stopLoss.toLocaleString('en-IN')} (+{stock.tradeSetup.stopLossRiskPct}%)
+                            {ccy}{stock.tradeSetup.stopLoss.toLocaleString('en-IN')} (+{stock.tradeSetup.stopLossRiskPct}%)
                           </span>
                         </div>
                         <div>
                           <span className="text-[10px] text-slate-400 block">Short / Saved ROI</span>
                           <span className="font-bold text-emerald-400">
-                            {scaledQty} Qty → +₹{expectedRupeeProfit.toLocaleString('en-IN')}
+                            {scaledQty} {stock.symbol === 'BZ=F' ? 'bbl' : stock.symbol === 'GC=F' ? 'oz' : 'Qty'} → +₹{expectedRupeeProfit.toLocaleString('en-IN')}
                           </span>
                         </div>
                       </div>
