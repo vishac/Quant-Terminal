@@ -24,7 +24,6 @@ import { MultiUserDesk } from './components/MultiUserDesk';
 import { FirebaseAuthModal } from './components/FirebaseAuthModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Radio } from 'lucide-react';
-import { DoNotUseWatermarkBanner } from './components/DoNotUseWatermarkBanner';
 import { getStoredPaperTrades, persistPaperTrades } from './services/paperTradeService';
 import { formatOrderDate, formatOrderTime } from './utils/orderFormatters';
 
@@ -265,9 +264,6 @@ function AppInner() {
       data-theme={theme}
       className={`min-h-screen bg-[#060913] text-slate-100 flex antialiased selection:bg-cyan-500/30 selection:text-cyan-200 theme-${theme}`}
     >
-      {/* Persistent Dynamic Scrolling Watermark & Fixed Warning Ticker */}
-      <DoNotUseWatermarkBanner />
-
       {/* Fixed Left Sidebar: Only displayed in Admin / Operations mode */}
       {userRole === 'admin' && (
         <>
@@ -279,7 +275,7 @@ function AppInner() {
             />
           )}
           <div
-            className={`fixed left-0 top-8 h-[calc(100%-2rem)] z-50 transition-transform duration-300 ease-in-out ${
+            className={`fixed left-0 top-0 h-full z-50 transition-transform duration-300 ease-in-out ${
               isSidebarOpen ? 'translate-x-0 shadow-[0_0_50px_rgba(0,0,0,0.8)]' : '-translate-x-full'
             }`}
           >
@@ -316,7 +312,7 @@ function AppInner() {
 
         {/* System Alert Banner */}
         {systemAlertMessage && (
-          <div className="mx-4 sm:mx-6 mt-28 p-3 rounded-xl bg-amber-950/40 border border-amber-500/40 text-xs font-mono text-amber-200 flex items-center justify-between animate-in slide-in-from-top-2 duration-300">
+          <div className="mx-4 sm:mx-6 mt-20 p-3 rounded-xl bg-amber-950/40 border border-amber-500/40 text-xs font-mono text-amber-200 flex items-center justify-between animate-in slide-in-from-top-2 duration-300">
             <div className="flex items-center gap-2">
               <Radio className="w-4 h-4 text-amber-400 animate-pulse" />
               <span>{systemAlertMessage}</span>
@@ -332,7 +328,7 @@ function AppInner() {
 
         {/* Viewport Content */}
         <main
-          className={`flex-1 w-full max-w-[1720px] mx-auto px-3.5 sm:px-6 pt-26 ${
+          className={`flex-1 w-full max-w-[1720px] mx-auto px-3.5 sm:px-6 pt-20 ${
             userRole === 'viewer' ? 'pb-8' : 'pb-24 lg:pb-8'
           }`}
         >

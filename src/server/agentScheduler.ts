@@ -79,9 +79,9 @@ class AgentBackgroundScheduler {
     }
 
     // -------------------------------------------------------------------------
-    // 2. INTRADAY MIS SQUARE-OFF (15:20 IST)
+    // 2. INTRADAY MIS & EXPIRING F&O SQUARE-OFF (>= 15:20 IST with Catch-Up)
     // -------------------------------------------------------------------------
-    const isSquareOffWindow = totalMinutes >= (15 * 60 + 20) && totalMinutes < (15 * 60 + 30);
+    const isSquareOffWindow = totalMinutes >= (15 * 60 + 20);
     if ((isSquareOffWindow && this._lastSquareOffDate !== today && session.isTradingDay) || forceSquareOff) {
       this._lastSquareOffDate = today;
       await this._executeIntradaySquareOff(today, ist.timeStr);
@@ -273,14 +273,23 @@ class AgentBackgroundScheduler {
   }
 
   // ---------------------------------------------------------------------------
-  // Routine: Intraday MIS Square-Off (15:20 IST)
+  // Routine: Intraday MIS & Expiring F&O Square-Off (>= 15:20 IST with Catch-Up)
   // ---------------------------------------------------------------------------
   private async _executeIntradaySquareOff(dateStr: string, timeStr: string): Promise<void> {
-    console.log(`[AgentScheduler] Executing Intraday Square-Off @ ${timeStr} IST...`);
+    console.log(`[AgentScheduler] Executing 15:20 IST Intraday & Expiring F&O Square-Off @ ${timeStr} IST...`);
     const openTrades = LedgerDatabase.getPaperTrades(50, 'OPEN');
 
     let squaredOffCount = 0;
     for (const trade of openTrades) {
+      // Allow non-expiring F&O contracts to carry forward overnight; square off all NSE_CASH/BSE_CASH intraday
+      const isIntradayCash = trade.segment === 'NSE_CASH' || trade.segment === 'BSE_CASH';
+      if (!isIntradayCash && trade.segment === 'NSE_FNO') {
+        const openedDate = trade.openedAt ? trade.openedAt.slice(0, 10) : dateStr;
+        if (openedDate === dateStr && !trade.symbol.toUpperCase().includes('EXP')) {
+          continue; // Keep non-expiring positional F&O open for carry-forward
+        }
+      }
+
       const q = quotesCache[`${trade.symbol}.NS`] || quotesCache[trade.symbol];
       const exitPrice = q?.price || trade.entryPrice;
       const pnl = trade.side === 'BUY'
@@ -292,14 +301,14 @@ class AgentBackgroundScheduler {
         exitPrice,
         pnlInr: Math.round(pnl),
         closedAt: new Date().toISOString(),
-        closeReason: 'Statutory 15:20 IST Intraday MIS Auto-Square-Off',
+        closeReason: `Statutory 15:20 IST Intraday / Expiry Auto-Square-Off (${dateStr})`,
       });
       squaredOffCount++;
     }
 
     LedgerDatabase.recordSchedulerLog(
       'INTRADAY_SQUAREOFF',
-      `Auto-squared off ${squaredOffCount} intraday positions at 15:20 IST pre-close checkpoint.`,
+      `Auto-squared off ${squaredOffCount} intraday / expiring position(s) at 15:20 IST pre-close checkpoint (${timeStr} IST).`,
       { squaredOffCount }
     );
   }

@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { quotesCache, NSE_EQUITY_QUANT_PROFILES } from './marketData.ts';
+import { quotesCache } from './marketData.ts';
 import { computeGlobalMarketImpact, type GlobalMarketImpactResponse } from './globalMarketImpactEngine.ts';
 
 export interface FirstPrinciplePillar {
@@ -1133,11 +1133,15 @@ export async function computeFirstPrinciplesMarketIntelligence(forceRecalibrate 
       avoidThesis: 'Intraday distribution and relative weakness vs NIFTY.',
     };
     const price = q.price || 1000;
-    const baseTicker = sym.replace('.NS', '');
-    const quantProfile = NSE_EQUITY_QUANT_PROFILES[baseTicker];
-    const atrPct = quantProfile?.atrPct ?? 1.85;
+    const niftyChg = quotesCache['^NSEI']?.changePct ?? 0;
+    const rawQuote = quotesCache[sym];
+    const intradaySpanPct =
+      rawQuote?.high && rawQuote?.low && rawQuote.high > rawQuote.low && price > 0
+        ? ((rawQuote.high - rawQuote.low) / price) * 100
+        : Math.max(1.4, Math.abs(q.changePct) * 1.15);
+    const atrPct = Math.max(1.2, Math.min(4.2, Number(intradaySpanPct.toFixed(2))));
     const stopDist = price * (Math.min(3.2, Math.max(1.1, atrPct * 0.9)) / 100);
-    const rsRank = quantProfile?.rsRank ?? 80;
+    const rsRank = Math.min(99, Math.max(45, Math.round(72 + q.changePct * 5.8 + (q.changePct - niftyChg) * 5.2)));
     const dynamicMultiplier = Math.max(1.65, Math.min(3.30, Number((1.85 + ((rsRank - 75) / 25) * 0.45).toFixed(2))));
     const targetDist = stopDist * dynamicMultiplier;
     const expectedRoiPct = Number(((targetDist / price) * 100).toFixed(2));

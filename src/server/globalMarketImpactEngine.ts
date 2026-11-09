@@ -9,7 +9,7 @@
  *     Expected ROI %, Position Sizing, and 5-Agent Consensus).
  */
 
-import { quotesCache, syncMarketQuotes, NSE_EQUITY_QUANT_PROFILES } from './marketData.ts';
+import { quotesCache, syncMarketQuotes } from './marketData.ts';
 import type { MarketQuote } from '../types/quant.ts';
 
 export interface GlobalCueItem {
@@ -1349,15 +1349,15 @@ export async function computeGlobalMarketImpact(): Promise<GlobalMarketImpactRes
     const convictionScore = Math.min(98, Math.max(64, Math.round(rawConviction)));
 
     // Calculate realistic defined-risk Trade Levels (Entry, Target 1, Target 2, Stop-Loss, Qty for ₹1L)
-    const baseTicker = profile.symbol.replace('.NS', '');
-    const quantProfile = NSE_EQUITY_QUANT_PROFILES[baseTicker];
-
-    // 1. Calculate stock-specific ATR & stop-loss distance
-    const stockAtr = quantProfile?.atrPct ?? (dayHigh > dayLow ? ((dayHigh - dayLow) / livePrice) * 100 : 1.75);
+    // 1. Calculate stock-specific ATR & stop-loss distance strictly from live intraday range
+    const stockAtr =
+      dayHigh > dayLow && livePrice > 0
+        ? Math.max(1.2, Math.min(4.5, ((dayHigh - dayLow) / livePrice) * 100))
+        : Math.max(1.45, Math.min(3.8, Math.abs(changePct) * 1.15 + 1.2));
     const stopDistancePct = Math.min(3.5, Math.max(1.15, Math.round(stockAtr * 0.95 * 100) / 100));
 
-    // 2. Dynamic Asymmetric Payoff Multiplier (Scales by RS Rank, Conviction & Relative Alpha)
-    const rsRank = quantProfile?.rsRank ?? 80;
+    // 2. Dynamic Asymmetric Payoff Multiplier (Scales by Live RS Rank, Conviction & Relative Alpha)
+    const rsRank = Math.min(99, Math.max(45, Math.round(72 + changePct * 5.8 + relativeAlpha * 5.2)));
     const rsBonus = ((rsRank - 75) / 25) * 0.45;
     const convictionBonus = ((convictionScore - 70) / 26) * 0.50;
     const alphaBonus = Math.max(-0.35, Math.min(0.55, relativeAlpha * 0.25));

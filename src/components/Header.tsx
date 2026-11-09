@@ -78,7 +78,7 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <>
-      <header className={`fixed top-8 right-0 h-16 bg-[#090e19]/90 backdrop-blur-xl border-b border-cyan-500/15 shadow-[0_1px_12px_rgba(0,240,255,0.06)] z-40 flex items-center justify-between px-3 sm:px-6 font-mono transition-all duration-300 ease-in-out ${
+      <header className={`fixed top-0 right-0 h-16 bg-[#090e19]/90 backdrop-blur-xl border-b border-cyan-500/15 shadow-[0_1px_12px_rgba(0,240,255,0.06)] z-40 flex items-center justify-between px-3 sm:px-6 font-mono transition-all duration-300 ease-in-out ${
         userRole === 'admin' && isSidebarOpen ? 'left-0 lg:left-64' : 'left-0'
       }`}>
         {/* Left items: Breadcrumb Button, Info Icon & Live Feed Telemetry */}
@@ -124,13 +124,13 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           )}
 
-          {/* Live / Delayed Feed Pill with Info Icon */}
+          {/* Live / Delayed Feed Pill with Subtle Paper-Only Indicator */}
           <div
             onClick={() => setIsInfoModalOpen(true)}
             title={
               isUpstoxLive
-                ? 'Upstox Analytics API Connected: Streaming real-time NSE/BSE quotes & Option Chains (no static IP required). Paper-trading mode only.'
-                : 'Delayed Feed Notice: Quotes are currently sourced from Yahoo Finance (~15m delayed). Pair your Upstox Analytics Token in Sync Hub -> Broker Gateway for live real-time NSE/BSE ticks (no static IP required).'
+                ? 'Upstox Analytics API Connected: Streaming real-time NSE/BSE quotes & Option Chains (no static IP required). Paper-trading simulation mode only.'
+                : 'Delayed Feed Notice: Quotes are currently sourced from Yahoo Finance (~15m delayed). Paper-trading simulation mode only. Pair your Upstox Analytics Token in Sync Hub -> Broker Gateway for live real-time NSE/BSE ticks.'
             }
             className={`flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-lg text-xs cursor-pointer transition border ${
               isUpstoxLive
@@ -139,17 +139,18 @@ export const Header: React.FC<HeaderProps> = ({
             }`}
           >
             <span className="text-slate-400 text-[10px] hidden sm:inline">FEED:</span>
-            <span className={`font-bold text-[10px] ${isUpstoxLive ? 'text-emerald-300' : 'text-amber-300'}`}>
+            <span className={`font-bold text-[10px] whitespace-nowrap ${isUpstoxLive ? 'text-emerald-300' : 'text-amber-300'}`}>
               {isUpstoxLive ? 'UPSTOX · LIVE' : 'NSE/BSE · DELAYED'}
             </span>
-            <span className={`inline-block w-1.5 h-1.5 rounded-full ${isUpstoxLive ? 'bg-emerald-400 animate-ping' : 'bg-amber-400'}`}></span>
-            <Info className={`w-3 h-3 ${isUpstoxLive ? 'text-emerald-400' : 'text-amber-400'}`} />
+            <span className="text-slate-600 text-[10px]" aria-hidden="true">·</span>
+            <span className="text-cyan-300 font-bold text-[10px] whitespace-nowrap">PAPER-ONLY</span>
+            <Info className={`w-3 h-3 shrink-0 ${isUpstoxLive ? 'text-emerald-400' : 'text-amber-400'}`} />
           </div>
 
           {/* Latency Telemetry */}
           <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-slate-900/80 border border-slate-800 rounded-lg text-xs">
             <span className="text-slate-400 text-[10px]">LATENCY:</span>
-            <span className="text-emerald-400 font-bold text-[10px]">{latencyMs} ms</span>
+            <span className="text-emerald-400 font-bold text-[10px] tabular-nums">{latencyMs} ms</span>
           </div>
 
           {/* Market Hours Gated Sync & Packet Saver Telemetry */}

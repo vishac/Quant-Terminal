@@ -5,6 +5,7 @@ import {
   formatOrderTime,
   resolveDerivativeExpiryInfo,
   computeCanonicalNiftyOptionLeg,
+  checkShouldAutoSquareOffOrder,
 } from '../utils/orderFormatters';
 import {
   selectBestLearnedEquityCandidate,
@@ -73,11 +74,36 @@ export function computeLeakProofPositionSize(
   }
 
   // Hard cap: Single trade initial stop (1R) cannot exceed ₹400 (0.4% of capital) or 25% of remaining budget
+  // AUDIT FIX (REV-020): Never force Math.max(1, ...) if 1 unit exceeds maxRiskCeiling or margin!
   const maxRiskCeiling = Math.min(400, Math.floor(remainingBudget * 0.25));
-  const calculatedQty = Math.max(1, Math.floor(maxRiskCeiling / priceDistance));
+  const calculatedQty = Math.floor(maxRiskCeiling / priceDistance);
+
+  if (calculatedQty < 1) {
+    return {
+      allowed: false,
+      qty: 0,
+      maxRiskINR: 0,
+      entryPrice: safeEntry,
+      stopLossPrice: safeStop,
+      remainingDailyBudgetINR: remainingBudget,
+      reason: `Pre-Trade Block: 1 unit stop distance (₹${priceDistance.toFixed(2)}) exceeds the per-trade 1R ceiling (₹${maxRiskCeiling}). Trade rejected.`
+    };
+  }
 
   // Capital margin check (assuming 5x MIS leverage for equities, or full cash)
-  const maxAffordableQty = Math.max(1, Math.floor((capitalINR * 0.8 * 5) / safeEntry));
+  const maxAffordableQty = Math.floor((capitalINR * 0.8 * 5) / safeEntry);
+  if (maxAffordableQty < 1) {
+    return {
+      allowed: false,
+      qty: 0,
+      maxRiskINR: 0,
+      entryPrice: safeEntry,
+      stopLossPrice: safeStop,
+      remainingDailyBudgetINR: remainingBudget,
+      reason: `Pre-Trade Block: 1 unit price (₹${safeEntry.toFixed(2)}) exceeds available margin budget. Trade rejected.`
+    };
+  }
+
   const finalQty = Math.min(calculatedQty, maxAffordableQty);
   const cappedRiskINR = Math.min(400, Math.round(finalQty * priceDistance));
 
@@ -1455,10 +1481,14 @@ export function updateOrdersLivePnl(
       const validSpot = niftyQuote?.price && niftyQuote.price > 1000 ? niftyQuote.price : 23793.45;
       const validVix = vixQuote?.price && vixQuote.price > 5 ? vixQuote.price : 14.46;
 
-      // Ensure authoritative NSE Tuesday/Holiday-Adjusted expiry (09-Nov-2026) replaces any stale Thursday 05-Nov-2026
-      const { expiryDateStr: authExp } = resolveDerivativeExpiryInfo('NSE_FNO', order.symbol, order.orderDate);
-      if (authExp && order.expiryDate !== authExp) {
-        order = { ...order, expiryDate: authExp };
+      // Preserve existing valid expiryDate (e.g. 09-Nov-2026) so expiring contracts are squared off on their expiry day;
+      // only backfill if missing or if it was a legacy Thursday date.
+      const isStaleThu = order.expiryDate && /^(05|12|19|26)-Nov-2026$/i.test(order.expiryDate.trim());
+      if (!order.expiryDate || isStaleThu) {
+        const { expiryDateStr: authExp } = resolveDerivativeExpiryInfo('NSE_FNO', order.symbol, order.orderDate);
+        if (authExp) {
+          order = { ...order, expiryDate: authExp };
+        }
       }
 
       const spreadMatch = (leg?.instrument || order.symbol).match(/([A-Z]+)\s+(\d{4,6})\/(\d{4,6})\s+(PE|CE)/i);
@@ -1507,7 +1537,31 @@ export function updateOrdersLivePnl(
     const livePnl = Number(
       ((side === 'BUY' ? currentPrice - entryPrice : entryPrice - currentPrice) * qty).toFixed(2)
     );
-    return evaluateStepRatchetTSL(order, livePnl, currentPrice);
+    const afterTsl = evaluateStepRatchetTSL(order, livePnl, currentPrice);
+
+    // Check 15:20 IST Intraday MIS & Expiring F&O Auto Square-Off (with catch-up if opened after 15:20 IST)
+    if (afterTsl.status === 'OPEN') {
+      const autoSq = checkShouldAutoSquareOffOrder({
+        segment: afterTsl.segment,
+        status: afterTsl.status,
+        orderDate: afterTsl.orderDate,
+        expiryDate: afterTsl.expiryDate,
+      });
+      if (autoSq.shouldSquareOff) {
+        const friction = afterTsl.statutoryFrictionSnapshotINR || 40;
+        const netRealizedPnl = Number((livePnl - friction).toFixed(2));
+        return {
+          ...afterTsl,
+          status: 'SQUARED_OFF' as const,
+          exitPrice: currentPrice,
+          pnlINR: netRealizedPnl,
+          exitReason: autoSq.exitReason || 'Statutory 15:20 IST Auto-Square-Off',
+          legs: afterTsl.legs.map((l, i) => (i === 0 ? { ...l, exitPrice: currentPrice } : l)),
+        };
+      }
+    }
+
+    return afterTsl;
   });
 
   // If Adaptive Auto-Prune is active, automatically cut & quarantine losing scripts (such as ULTRACEMCO in loss)

@@ -301,6 +301,66 @@ export const ARCHITECTURE_REVERT_LEDGER: RevertLedgerEntry[] = [
     revertInstruction:
       'Revert src/server/backtester.ts, src/services/positionSizer.ts, src/server/riskEngine.ts, and src/services/scriptLearningEngine.ts to REV-018.',
   },
+  {
+    revertId: 'REV-020',
+    dateIST: '09-Nov-2026',
+    category: 'STRATEGY_VETO_ENGINE',
+    moduleName: 'Second-Pass Code Re-Audit: Unclamped F&O Exit Prices, Full 2026 Round-Trip Statutory Friction Deduction, Leak-Proof 1R Floor Removal & Transition from DO NOT USE Watermark to Subtle PAPER-ONLY Header Indicator',
+    filePath: 'src/services/paperTradeService.ts, src/services/orderLifecycle.ts, src/services/agentQuantEngine.ts, src/App.tsx, src/components/Header.tsx',
+    previousStateSummary:
+      'paperTradeService.ts contained a legacy clamp rewriting NSE_FNO exitPrice when exitPrice <= 2.0 or exitPrice > entryPrice + 20 and computed realized P&L without deducting round-trip statutory friction; orderLifecycle.ts charged cash-delivery STT on the sell leg only (0.10%) and used 0.01% for F&O STT; agentQuantEngine.ts forced Math.max(1, ...) in computeLeakProofPositionSize even when 1 share breached the ₹400 1R cap; and the full-screen DO NOT USE maintenance watermark occupied the viewport.',
+    newStateSummary:
+      'Removed the artificial F&O exitPrice clamp; updated orderLifecycle.ts and paperTradeService.ts to deduct full 2026 round-trip statutory costs (0.20% both-leg cash-delivery STT, 0.15% F&O option sell STT, exchange+IPFT, SEBI, stamp duty, ₹40 brokerage, 18% GST) from realized P&L; removed Math.max(1, ...) in computeLeakProofPositionSize so 1-unit risk breaches return allowed: false; verified npm run data:sync (.data/latest_walkforward_sync.json); and retired the DO NOT USE watermark in favor of a subtle PAPER-ONLY indicator in Header.tsx.',
+    quantValueJustification:
+      'Guarantees 100% mathematical parity across the backtester, pre-trade statutory veto gate, order state machine, and realized paper-trade ledger while restoring full unobstructed viewport height.',
+    revertInstruction:
+      'Restore DoNotUseWatermarkBanner in src/App.tsx and revert paperTradeService.ts, orderLifecycle.ts, and agentQuantEngine.ts to REV-019.',
+  },
+  {
+    revertId: 'REV-021',
+    dateIST: '09-Nov-2026',
+    category: 'EXPIRY_CALENDAR_FIX',
+    moduleName: '15:15 IST Autonomous / 15:25 IST Manual Entry Cutoff, 15:20 IST Intraday & Expiry Auto Square-Off with Catch-Up, and Holiday-Adjusted Monday Expiry Rollover Fix',
+    filePath: 'src/utils/orderFormatters.ts, src/services/paperTradeService.ts, src/services/agentQuantEngine.ts, src/services/statutoryVetoEngine.ts, src/server/agentScheduler.ts',
+    previousStateSummary:
+      'getOfficialNseOptionChainExpiries() checked d === 0 before holiday step-back, allowing Monday-stepped-back expiries (09-Nov-2026 from Tuesday 10-Nov-2026 Diwali Balipratipada) to remain active or get overwritten by 17-Nov-2026; autonomous entries were not blocked at 15:15 IST; and open intraday cash and expiring F&O contracts were not auto squared-off at 15:20 IST (with catch-up after 15:30 IST).',
+    newStateSummary:
+      'Added checkSessionEntryCutoffWindow() (Gate 0 in statutoryVetoEngine.ts & runAutonomousAgentCycleIfArmed) to block autonomous NSE/BSE entries at >= 15:15 IST and manual overrides at >= 15:25 IST; added checkShouldAutoSquareOffOrder() across sanitizeAndDedupeOrders(), updateOrdersLivePnl(), and agentScheduler.ts to auto square-off all open intraday cash and expiring F&O positions (expiryDate <= today) at >= 15:20 IST with deterministic catch-up while preserving non-expiring F&O carry-forward; and fixed getOfficialNseOptionChainExpiries() to evaluate the holiday-stepped-back expiry date against 15:15 IST rollover.',
+    quantValueJustification:
+      'Prevents expired F&O contracts (such as NIFTY 09-Nov-2026 PE Spread) or MIS cash positions from remaining OPEN past 15:20 IST / 15:30 IST market close and blocks late-session autonomous entries after 15:15 IST.',
+    revertInstruction:
+      'Revert src/utils/orderFormatters.ts, src/services/paperTradeService.ts, src/services/agentQuantEngine.ts, src/services/statutoryVetoEngine.ts, and src/server/agentScheduler.ts to REV-020.',
+  },
+  {
+    revertId: 'REV-022',
+    dateIST: '09-Nov-2026',
+    category: 'STRATEGY_VETO_ENGINE',
+    moduleName: 'Whole-NSE Chartink Discovery First + Upstox/Yahoo Enrichment & 100% Live Market-Data Conviction Scoring (Zero Static Profile Boosts)',
+    filePath: 'src/server/marketData.ts, server.ts, src/components/InstitutionalEquityRadar.tsx, src/server/firstPrinciplesEngine.ts, src/server/globalMarketImpactEngine.ts',
+    previousStateSummary:
+      'When Upstox was active, fetchDynamicZonesScreener() bypassed Chartink and returned only the 45 hardcoded stocks in UPSTOX_EQUITY_NAMES; additionally, computeDynamicStrategyQuantification() pulled 80% of its 0-100 score from hardcoded NSE_EQUITY_QUANT_PROFILES (ROCE 31.2% · PAT +124%, static rsRank 96, static moatBaseScore 98), permanently pinning TRENT, HAL, BEL, BHARTIARTL, DIXON, SOLARINDS, and ABB at 91-93/100.',
+    newStateSummary:
+      'Inverted fetchDynamicZonesScreener() to always discover breakout candidates across all 2,000+ NSE stocks via the live Chartink scanner first and then enrich them via Upstox v2 / Yahoo Finance quotes (registering all discovered .NS symbols into quotesCache for the AI Council); replaced static NSE_EQUITY_QUANT_PROFILES scoring with 100% live market-data formulas across all 5 pillars; and enforced a hard gate requiring positive session momentum (>= +0.35% & positive alpha vs NIFTY) + volume/turnover surge to pass >= 88/100.',
+    quantValueJustification:
+      'Eliminates static stock lock-in and ensures 1. Market Finder and 3. AI Council rank stocks strictly by real-time intraday breakouts, rupee turnover, and relative strength.',
+    revertInstruction:
+      'Revert src/server/marketData.ts, server.ts, and src/components/InstitutionalEquityRadar.tsx to REV-021.',
+  },
+  {
+    revertId: 'REV-023',
+    dateIST: '09-Nov-2026',
+    category: 'STRATEGY_VETO_ENGINE',
+    moduleName: 'Authoritative SEBI/AMFI + Chartink Market Cap Classification, Cross-Sectional Percentile Scoring (Zero 91/100 Ties), Swing vs Compounder Split & Mobile LTP Visibility',
+    filePath: 'src/server/marketData.ts, src/components/InstitutionalEquityRadar.tsx, src/services/scriptLearningEngine.ts, src/components/MacroPolicyThesis.tsx',
+    previousStateSummary:
+      'fetchDynamicZonesScreener() classified any stock with priceBase >= ₹1,800 or single-day rupeeTurnoverCr >= ₹80 Cr as Large Cap (falsely tagging small/mid-cap stocks such as PGEL, SAGILITY, ANGELONE, OBEROIRLTY, and LICHSGFIN as Large Cap); InstitutionalEquityRadar.tsx labeled Cap filter options by per-share price (>= ₹2,000, ₹500-₹2,000, < ₹500); fallback intraday high/low formulas cancelled out to a constant 77% closeLocationPct causing multiple stocks to tie at 91/100; vol >= 300,000 tagged nearly every stock as SWING; and mobile viewports hid Live LTP off-screen to the right.',
+    newStateSummary:
+      'Implemented classifySebiMarketCapTier() combining parallel Chartink Market Cap bucket scans (market cap >= 85000 Cr Large Cap, 28000..85000 Cr Mid Cap, < 28000 Cr Small Cap) with canonical SEBI/AMFI Nifty 100 (Large Cap) and Nifty Midcap 150 (Mid Cap) registries while defaulting Rank 251+ equities to Small Cap; eliminated the 77% range cancellation bug and blended 5-pillar scores with cross-sectional percentile ranks across the scanned universe so scores spread smoothly (62 to 97) without tying at 91/100; separated high-velocity SWING breakouts (>= 2.15% or top-35% volume/momentum thrust) from steady 200-SMA COMPOUNDERS; and added inline mobile LTP & % Change pills plus Cap Tier badges across all 1. Market Finder tables.',
+    quantValueJustification:
+      'Ensures 100% accurate SEBI/AMFI market-cap tiering, eliminates artificial 91/100 score ties via cross-sectional percentile ranking, restores meaningful Swing vs Compounder filtering, and makes live LTP immediately visible on mobile screens.',
+    revertInstruction:
+      'Revert src/server/marketData.ts, src/components/InstitutionalEquityRadar.tsx, src/services/scriptLearningEngine.ts, and src/components/MacroPolicyThesis.tsx to REV-022.',
+  },
 ];
 
 

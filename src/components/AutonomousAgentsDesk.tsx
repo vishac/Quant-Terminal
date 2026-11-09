@@ -223,7 +223,11 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({
       }
     }
     if (orders.some(o => o.status === 'OPEN')) {
-      setOrders(prev => updateOrdersLivePnl(prev, quotes));
+      setOrders(prev => {
+        const updated = updateOrdersLivePnl(prev, quotes);
+        persistPaperTrades(updated);
+        return updated;
+      });
     }
   }, [quotes, allBotsArmed]);
 

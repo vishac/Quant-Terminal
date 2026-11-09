@@ -212,10 +212,11 @@ app.get('/api/market-data/:symbol', async (req, res) => {
   res.status(404).json({ success: false, error: 'Quote unavailable from the data source.' });
 });
 
-// Primary Upstox Live NSE Screener with Automatic Chartink Backup Failover
-app.get('/api/screener/chartink', async (_req, res) => {
+// Whole-NSE Chartink Discovery + Upstox/Yahoo Live Quote Enrichment
+app.get('/api/screener/chartink', async (req, res) => {
   try {
-    const picks = await fetchDynamicZonesScreener();
+    const force = req.query.force === 'true';
+    const picks = await fetchDynamicZonesScreener(force);
     const activeSource = getActiveScreenerSource();
     res.json({
       success: true,

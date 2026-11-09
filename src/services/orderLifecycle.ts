@@ -116,37 +116,62 @@ export interface SquareOffResult {
 }
 
 // ---------------------------------------------------------------------------
-// Statutory cost calculator (2026 SEBI rates)
+// Statutory cost calculator (2026 SEBI rates — Full Round-Trip Friction)
 // ---------------------------------------------------------------------------
 
-/** Approximate statutory costs per round-trip. Conservative estimate. */
+/**
+ * Computes conservative 2026 SEBI/NSE/BSE/MCX round-trip statutory costs:
+ * - Cash Delivery (NSE_CASH / BSE_CASH): 0.10% STT on BOTH buy and sell legs (0.20% round-trip),
+ *   0.015% buy stamp duty, exchange turnover + IPFT on both legs, SEBI ₹10/Cr on both legs,
+ *   flat ₹40 round-trip brokerage (₹20 × 2), and 18% GST on (brokerage + exchange + SEBI).
+ * - NSE F&O (NSE_FNO): 0.15% sell-side STT on Options (2026 Finance Act baseline),
+ *   0.003% buy stamp duty, 0.03553% exchange + IPFT per leg, SEBI fee, ₹40 brokerage, 18% GST.
+ * - MCX Commodity (MCX_FUTURES / MCX_OPTIONS): 0.01% / 0.05% sell-side CTT,
+ *   0.002% buy stamp duty, exchange fee, SEBI fee, ₹40 brokerage, 18% GST.
+ */
 export function estimateStatutoryCosts(
   notionalInr: number,
   segment: LiveOrder['segment'],
-  isSell: boolean = true
+  isRoundTrip: boolean = true
 ): number {
-  // STT / CTT rates (approx)
-  const sttRate = segment.startsWith('NSE_FNO') || segment === 'MCX_FUTURES'
-    ? 0.0001   // F&O options sell-side STT
-    : 0.001;   // Equity delivery sell-side STT
-  const stt = isSell ? notionalInr * sttRate : 0;
+  const safeNotional = Math.max(0, notionalInr);
+  if (safeNotional <= 0) return 0;
 
-  // Exchange + IPFT fee (~0.0325% both legs)
-  const exchange = notionalInr * 0.000325;
+  const legs = isRoundTrip ? 2 : 1;
+  const totalTurnover = safeNotional * legs;
 
-  // SEBI turnover fee (₹10 per crore ~ 0.000001%)
-  const sebi = notionalInr * 0.000001;
+  let sttOrCtt = 0;
+  let exchangeRatePerLeg = 0.0000325;
+  let stampBuyRate = 0.00015;
 
-  // Stamp duty on buy (0.015% equity, 0.002% F&O)
-  const stampBuy = segment === 'NSE_CASH' || segment === 'BSE_CASH'
-    ? notionalInr * 0.00015
-    : notionalInr * 0.00002;
+  if (segment === 'NSE_CASH' || segment === 'BSE_CASH') {
+    // Cash delivery STT: 0.10% on buy + 0.10% on sell = 0.20% round-trip
+    sttOrCtt = safeNotional * (isRoundTrip ? 0.002 : 0.001);
+    exchangeRatePerLeg = segment === 'BSE_CASH' ? 0.0000375 : 0.0000325;
+    stampBuyRate = 0.00015; // 0.015% on buy leg
+  } else if (segment === 'NSE_FNO') {
+    // 2026 Finance Act Option Sell STT (0.15% on sell leg)
+    sttOrCtt = safeNotional * 0.0015;
+    exchangeRatePerLeg = 0.0003553;
+    stampBuyRate = 0.00003; // 0.003% on buy leg
+  } else if (segment === 'MCX_OPTIONS') {
+    sttOrCtt = safeNotional * 0.0005;
+    exchangeRatePerLeg = 0.0004;
+    stampBuyRate = 0.00003;
+  } else {
+    // MCX_FUTURES
+    sttOrCtt = safeNotional * 0.0001;
+    exchangeRatePerLeg = 0.000026;
+    stampBuyRate = 0.00002;
+  }
 
-  // GST on exchange + SEBI + brokerage (18%)
-  const brokerage = 40; // Flat ₹40 per order (conservative)
+  const exchange = totalTurnover * exchangeRatePerLeg;
+  const sebi = totalTurnover * 0.000001; // ₹10 per crore per leg
+  const stampBuy = safeNotional * stampBuyRate;
+  const brokerage = 20 * legs; // ₹20 per executed leg (₹40 round-trip)
   const gst = (exchange + sebi + brokerage) * 0.18;
 
-  return Math.round(stt + exchange + sebi + stampBuy + gst + brokerage);
+  return Math.round(sttOrCtt + exchange + sebi + stampBuy + brokerage + gst);
 }
 
 // ---------------------------------------------------------------------------

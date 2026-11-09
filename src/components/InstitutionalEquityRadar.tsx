@@ -108,16 +108,16 @@ export const InstitutionalEquityRadar: React.FC = () => {
     else setIsLoadingScreener(true);
     setScreenerError(null);
     try {
-      const res = await fetch('/api/screener/chartink');
+      const res = await fetch(isManual ? '/api/screener/chartink?force=true' : '/api/screener/chartink');
       const data = await res.json();
       if (data.success && Array.isArray(data.data) && data.data.length > 0) {
         setLivePicks(data.data);
         const activeSrc = data.source === 'UPSTOX_PRIMARY_LIVE' ? 'UPSTOX_PRIMARY_LIVE' : 'CHARTINK_BACKUP_AUTO_FAILOVER';
         setScreenerSource(activeSrc);
         const now = new Date();
-        setLastRefreshedAt(`${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })} IST (${activeSrc === 'UPSTOX_PRIMARY_LIVE' ? 'Upstox Primary Live' : 'Chartink Auto-Backup'})`);
+        setLastRefreshedAt(`${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })} IST (${activeSrc === 'UPSTOX_PRIMARY_LIVE' ? 'Chartink Discovery + Upstox Live' : 'Chartink Whole-NSE Live'})`);
         if (isManual) {
-          setToastMessage(`⚡ ${activeSrc === 'UPSTOX_PRIMARY_LIVE' ? 'Upstox Live Primary' : 'Chartink Backup Failover'}: Synchronized ${data.data.length} breakout candidates.`);
+          setToastMessage(`⚡ Live Whole-NSE Scan: Synchronized ${data.data.length} dynamic breakout candidates scored 100% from live market data.`);
           setTimeout(() => setToastMessage(null), 4000);
         }
       } else {
@@ -142,10 +142,10 @@ export const InstitutionalEquityRadar: React.FC = () => {
 
   const isUpstoxLive = screenerSource === 'UPSTOX_PRIMARY_LIVE' || provider === 'UPSTOX_ANALYTICS_REALTIME';
   const activeGatewayLabel = isUpstoxLive
-    ? 'Upstox Analytics v2 Live NSE Quotes (Primary)'
-    : 'Chartink NSE Technical Screener (Auto-Failover Backup)';
+    ? 'Chartink Whole-NSE Discovery + Upstox Analytics v2 Live Enrichment'
+    : 'Chartink Whole-NSE Technical Screener + Yahoo OHLC Enrichment';
   const activeApiEndpoint = isUpstoxLive
-    ? 'https://api.upstox.com/v2/market-quote/quotes'
+    ? 'https://chartink.com/screener/process + https://api.upstox.com/v2/market-quote/quotes'
     : 'https://chartink.com/screener/process';
 
   // Notifications
@@ -244,8 +244,8 @@ export const InstitutionalEquityRadar: React.FC = () => {
 
     return list.sort((a, b) => {
       let comparison = 0;
-      const aScore = a.strategyQuantification?.compositeScore ?? 90;
-      const bScore = b.strategyQuantification?.compositeScore ?? 90;
+      const aScore = a.strategyQuantification?.compositeScore ?? 75;
+      const bScore = b.strategyQuantification?.compositeScore ?? 75;
       const aLtp = quotes[a.symbol]?.price ?? a.ltp ?? 0;
       const bLtp = quotes[b.symbol]?.price ?? b.ltp ?? 0;
       const aChg = quotes[a.symbol]?.changePct ?? a.changePct ?? 0;
@@ -256,6 +256,15 @@ export const InstitutionalEquityRadar: React.FC = () => {
       switch (sortField) {
         case 'CONVICTION':
           comparison = bScore - aScore;
+          if (comparison === 0) {
+            comparison = (b.exactDecimalScore ?? bScore) - (a.exactDecimalScore ?? aScore);
+          }
+          if (Math.abs(comparison) < 0.01) {
+            comparison = bChg - aChg;
+          }
+          if (Math.abs(comparison) < 0.01) {
+            comparison = bVol - aVol;
+          }
           break;
         case 'LTP_HIGH':
           comparison = bLtp - aLtp;
@@ -273,7 +282,7 @@ export const InstitutionalEquityRadar: React.FC = () => {
           comparison = b.tacticalLevels.target1.upsidePct - a.tacticalLevels.target1.upsidePct;
           break;
         default:
-          comparison = bScore - aScore;
+          comparison = bScore - aScore || bChg - aChg;
       }
       return sortAscending ? -comparison : comparison;
     });
@@ -716,9 +725,9 @@ export const InstitutionalEquityRadar: React.FC = () => {
               className="p-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-cyan-300 outline-none cursor-pointer"
             >
               <option value="ALL">All Market Caps ({currentUniverse.length})</option>
-              <option value="LARGE_CAP">Large Cap (&ge; ₹2,000) ({largeCapCount})</option>
-              <option value="MID_CAP">Mid Cap (₹500 - ₹2,000) ({midCapCount})</option>
-              <option value="SMALL_CAP">Small Cap (&lt; ₹500) ({smallCapCount})</option>
+              <option value="LARGE_CAP">Large Cap (Nifty 100 · &ge; ₹85K Cr) ({largeCapCount})</option>
+              <option value="MID_CAP">Mid Cap (Midcap 150 · ₹28K–₹85K Cr) ({midCapCount})</option>
+              <option value="SMALL_CAP">Small Cap (Rank 251+ · &lt; ₹28K Cr) ({smallCapCount})</option>
             </select>
           </div>
 
@@ -867,14 +876,34 @@ export const InstitutionalEquityRadar: React.FC = () => {
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="font-bold text-cyan-200 text-sm font-mono">{stock.ticker}</span>
-                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-800 font-mono">
+                          <span
+                            className={`text-[9px] px-1.5 py-0.5 rounded font-mono font-semibold border ${
+                              stock.sector === 'LARGE_CAP'
+                                ? 'bg-cyan-950/60 text-cyan-200 border-cyan-500/35'
+                                : stock.sector === 'MID_CAP'
+                                  ? 'bg-indigo-950/60 text-indigo-200 border-indigo-500/35'
+                                  : 'bg-amber-950/60 text-amber-200 border-amber-500/35'
+                            }`}
+                          >
                             {stock.capCategory}
                           </span>
                           <span className={`text-[9px] px-1.5 py-0.5 rounded font-mono font-bold ${stock.horizon === 'SHORT_TERM' ? 'bg-cyan-950/80 text-cyan-300 border border-cyan-500/30' : 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/30'}`}>
                             {stock.horizon === 'SHORT_TERM' ? 'SWING' : 'COMPOUNDER'}
                           </span>
                         </div>
-                        <div className="text-[11px] text-slate-400 truncate max-w-[170px]">{stock.name}</div>
+                        <div className="text-[11px] text-slate-400 truncate max-w-[175px]">{stock.name}</div>
+                        {/* Mobile Inline Live LTP & % Change Pill so mobile users see price without horizontal scrolling */}
+                        <div className="flex sm:hidden items-center gap-1.5 mt-1 font-mono text-[11px]">
+                          <span className="font-bold text-cyan-200 tabular-nums">
+                            ₹{ltp.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                          <span className={`font-bold tabular-nums ${changePct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                            ({changePct >= 0 ? '+' : ''}{changePct.toFixed(2)}%)
+                          </span>
+                          <span className="text-[9px] text-slate-500">
+                            · {((stock.volume ?? 0) / 1000).toFixed(0)}K Vol
+                          </span>
+                        </div>
                         <div className="text-[10px] text-cyan-400/80 font-mono mt-0.5">{stock.institutionalStrategy.modelName}</div>
                       </td>
 
@@ -1065,7 +1094,15 @@ export const InstitutionalEquityRadar: React.FC = () => {
                       <div>
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="text-base font-bold text-slate-100 font-sans">{stock.ticker}</span>
-                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-800 font-mono">
+                          <span
+                            className={`text-[9px] px-1.5 py-0.5 rounded font-mono font-semibold border ${
+                              stock.sector === 'LARGE_CAP'
+                                ? 'bg-cyan-950/60 text-cyan-200 border-cyan-500/35'
+                                : stock.sector === 'MID_CAP'
+                                  ? 'bg-indigo-950/60 text-indigo-200 border-indigo-500/35'
+                                  : 'bg-amber-950/60 text-amber-200 border-amber-500/35'
+                            }`}
+                          >
                             {stock.capCategory}
                           </span>
                           <span className={`text-[9px] px-1.5 py-0.5 rounded font-mono font-bold ${stock.horizon === 'SHORT_TERM' ? 'bg-cyan-950/80 text-cyan-300 border border-cyan-500/30' : 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/30'}`}>
@@ -1807,26 +1844,26 @@ export const InstitutionalEquityRadar: React.FC = () => {
 
             <div className="space-y-3 text-xs text-slate-300 leading-relaxed font-sans">
               <p className="text-slate-400">
-                The Horizon classification is computed strictly from live price action and volume telemetry received from the NSE feed:
+                The Horizon classification separates high-velocity intraday breakouts from steady institutional 200-SMA trend leaders:
               </p>
 
               <div className="p-3 rounded-xl bg-slate-950 border border-cyan-500/30 space-y-1">
                 <div className="text-cyan-300 font-bold font-mono">1. SHORT-TERM SWINGS ({shortTermCount} Stocks)</div>
                 <p className="text-slate-300 text-[11px]">
-                  <strong>Trigger:</strong> Session Day Gain &ge; +2.0% OR Session Volume &ge; 250,000 shares.
+                  <strong>Trigger:</strong> Session Day Move &ge; +2.15% OR Top-35% Cross-Sectional Volume/Momentum Thrust with Gain &ge; +1.45%.
                 </p>
                 <p className="text-slate-400 text-[11px]">
-                  High-velocity momentum candidates experiencing rapid price expansion, designed for multi-day to multi-week tactical swings.
+                  High-velocity momentum candidates experiencing rapid range expansion, designed for tactical swing execution.
                 </p>
               </div>
 
               <div className="p-3 rounded-xl bg-slate-950 border border-emerald-500/30 space-y-1">
                 <div className="text-emerald-300 font-bold font-mono">2. LONG-TERM COMPOUNDERS ({longTermCount} Stocks)</div>
                 <p className="text-slate-300 text-[11px]">
-                  <strong>Trigger:</strong> Low intraday volatility (&lt; +2.0%) with sustained position above 200-day SMA baseline.
+                  <strong>Trigger:</strong> Steady institutional trend above the 200-day SMA with controlled intraday volatility (&lt; +2.15%).
                 </p>
                 <p className="text-slate-400 text-[11px]">
-                  Steady institutional accumulation plays with low turnover and robust structural price support above key long-term moving averages.
+                  Institutional accumulation leaders compounding above long-term moving averages without erratic intraday whipsaws.
                 </p>
               </div>
             </div>
@@ -1856,7 +1893,7 @@ export const InstitutionalEquityRadar: React.FC = () => {
             <div className="flex items-center justify-between pb-3 border-b border-slate-800 mb-4">
               <div className="flex items-center gap-2 text-cyan-300 font-bold text-sm">
                 <Layers className="w-5 h-5 text-cyan-400" />
-                <span className="font-mono">MARKET CAP TIER CRITERIA</span>
+                <span className="font-mono">SEBI / AMFI MARKET CAP TIER CRITERIA</span>
               </div>
               <button onClick={() => setShowCapInfo(false)} className="text-slate-400 hover:text-white p-1">
                 <X className="w-4 h-4" />
@@ -1865,32 +1902,32 @@ export const InstitutionalEquityRadar: React.FC = () => {
 
             <div className="space-y-3 text-xs text-slate-300 leading-relaxed font-sans">
               <p className="text-slate-400">
-                To replace dead static sector categorizations, equities are categorized dynamically from verified NSE price bases:
+                Equities are classified strictly by official SEBI / AMFI Market Capitalization Rank (Nifty 100 / Nifty Midcap 150 / Rank 251+) and live Chartink Market Cap buckets (never by per-share price):
               </p>
 
               <div className="grid grid-cols-1 gap-2.5 font-mono">
-                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex justify-between items-center">
+                <div className="p-3 rounded-xl bg-slate-950 border border-cyan-500/30 flex justify-between items-center">
                   <div>
-                    <span className="text-cyan-300 font-bold">Large Cap (&ge; ₹2,000)</span>
-                    <span className="text-slate-400 block text-[11px] font-sans">Institutional heavyweight leaders</span>
+                    <span className="text-cyan-300 font-bold">Large Cap (Rank 1–100 · Nifty 100)</span>
+                    <span className="text-slate-400 block text-[11px] font-sans">Market Cap &ge; ₹85,000 Cr · Institutional index heavyweights</span>
                   </div>
-                  <span className="px-2.5 py-1 rounded bg-slate-900 text-slate-200 border border-slate-800 font-bold">{largeCapCount} stocks</span>
+                  <span className="px-2.5 py-1 rounded bg-slate-900 text-cyan-200 border border-cyan-500/30 font-bold">{largeCapCount} stocks</span>
                 </div>
 
-                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex justify-between items-center">
+                <div className="p-3 rounded-xl bg-slate-950 border border-indigo-500/30 flex justify-between items-center">
                   <div>
-                    <span className="text-emerald-300 font-bold">Mid Cap (₹500 - ₹2,000)</span>
-                    <span className="text-slate-400 block text-[11px] font-sans">High-beta growth candidates</span>
+                    <span className="text-indigo-300 font-bold">Mid Cap (Rank 101–250 · Nifty Midcap 150)</span>
+                    <span className="text-slate-400 block text-[11px] font-sans">Market Cap ₹28,000 Cr – ₹85,000 Cr · Institutional growth leaders</span>
                   </div>
-                  <span className="px-2.5 py-1 rounded bg-slate-900 text-slate-200 border border-slate-800 font-bold">{midCapCount} stocks</span>
+                  <span className="px-2.5 py-1 rounded bg-slate-900 text-indigo-200 border border-indigo-500/30 font-bold">{midCapCount} stocks</span>
                 </div>
 
-                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex justify-between items-center">
+                <div className="p-3 rounded-xl bg-slate-950 border border-amber-500/30 flex justify-between items-center">
                   <div>
-                    <span className="text-amber-300 font-bold">Small Cap (&lt; ₹500)</span>
-                    <span className="text-slate-400 block text-[11px] font-sans">Emerging volume breakout plays</span>
+                    <span className="text-amber-300 font-bold">Small Cap (Rank 251+ · Nifty Smallcap)</span>
+                    <span className="text-slate-400 block text-[11px] font-sans">Market Cap &lt; ₹28,000 Cr · High-velocity emerging breakouts</span>
                   </div>
-                  <span className="px-2.5 py-1 rounded bg-slate-900 text-slate-200 border border-slate-800 font-bold">{smallCapCount} stocks</span>
+                  <span className="px-2.5 py-1 rounded bg-slate-900 text-amber-200 border border-amber-500/30 font-bold">{smallCapCount} stocks</span>
                 </div>
               </div>
             </div>

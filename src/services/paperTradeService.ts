@@ -5,7 +5,9 @@ import {
   formatOrderTime,
   resolveDerivativeExpiryInfo,
   derivePositionStructureAndCost,
-  ConstituentLegBreakdown
+  ConstituentLegBreakdown,
+  checkSessionEntryCutoffWindow,
+  checkShouldAutoSquareOffOrder,
 } from '../utils/orderFormatters';
 import { generateLiveMarketOrder } from './agentQuantEngine';
 import {
@@ -67,10 +69,63 @@ const LEGACY_STATIC_IDS = new Set([
 ]);
 
 /**
+ * Computes 2026 round-trip statutory friction (STT/CTT, Exchange+IPFT, SEBI, Stamp Duty,
+ * ₹20/leg brokerage, and 18% GST) for a paper trade order if not already stamped by the Veto Gate.
+ */
+export function computePaperOrderStatutoryFrictionINR(
+  segment: PaperTradeOrder['segment'],
+  entryPrice: number,
+  exitPrice: number,
+  qty: number,
+  stampedFrictionINR?: number
+): number {
+  if (stampedFrictionINR != null && Number.isFinite(stampedFrictionINR) && stampedFrictionINR > 0) {
+    return Number(stampedFrictionINR.toFixed(2));
+  }
+  const buyNotional = Math.max(0, entryPrice * qty);
+  const sellNotional = Math.max(0, exitPrice * qty);
+  const totalTurnover = buyNotional + sellNotional;
+  if (totalTurnover <= 0) return 0;
+
+  let sttOrCtt = 0;
+  let exchRate = 0.0000325;
+  let stampRate = 0.00015;
+
+  if (segment === 'NSE_CASH' || segment === 'BSE_CASH') {
+    // 2026 Cash Delivery: 0.10% Buy STT + 0.10% Sell STT
+    sttOrCtt = (buyNotional + sellNotional) * 0.001;
+    exchRate = segment === 'BSE_CASH' ? 0.0000375 : 0.0000325;
+    stampRate = 0.00015;
+  } else if (segment === 'NSE_FNO') {
+    // 2026 F&O Option Sell STT (0.15% on sell leg)
+    sttOrCtt = sellNotional * 0.0015;
+    exchRate = 0.0003553;
+    stampRate = 0.00003;
+  } else if (segment === 'MCX_OPTIONS') {
+    sttOrCtt = sellNotional * 0.0005;
+    exchRate = 0.0004;
+    stampRate = 0.00003;
+  } else {
+    // MCX_FUTURES
+    sttOrCtt = sellNotional * 0.0001;
+    exchRate = 0.000026;
+    stampRate = 0.00002;
+  }
+
+  const exchangeFee = totalTurnover * exchRate;
+  const sebiFee = totalTurnover * 0.000001;
+  const stampDuty = buyNotional * stampRate;
+  const brokerage = 40; // ₹20 Buy + ₹20 Sell
+  const gst = (brokerage + exchangeFee + sebiFee) * 0.18;
+
+  return Number((sttOrCtt + exchangeFee + sebiFee + stampDuty + brokerage + gst).toFixed(2));
+}
+
+/**
  * Guarantees every PaperTradeOrder in an array has a strictly unique ID,
  * strips any legacy static seed IDs, consolidates legacy multi-leg spreads into a unified
- * net-premium position, and enforces the strict mathematical invariant:
- * P&L === (ExitPrice - EntryPrice) * Qty * Direction.
+ * net-premium position, removes any artificial F&O exitPrice clamping, and deducts
+ * 2026 round-trip statutory friction on closed trades.
  */
 export function sanitizeAndDedupeOrders(trades: PaperTradeOrder[]): { cleaned: PaperTradeOrder[]; mutated: boolean } {
   if (!Array.isArray(trades)) return { cleaned: [], mutated: false };
@@ -104,7 +159,7 @@ export function sanitizeAndDedupeOrders(trades: PaperTradeOrder[]): { cleaned: P
     const entryPrice = Number((updated.entryPrice ?? firstLeg?.price ?? 100).toFixed(2));
     const currentSymbol = updated.symbol;
 
-    // Resolve authoritative NSE Tuesday / Holiday-Adjusted expiry (e.g. 09-Nov-2026 Weekly, 23-Nov-2026 Monthly)
+    // Preserve existing valid order expiryDate (e.g. 09-Nov-2026) so expiring contracts are squared off on their true expiry day
     const { expiryDateStr: authoritativeExpiry } = resolveDerivativeExpiryInfo(
       updated.segment,
       currentSymbol,
@@ -113,9 +168,9 @@ export function sanitizeAndDedupeOrders(trades: PaperTradeOrder[]): { cleaned: P
     const isStaleThursdayExpiry =
       updated.expiryDate && /^(05|12|19|26)-Nov-2026$/i.test(updated.expiryDate.trim());
     const resolvedExpiryDate =
-      authoritativeExpiry || (!isStaleThursdayExpiry ? updated.expiryDate : undefined);
+      (!isStaleThursdayExpiry && updated.expiryDate) || authoritativeExpiry || undefined;
 
-    // Resolve exitPrice and reconcile P&L so P&L === (Exit - Entry) * Qty * Direction
+    // Resolve exitPrice without any artificial F&O option clamping
     let exitPrice = updated.exitPrice ?? firstLeg?.exitPrice;
     const rawPnl = Number((updated.pnlINR ?? 0).toFixed(2));
 
@@ -129,7 +184,6 @@ export function sanitizeAndDedupeOrders(trades: PaperTradeOrder[]): { cleaned: P
       }
     } else {
       exitPrice = Number(exitPrice.toFixed(2));
-      // If exitPrice equals entryPrice while rawPnl is non-zero, derive exitPrice from rawPnl
       if (Math.abs(exitPrice - entryPrice) < 0.01 && Math.abs(rawPnl) > 0.01) {
         exitPrice = Number(
           Math.max(0.05, side === 'BUY' ? entryPrice + rawPnl / qty : entryPrice - rawPnl / qty).toFixed(2)
@@ -137,14 +191,32 @@ export function sanitizeAndDedupeOrders(trades: PaperTradeOrder[]): { cleaned: P
       }
     }
 
-    // Eradicate the legacy ₹0.50 LTP decay bug on NSE_FNO spreads
-    if (updated.segment === 'NSE_FNO' && (exitPrice <= 2.0 || exitPrice > entryPrice + 20)) {
-      mutated = true;
-      exitPrice = Number(Math.max(4.5, entryPrice * 0.68).toFixed(2));
-    }
+    // Check 15:20 IST Intraday MIS & Expiring F&O Auto Square-Off (with full catch-up if opened after 15:20 IST)
+    const autoSq = checkShouldAutoSquareOffOrder({
+      segment: updated.segment,
+      status: updated.status,
+      orderDate: updated.orderDate,
+      expiryDate: resolvedExpiryDate,
+    });
 
+    const nextStatus = autoSq.shouldSquareOff ? 'SQUARED_OFF' : updated.status;
+    const nextExitReason = autoSq.shouldSquareOff
+      ? autoSq.exitReason || 'Statutory 15:20 IST Auto-Square-Off'
+      : updated.exitReason;
+
+    const statutoryFrictionINR = computePaperOrderStatutoryFrictionINR(
+      updated.segment,
+      entryPrice,
+      exitPrice,
+      qty,
+      updated.statutoryFrictionSnapshotINR
+    );
+
+    const grossPnl = (side === 'BUY' ? exitPrice - entryPrice : entryPrice - exitPrice) * qty;
+    // Deduct full 2026 round-trip statutory friction on closed trades; keep unrealized MTM gross while open
+    const isClosed = nextStatus !== 'OPEN';
     const reconciledPnl = Number(
-      ((side === 'BUY' ? exitPrice - entryPrice : entryPrice - exitPrice) * qty).toFixed(2)
+      (isClosed ? grossPnl - statutoryFrictionINR : grossPnl).toFixed(2)
     );
 
     const rawFloor = updated.trailingStopPnlINR ?? -cappedMaxLoss;
@@ -174,11 +246,11 @@ export function sanitizeAndDedupeOrders(trades: PaperTradeOrder[]): { cleaned: P
 
     const nextStage: TslStage =
       updated.tslStage ??
-      (updated.status === 'TRAILING_STOP_HIT'
+      (nextStatus === 'TRAILING_STOP_HIT'
         ? 'TRAILING_STOP_HIT'
-        : updated.status === 'TARGET_HIT'
+        : nextStatus === 'TARGET_HIT'
           ? 'TARGET_HIT'
-          : updated.status === 'STOP_HIT'
+          : nextStatus === 'STOP_HIT'
             ? 'STOP_HIT'
             : 'INITIAL_RISK_STOP');
 
@@ -187,6 +259,7 @@ export function sanitizeAndDedupeOrders(trades: PaperTradeOrder[]): { cleaned: P
     );
 
     if (
+      autoSq.shouldSquareOff ||
       resolvedExpiryDate !== updated.expiryDate ||
       cappedMaxLoss !== updated.maxDefinedLossINR ||
       updated.tslStage == null ||
@@ -194,21 +267,25 @@ export function sanitizeAndDedupeOrders(trades: PaperTradeOrder[]): { cleaned: P
       updated.entryPrice !== entryPrice ||
       updated.exitPrice !== exitPrice ||
       updated.pnlINR !== reconciledPnl ||
-      updated.trailingStopPrice !== trailingStopPrice
+      updated.trailingStopPrice !== trailingStopPrice ||
+      updated.statutoryFrictionSnapshotINR !== statutoryFrictionINR
     ) {
       mutated = true;
       updated = {
         ...updated,
         symbol: currentSymbol,
         expiryDate: resolvedExpiryDate,
+        status: nextStatus,
+        exitReason: nextExitReason,
         side,
         qty,
         entryPrice,
         exitPrice,
         pnlINR: reconciledPnl,
+        statutoryFrictionSnapshotINR: statutoryFrictionINR,
         peakPnlINR,
-        trailingStopPnlINR: updated.status === 'TRAILING_STOP_HIT' || updated.status === 'TARGET_HIT' ? reconciledPnl : trailingStopPnlINR,
-        trailingStopPrice: updated.status === 'TRAILING_STOP_HIT' || updated.status === 'TARGET_HIT' ? exitPrice : trailingStopPrice,
+        trailingStopPnlINR: nextStatus === 'TRAILING_STOP_HIT' || nextStatus === 'TARGET_HIT' ? reconciledPnl : trailingStopPnlINR,
+        trailingStopPrice: nextStatus === 'TRAILING_STOP_HIT' || nextStatus === 'TARGET_HIT' ? exitPrice : trailingStopPrice,
         initialStopLossPrice,
         maxDefinedLossINR: cappedMaxLoss,
         tslStage: nextStage,
@@ -324,10 +401,19 @@ export function runAutonomousAgentCycleIfArmed(
   const niftyPrice = quotes['^NSEI']?.price;
   if (!niftyPrice || niftyPrice <= 0) return null;
 
+  // getStoredPaperTrades() automatically runs sanitizeAndDedupeOrders(), which squares off
+  // any open intraday MIS or expiring F&O positions if IST time is >= 15:20 IST.
   const existing = getStoredPaperTrades();
+
+  // Check 15:15 IST Autonomous Entry Cutoff for NSE/BSE
+  const nseEntryGate = checkSessionEntryCutoffWindow({
+    segment: 'NSE_CASH',
+    isManualOverride: false,
+  });
+
   if (existing.length > 0) {
     autoExecutionTriggeredThisSession = true;
-    // If any existing open position is stuck in a loss (e.g. ULTRACEMCO), automatically prune & rotate to learned winners
+    // If any existing open position is stuck in a loss and we are within the < 15:15 IST entry window, prune & rotate
     if (isAutoPruneLosersEnabled()) {
       const hasOpenLoser = existing.some(
         (o) =>
@@ -335,17 +421,26 @@ export function runAutonomousAgentCycleIfArmed(
           ((o.pnlINR || 0) < -35 || extractBaseSymbolFromOrder(o) === 'ULTRACEMCO')
       );
       if (hasOpenLoser) {
-        const { updatedOrders } = executeAdaptivePruneAndRotateCycle(existing, quotes, true);
+        const { updatedOrders } = executeAdaptivePruneAndRotateCycle(
+          existing,
+          quotes,
+          nseEntryGate.allowed
+        );
         return updatedOrders;
       }
     }
     return null;
   }
 
+  // Block autonomous new entries outside the 09:15–15:15 IST window
+  if (!nseEntryGate.allowed) {
+    return null;
+  }
+
   autoExecutionTriggeredThisSession = true;
 
-  // Evaluate all desks through the Strict 2026 Statutory Tax & >2.0% Net Profit Veto Gate
-  const scanBatch = executeIntelligentScanAndDeploy(quotes, existing, 'ALL');
+  // Evaluate all desks through the Strict 2026 Statutory Tax & >2.0% Net Profit Veto Gate (Autonomous = false)
+  const scanBatch = executeIntelligentScanAndDeploy(quotes, existing, 'ALL', false);
   if (scanBatch.deployedOrders.length > 0) {
     persistPaperTrades(scanBatch.deployedOrders);
     return scanBatch.deployedOrders;
@@ -415,7 +510,17 @@ export function flattenOrdersToTrades(
     const priceDeltaPerUnit = Number(
       (side === 'BUY' ? cleanExitPrice - entryPrice : entryPrice - cleanExitPrice).toFixed(2)
     );
-    const exactPnl = Number((priceDeltaPerUnit * qty).toFixed(2));
+    const statutoryFrictionINR = computePaperOrderStatutoryFrictionINR(
+      order.segment,
+      entryPrice,
+      cleanExitPrice,
+      qty,
+      order.statutoryFrictionSnapshotINR
+    );
+    const grossPnl = priceDeltaPerUnit * qty;
+    const exactPnl = Number(
+      (isOpen ? grossPnl : grossPnl - statutoryFrictionINR).toFixed(2)
+    );
 
     const rawFloor = order.trailingStopPnlINR ?? -oneR;
     const trailingStopPrice =

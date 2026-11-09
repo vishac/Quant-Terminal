@@ -8,12 +8,13 @@
 ## 1. Plain-English 4-Core Operational Workflow
 
 ### Core 1: `1. Market Finder` *(Screener, 52W-Low Bottoms, Bear Puts & Elections)*
-- **Sub-Tab `01. Live Breakout & Factor Screener`**:
-  - Scans NSE Nifty 50 / Next 50 equities, NIFTY/BANKNIFTY indices, and MCX Crude Oil across a 5-Factor rubric (`0–100` score).
-  - **Note on Factor Weights & Thresholds**: The `0.20 / 0.25 / 0.25 / 0.15 / 0.15` pillar weights and `88/100` qualification cutoff are **configurable heuristic priors (hypotheses)**, not universal constants of nature. Operators should validate symbol-level edge via `2. Stress Lab -> Backtest` or `npm run data:sync` before deploying capital.
+- **Sub-Tab `01. Live Breakout & Factor Screener` (`REV-022` & `REV-023` — Whole-NSE Discovery, SEBI/AMFI Market Cap Tiering & Cross-Sectional Percentile Scoring)**:
+  - **Whole-NSE Discovery + SEBI/AMFI Market Cap Tiering (`Large Cap`, `Mid Cap`, `Small Cap`)**: Queries the live Chartink NSE breakout scanner across three SEBI/AMFI market-capitalization buckets (`market cap >= 85000` Cr for `Large Cap`, `28000..85000` Cr for `Mid Cap`, `< 28000` Cr for `Small Cap`) combined with the canonical SEBI **Nifty 100 (`Large Cap`, Rank 1–100)** and **Nifty Midcap 150 (`Mid Cap`, Rank 101–250)** registries, defaulting all Rank 251+ stocks to **`Small Cap`** (never classifying by share price or single-day turnover).
+  - **Cross-Sectional Percentile Scoring (`0–100`) & Strict `>= 88` Qualification Gate**: Blends live rupee turnover (`₹ Cr`), share volume, intraday close location (`%`), session `% change`, relative alpha vs. NIFTY 50, and 52-week range position with **cross-sectional percentile ranks (`0–100`)** across the active scan so conviction scores spread smoothly (`62` to `97`) without tying at `91 / 100`. Passing the `>= 88 / 100` `EXEC QUALIFIED` gate requires positive session momentum (`changePct >= +0.45%` and positive alpha vs. NIFTY) and volume/turnover expansion (`volume >= 200,000` or turnover `>= ₹15 Cr`).
+  - **True `SWING` vs. `COMPOUNDER` Horizon Split & Mobile Inline LTP**: Classifies high-velocity intraday breakouts (`|changePct| >= 2.15%` or top-35% volume/momentum thrust) as `SWING` and steady trend leaders above 200-SMA (`< 2.15%`) as `COMPOUNDER`, while displaying live `₹LTP` and `% change` inline on mobile screens.
 - **Sub-Tab `02. 52W-Low Bottom Accumulation, Bear Put (T1/T2/T3) & Elections (India + US)`**:
-  - **Mutually-Exclusive Regime & Relative-Strength Arbiter (`Mode A` vs. `Mode B`)**:
-    - A single stock can **never** appear in both Mode A and Mode B simultaneously.
+  - **Mutually-Exclusive Regime & Relative-Strength Arbiter (`Mode A` vs. `Mode B`) + SEBI/AMFI Cap Badges**:
+    - Every setup card displays its official SEBI/AMFI Market Cap badge (`Large Cap`, `Mid Cap`, `Small Cap`) and cross-sectionally differentiated conviction score.
     - **Mode A (`52W-Low Bottom Accumulation Long`)**: Selected **only** when the sector is not under a hard macro outflow veto, the stock sits in the 52-week value zone (`<=14.5%` above 52W Low or `>=14%` below 52W High), **AND** it exhibits positive institutional delivery absorption (`deliveryRatio >= 1.25`) with relative strength holding above `min(-0.15%, NIFTY change %)`.
     - **Mode B (`Bear-Market Put PE F&O`)**: Mutually exclusive (`else if`); selected **only** when Mode A is false and the script is actively breaking down (`changePct <= -0.25%` or in a hard-vetoed outflow sector).
 
@@ -41,6 +42,10 @@
 ---
 
 ### Core 4: `4. Order Book` *(Live Trades, `<1.5%` Intraday DD Guard, T-1 Tax Calendar & Revert Ledger)*
+- **Intraday Entry Cutoff (`15:15 IST` Autonomous / `15:25 IST` Manual Override) & `15:20 IST` Auto Square-Off (`REV-021`)**:
+  - **Autonomous Entry Window**: Autonomous NSE/BSE (`NSE_CASH`, `BSE_CASH`, `NSE_FNO`) entries are strictly permitted only between `09:15 IST` and `15:14:59 IST` (`09:00–23:14:59 IST` for MCX). All autonomous entries are blocked at or after `15:15 IST`.
+  - **Manual Override Window**: Manual operator deployments are permitted until `15:25 IST` for non-expiring F&O setups (`15:15 IST` cutoff for same-day expiring F&O; `15:20 IST` cutoff for intraday Cash MIS) and blocked at or after `15:25 IST`.
+  - **`15:20 IST` Auto Square-Off with Catch-Up**: All open intraday cash (`NSE_CASH` / `BSE_CASH`) positions and expiring F&O contracts (`expiryDate <= today`, including holiday-advanced Monday expiries such as `09-Nov-2026`) automatically square off at `15:20 IST` (or immediately on app load if opened after `15:20 IST` or on a subsequent day) with full 2026 round-trip statutory friction deducted. Non-expiring F&O contracts (`expiryDate > today`) are permitted to carry forward overnight.
 - **Synchronized `1.50%` Daily Intraday Loss Limit (`src/server/riskEngine.ts`)**:
   - Both the frontend risk guard and backend `riskEngine.ts` enforce `maxDailyLossInr = 15,000` (`1.50%` of `₹10,00,000` reference capital) before tripping the intraday kill-switch.
 - **T-1 Pre-Market Statutory Tax & Brokerage Calendar**:

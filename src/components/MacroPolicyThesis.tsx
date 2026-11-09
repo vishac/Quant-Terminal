@@ -513,6 +513,17 @@ export const MacroPolicyThesis: React.FC = () => {
                             52W-LOW ACCUMULATION · {setup.accumulationOrPutScore}/100
                           </span>
                           <span className="text-base font-bold text-white">{setup.symbol}</span>
+                          <span
+                            className={`text-[9px] px-1.5 py-0.5 rounded font-mono font-semibold border ${
+                              setup.capCategory === 'Large Cap'
+                                ? 'bg-cyan-950/60 text-cyan-200 border-cyan-500/35'
+                                : setup.capCategory === 'Mid Cap'
+                                  ? 'bg-indigo-950/60 text-indigo-200 border-indigo-500/35'
+                                  : 'bg-amber-950/60 text-amber-200 border-amber-500/35'
+                            }`}
+                          >
+                            {setup.capCategory}
+                          </span>
                         </div>
                         <span className="text-[11px] text-slate-400 block mt-0.5 font-sans">
                           {setup.name} · {setup.sector}
@@ -619,6 +630,17 @@ export const MacroPolicyThesis: React.FC = () => {
                             BEAR PUT (PE) F&amp;O · {setup.accumulationOrPutScore}/100
                           </span>
                           <span className="text-sm font-bold text-white">{setup.instrumentLabel}</span>
+                          <span
+                            className={`text-[9px] px-1.5 py-0.5 rounded font-mono font-semibold border ${
+                              setup.capCategory === 'Large Cap'
+                                ? 'bg-cyan-950/60 text-cyan-200 border-cyan-500/35'
+                                : setup.capCategory === 'Mid Cap'
+                                  ? 'bg-indigo-950/60 text-indigo-200 border-indigo-500/35'
+                                  : 'bg-amber-950/60 text-amber-200 border-amber-500/35'
+                            }`}
+                          >
+                            {setup.capCategory}
+                          </span>
                         </div>
                         <span className="text-[11px] text-slate-400 block mt-0.5 font-sans">
                           Underlying Spot: ₹{setup.spotLtp.toLocaleString('en-IN')} ({setup.changePct >= 0 ? '+' : ''}
@@ -926,11 +948,22 @@ export const MacroPolicyThesis: React.FC = () => {
                 <div className="space-y-3">
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[10px] font-bold">
                           #{idx + 1} CONFIRMED LEADER
                         </span>
                         <span className="text-lg text-white font-bold">{leader.symbol}</span>
+                        <span
+                          className={`text-[9px] px-1.5 py-0.5 rounded font-mono font-semibold border ${
+                            leader.capCategory === 'Large Cap'
+                              ? 'bg-cyan-950/60 text-cyan-200 border-cyan-500/35'
+                              : leader.capCategory === 'Mid Cap'
+                                ? 'bg-indigo-950/60 text-indigo-200 border-indigo-500/35'
+                                : 'bg-amber-950/60 text-amber-200 border-amber-500/35'
+                          }`}
+                        >
+                          {leader.capCategory}
+                        </span>
                       </div>
                       <span className="text-xs text-slate-400 font-sans block mt-0.5">
                         {leader.name} // {leader.sector}

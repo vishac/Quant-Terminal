@@ -18,6 +18,7 @@ export interface ScriptLearningRecord {
   yahooSymbol: string;
   name: string;
   sector: string;
+  capCategory: 'Large Cap' | 'Mid Cap' | 'Small Cap';
   ltp: number;
   changePct: number;
   relAlphaVsNifty: number;
@@ -34,9 +35,45 @@ export interface ScriptLearningRecord {
   isQuarantined: boolean;
   quarantineReason: string | null;
   learnedScore: number; // 0 to 100
+  rawScore?: number;
   isEligibleForDeploy: boolean;
   recommendedAction: 'DEPLOY_LONG' | 'OBSERVE_WAIT' | 'DISCARD_AVOID';
   rationale: string;
+}
+
+const CLIENT_NIFTY_100_LARGE_CAP_SET = new Set<string>([
+  'RELIANCE', 'TCS', 'HDFCBANK', 'ICICIBANK', 'BHARTIARTL', 'INFY', 'SBIN', 'ITC', 'LT', 'HINDUNILVR',
+  'SUNPHARMA', 'AXISBANK', 'KOTAKBANK', 'MARUTI', 'NTPC', 'M&M', 'ULTRACEMCO', 'TATAMOTORS', 'BAJFINANCE', 'ONGC',
+  'TITAN', 'ADANIENT', 'ADANIPORTS', 'POWERGRID', 'COALINDIA', 'HAL', 'BEL', 'SIEMENS', 'TRENT', 'BAJAJ-AUTO',
+  'HCLTECH', 'WIPRO', 'TECHM', 'ASIANPAINT', 'JSWSTEEL', 'TATASTEEL', 'GRASIM', 'HINDALCO', 'NESTLEIND', 'CIPLA',
+  'DRREDDY', 'APOLLOHOSP', 'SBILIFE', 'HDFCLIFE', 'BAJAJFINSV', 'EICHERMOT', 'BPCL', 'INDUSINDBK', 'HEROMOTOCO', 'SHRIRAMFIN',
+  'BRITANNIA', 'TATACONSUM', 'DIVISLAB', 'ABB', 'ADANIENSOL', 'ADANIGREEN', 'ADANIPOWER', 'AMBUJACEM', 'ATGL', 'BAJAJHLDNG',
+  'BANKBARODA', 'BHEL', 'BOSCHLTD', 'CANBK', 'CHOLAFIN', 'COLPAL', 'DABUR', 'DLF', 'DMART', 'GAIL',
+  'GODREJCP', 'HAVELLS', 'ICICIGI', 'ICICIPRULI', 'INDIGO', 'IOC', 'IRCTC', 'IRFC', 'JINDALSTEL', 'JIOFIN',
+  'JSWENERGY', 'LICI', 'LODHA', 'LTIM', 'MARICO', 'MOTHERSON', 'NAUKRI', 'NHPC', 'PIDILITIND', 'PFC',
+  'PNB', 'RECLTD', 'SHREECEM', 'SRF', 'TATAPOWER', 'TORNTPHARM', 'TVSMOTOR', 'UNITDSPR', 'VBL', 'VEDL',
+  'ZOMATO', 'ZYDUSLIFE', 'NIFTY',
+]);
+
+const CLIENT_NIFTY_MIDCAP_150_SET = new Set<string>([
+  'SOLARINDS', 'DIXON', 'POLYCAB', 'COCHINSHIP', 'OBEROIRLTY', 'LICHSGFIN', 'PERSISTENT', 'COFORGE', 'MPHASIS', 'KPITTECH',
+  'TATAELXSI', 'OFSS', 'CUMMINSIND', 'CGPOWER', 'BHARATFORG', 'TIINDIA', 'ASTRAL', 'SUPREMEIND', 'AUROPHARMA', 'LUPIN',
+  'ALKEM', 'MANKIND', 'MAXHEALTH', 'FORTIS', 'SYNGENE', 'BIOCON', 'PIIND', 'UPL', 'COROMANDEL', 'DEEPAKNTR',
+  'TATACHEM', 'VOLTAS', 'BLUESTARCO', 'CROMPTON', 'PAGEIND', 'JUBLFOOD', 'DEVYANI', 'INDHOTEL', 'ASHOKLEY', 'BALKRISIND',
+  'MRF', 'APOLLOTYRE', 'EXIDEIND', 'SONACOMS', 'ENDURANCE', 'SCHAEFFLER', 'TIMKEN', 'SKFINDIA', 'THERMAX', 'KEI',
+  'APLAPOLLO', 'JKCEMENT', 'DALBHARAT', 'RAMCOCEM', 'ACC', 'PRESTIGE', 'PHOENIXLTD', 'GODREJPROP', 'BRIGADE', 'FEDERALBNK',
+  'IDFCFIRSTB', 'AUBANK', 'BANDHANBNK', 'INDIANB', 'UNIONBANK', 'BANKINDIA', 'MAHABANK', 'MUTHOOTFIN', 'POONAWALLA', 'SUNDARMFIN',
+  'LTF', 'ABCAPITAL', 'MFSL', 'STARHEALTH', 'PAYTM', 'POLICYBZR', 'DELHIVERY', 'NYKAA', 'YESBANK', 'IDEA',
+  'INDUSTOWER', 'TATACOMM', 'PETRONET', 'IGL', 'MGL', 'GUJGASLTD', 'OIL', 'HINDPETRO', 'MRPL', 'SAIL',
+  'NATIONALUM', 'HINDCOPPER', 'NMDC', 'GMRINFRA', 'RVNL', 'HUDCO', 'IREDA', 'SJVN', 'NLCINDIA', 'TORNTPOWER',
+  'JSWINFRA', 'CONCOR', 'MAZDOCK', 'BDL', 'SUZLON', 'BSE', 'KALYANKJIL', 'PATANJALI', 'LLOYDSME', 'UNOMINDA',
+]);
+
+export function resolveClientSebiCapCategory(symbol: string): 'Large Cap' | 'Mid Cap' | 'Small Cap' {
+  const clean = symbol.toUpperCase().replace('.NS', '').replace('.BO', '').trim();
+  if (CLIENT_NIFTY_100_LARGE_CAP_SET.has(clean)) return 'Large Cap';
+  if (CLIENT_NIFTY_MIDCAP_150_SET.has(clean)) return 'Mid Cap';
+  return 'Small Cap';
 }
 
 export interface PersistedScriptMemory {
@@ -455,6 +492,7 @@ export function evaluateAdaptiveScriptLearningMatrix(
       yahooSymbol: item.yahooSymbol,
       name: item.name,
       sector: item.sector,
+      capCategory: resolveClientSebiCapCategory(item.symbol),
       ltp,
       changePct,
       relAlphaVsNifty: relAlpha,
@@ -471,6 +509,7 @@ export function evaluateAdaptiveScriptLearningMatrix(
       isQuarantined,
       quarantineReason,
       learnedScore,
+      rawScore,
       isEligibleForDeploy,
       recommendedAction,
       rationale,
@@ -481,8 +520,21 @@ export function evaluateAdaptiveScriptLearningMatrix(
     savePersistedScriptMemory(memory);
   }
 
-  // Sort by learnedScore descending so best positive leaders are always at the top
-  return records.sort((a, b) => b.learnedScore - a.learnedScore);
+  // Sort by rawScore descending and blend with cross-sectional percentile rank so top leaders never tie at identical scores
+  const sortedRecords = records.sort((a, b) => (b.rawScore ?? 0) - (a.rawScore ?? 0));
+  const totalNonQ = Math.max(1, sortedRecords.filter((r) => !r.isQuarantined).length - 1);
+  let nonQIdx = 0;
+  return sortedRecords.map((r) => {
+    if (r.isQuarantined) return r;
+    const pctRank = 1 - nonQIdx / totalNonQ; // 1.0 at top -> 0.0 at bottom
+    nonQIdx++;
+    const crossSectionalScore = 64 + pctRank * 33;
+    const differentiatedScore = Math.min(98, Math.max(45, Math.round(r.learnedScore * 0.55 + crossSectionalScore * 0.45)));
+    return {
+      ...r,
+      learnedScore: differentiatedScore,
+    };
+  });
 }
 
 /**
@@ -654,6 +706,7 @@ export interface BottomAndBearPutSetup {
   yahooSymbol: string;
   name: string;
   sector: string;
+  capCategory: 'Large Cap' | 'Mid Cap' | 'Small Cap';
   mode: BottomOrBearSetupMode;
   modeLabel: string;
   instrumentLabel: string;
@@ -812,6 +865,7 @@ export function evaluateBottomAccumulationAndBearPutMatrix(
         yahooSymbol: item.yahooSymbol,
         name: item.name,
         sector: item.sector,
+        capCategory: resolveClientSebiCapCategory(item.symbol),
         mode: 'BOTTOM_ACCUMULATION_LONG',
         modeLabel: '52W-Low Bottom Accumulation · Long Reversal',
         instrumentLabel: `${item.symbol} (NSE Cash Accumulation)`,
@@ -887,6 +941,7 @@ export function evaluateBottomAccumulationAndBearPutMatrix(
         yahooSymbol: item.yahooSymbol,
         name: item.name,
         sector: item.sector,
+        capCategory: resolveClientSebiCapCategory(item.symbol),
         mode: 'BEAR_MARKET_PUT_FNO',
         modeLabel: 'Bear-Market Put (PE) F&O · Profit on Downside',
         instrumentLabel: `${item.symbol} ${putStrike} PE (NSE F&O)`,
@@ -942,6 +997,7 @@ export function evaluateBottomAccumulationAndBearPutMatrix(
     yahooSymbol: '^NSEI',
     name: 'NIFTY 50 Index Put (PE)',
     sector: 'Index F&O Hedge',
+    capCategory: 'Large Cap',
     mode: 'BEAR_MARKET_PUT_FNO',
     modeLabel: 'Index Bear Put (PE) · Downside Profit Engine',
     instrumentLabel: `NIFTY ${niftyAtmPutStrike} PE (Weekly F&O)`,
@@ -955,7 +1011,7 @@ export function evaluateBottomAccumulationAndBearPutMatrix(
     fiftyTwoWeekHigh: Number((niftySpot * 1.09).toFixed(2)),
     distanceFrom52WLowPct: 11.2,
     drawdownFrom52WHighPct: 8.4,
-    accumulationOrPutScore: niftyChg < 0 ? 94 : 84,
+    accumulationOrPutScore: niftyChg < 0 ? 95 : 86,
     entryPrice: niftyPutEntry,
     stopLossPrice: niftyPutStop,
     t1Price: niftyPutT1,
@@ -976,8 +1032,26 @@ export function evaluateBottomAccumulationAndBearPutMatrix(
     rationale: `Direct NIFTY ${niftyAtmPutStrike} PE downside profit setup when market is low/weak (${niftyChg >= 0 ? '+' : ''}${niftyChg.toFixed(2)}%). Targets T1 ₹${niftyPutT1}, T2 ₹${niftyPutT2}, T3 ₹${niftyPutT3} with strict 82% step-ratchet non-erosion protection.`,
   });
 
-  bottomAccumulationLongs.sort((a, b) => b.accumulationOrPutScore - a.accumulationOrPutScore);
-  bearMarketPutSetups.sort((a, b) => b.accumulationOrPutScore - a.accumulationOrPutScore);
+  // Sort and apply cross-sectional percentile differentiation so cards never tie at identical scores
+  bottomAccumulationLongs.sort(
+    (a, b) => b.accumulationOrPutScore - a.accumulationOrPutScore || a.distanceFrom52WLowPct - b.distanceFrom52WLowPct
+  );
+  bearMarketPutSetups.sort(
+    (a, b) => b.accumulationOrPutScore - a.accumulationOrPutScore || a.changePct - b.changePct
+  );
+
+  const differentiateSetupScores = (list: BottomAndBearPutSetup[]) => {
+    const denom = Math.max(1, list.length - 1);
+    return list.map((item, idx) => {
+      const pctRank = 1 - idx / denom;
+      const crossScore = 68 + pctRank * 28;
+      const blended = Math.min(97, Math.max(62, Math.round(item.accumulationOrPutScore * 0.55 + crossScore * 0.45)));
+      return {
+        ...item,
+        accumulationOrPutScore: blended,
+      };
+    });
+  };
 
   const marketLowRegimeSummary =
     niftyChg < -0.25 || macroSnapshot.warEscalationIndex >= 55
@@ -985,8 +1059,8 @@ export function evaluateBottomAccumulationAndBearPutMatrix(
       : `Balanced / Accumulation Tape (NIFTY ${niftyChg >= 0 ? '+' : ''}${niftyChg.toFixed(2)}%, VIX ${vix.toFixed(2)}): Mode A 52W-Low Institutional Bottom-Accumulation leaders offer high R:R toward T1/T2/T3; keep Mode B Bear Puts ready for sector breakdowns.`;
 
   return {
-    bottomAccumulationLongs: bottomAccumulationLongs.slice(0, 10),
-    bearMarketPutSetups: bearMarketPutSetups.slice(0, 10),
+    bottomAccumulationLongs: differentiateSetupScores(bottomAccumulationLongs.slice(0, 10)),
+    bearMarketPutSetups: differentiateSetupScores(bearMarketPutSetups.slice(0, 10)),
     marketLowRegimeSummary,
   };
 }

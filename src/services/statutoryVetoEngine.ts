@@ -5,6 +5,7 @@ import {
   formatOrderTime,
   resolveDerivativeExpiryInfo,
   computeCanonicalNiftyOptionLeg,
+  checkSessionEntryCutoffWindow,
 } from '../utils/orderFormatters';
 import {
   evaluateAdaptiveScriptLearningMatrix,
@@ -90,6 +91,7 @@ export interface CandidateVetoEvaluation {
   approved: boolean;
   vetoCode:
     | 'APPROVED_CONFIRMED_OVER_2PCT_NET'
+    | 'VETO_SESSION_CUTOFF_LOCKED'
     | 'VETO_DUPLICATE_OPEN_SCRIPT'
     | 'VETO_UNCONFIRMED_OR_QUARANTINED_SCRIPT'
     | 'VETO_INTER_AGENT_COUNCIL_OR_RED_TEAM'
@@ -434,6 +436,7 @@ export function evaluateCandidateOrderAgainstVetoRules(params: {
   customReasonPrefix?: string;
   interAgentConsensus?: InterAgentConsensusEvaluation;
   minRequiredNetProfitPct?: number;
+  isManualOverride?: boolean;
 }): CandidateVetoEvaluation {
   const {
     candidateOrder,
@@ -444,6 +447,7 @@ export function evaluateCandidateOrderAgainstVetoRules(params: {
     customReasonPrefix,
     interAgentConsensus,
     minRequiredNetProfitPct = interAgentConsensus?.requiredMinNetProfitPct ?? 2.0,
+    isManualOverride = true,
   } = params;
 
   const now = new Date();
@@ -480,6 +484,37 @@ export function evaluateCandidateOrderAgainstVetoRules(params: {
     (grossTargetProfitINR / Math.max(0.01, friction.totalFrictionINR)).toFixed(2)
   );
   const netExpectancyR = Number((netProfitINR / maxRisk1RINR).toFixed(2));
+
+  // Gate 0: Session Entry Cutoff Window (15:15 IST Autonomous / 15:25 IST Manual Override / 15:20 IST Intraday & Expiry Lockout)
+  const cutoffCheck = checkSessionEntryCutoffWindow({
+    segment: candidateOrder.segment,
+    isManualOverride,
+    expiryDateStr: candidateOrder.expiryDate,
+  });
+  if (!cutoffCheck.allowed) {
+    return {
+      id: `veto-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      timestampIST,
+      deskName,
+      agentId: candidateOrder.agentId,
+      segment: candidateOrder.segment,
+      symbol: candidateOrder.symbol,
+      strategyName: candidateOrder.strategyName,
+      confirmedScriptStatus,
+      capitalDeployedINR,
+      maxRisk1RINR,
+      grossTargetProfitINR,
+      friction,
+      netProfitINR,
+      netProfitPct,
+      grossToFrictionRatio,
+      netExpectancyR,
+      approved: false,
+      vetoCode: 'VETO_SESSION_CUTOFF_LOCKED',
+      verdictReason: cutoffCheck.reason,
+      interAgentConsensus,
+    };
+  }
 
   // Gate 1: Duplicate Open Position Check
   if (confirmedScriptStatus === 'DUPLICATE_OPEN') {
@@ -689,7 +724,8 @@ let vetoSeqCounter = 500;
 export function executeIntelligentScanAndDeploy(
   quotes: Record<string, MarketQuote>,
   existingOrders: PaperTradeOrder[],
-  scope: 'ALL' | 'NSE_FNO' | 'NSE_CASH' | 'BSE_CASH' | 'MCX' = 'ALL'
+  scope: 'ALL' | 'NSE_FNO' | 'NSE_CASH' | 'BSE_CASH' | 'MCX' = 'ALL',
+  isManualOverride: boolean = true
 ): ScanAndDeployAuditBatch {
   const now = new Date();
   const orderDate = formatOrderDate(now);
@@ -821,6 +857,7 @@ export function executeIntelligentScanAndDeploy(
       isOptionContract: true,
       interAgentConsensus: fnoConsensus,
       minRequiredNetProfitPct: macroSnapshot.requiredMinNetProfitPct,
+      isManualOverride,
     });
 
     evaluations.push(fnoEval);
@@ -940,6 +977,7 @@ export function executeIntelligentScanAndDeploy(
         isOptionContract: false,
         interAgentConsensus: nseConsensus,
         minRequiredNetProfitPct: macroSnapshot.requiredMinNetProfitPct,
+        isManualOverride,
       });
 
       evaluations.push(nseEval);
@@ -1057,6 +1095,7 @@ export function executeIntelligentScanAndDeploy(
         isOptionContract: false,
         interAgentConsensus: bseConsensus,
         minRequiredNetProfitPct: macroSnapshot.requiredMinNetProfitPct,
+        isManualOverride,
       });
 
       evaluations.push(bseEval);
@@ -1156,6 +1195,7 @@ export function executeIntelligentScanAndDeploy(
         isOptionContract: false,
         interAgentConsensus: mcxConsensus,
         minRequiredNetProfitPct: macroSnapshot.requiredMinNetProfitPct,
+        isManualOverride,
       });
 
       evaluations.push(mcxEval);
@@ -1235,6 +1275,7 @@ export function executeIntelligentScanAndDeploy(
         isOptionContract: false,
         interAgentConsensus: goldConsensus,
         minRequiredNetProfitPct: macroSnapshot.requiredMinNetProfitPct,
+        isManualOverride,
       });
 
       evaluations.push(goldEval);

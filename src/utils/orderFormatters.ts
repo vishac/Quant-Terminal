@@ -224,16 +224,242 @@ function stepBackIfWeekendOrHoliday(candidate: Date): {
 }
 
 /**
+ * Parses a `dd-mmm-yyyy` date string (e.g. "09-Nov-2026") into local IST midnight milliseconds
+ * (using the same getNowInIST coordinate space) for exact calendar-day comparisons.
+ */
+export function parseDdMmmYyyyToISTMidnightMs(dateStr?: string | null): number | null {
+  if (!dateStr || typeof dateStr !== 'string') return null;
+  const match = dateStr.trim().match(/\b(\d{1,2})-([A-Za-z]{3})-(\d{4})\b/);
+  if (!match) return null;
+  const day = parseInt(match[1], 10);
+  const monthAbbr = match[2].charAt(0).toUpperCase() + match[2].slice(1, 3).toLowerCase();
+  const monthIdx = MONTH_NAMES.indexOf(monthAbbr as (typeof MONTH_NAMES)[number]);
+  const year = parseInt(match[3], 10);
+  if (monthIdx === -1 || !Number.isFinite(day) || !Number.isFinite(year)) return null;
+  return new Date(year, monthIdx, day, 0, 0, 0, 0).getTime();
+}
+
+/**
+ * Evaluates whether a new trade entry is allowed at the current IST clock time:
+ * - Autonomous NSE/BSE (NSE_CASH, BSE_CASH, NSE_FNO): Strictly 09:15 IST to 15:15 IST on trading days.
+ *   Blocked at or after 15:15 IST (`totalMinutes >= 15 * 60 + 15`).
+ * - Manual Override NSE/BSE: Allowed from 09:15 IST up to 15:25 IST (`totalMinutes < 15 * 60 + 25`)
+ *   for non-expiring / carry-forward setups; blocked at or after 15:25 IST.
+ *   Note: Intraday Cash MIS (`NSE_CASH` / `BSE_CASH`) and same-day expiring F&O (`expiryDate === today`)
+ *   are blocked at or after 15:20 IST (and same-day expiring F&O is blocked at or after 15:15 IST)
+ *   because 15:20 IST is the mandatory square-off deadline.
+ * - MCX Commodities (`MCX_FUTURES`, `MCX_OPTIONS`): 09:00 IST to 23:15 IST (autonomous) / 23:25 IST (manual).
+ */
+export function checkSessionEntryCutoffWindow(params: {
+  segment: 'NSE_FNO' | 'NSE_CASH' | 'BSE_CASH' | 'MCX_FUTURES' | 'MCX_OPTIONS';
+  isManualOverride?: boolean;
+  expiryDateStr?: string | null;
+  referenceDate?: Date;
+}): {
+  allowed: boolean;
+  istTimeStr: string;
+  istDateStr: string;
+  reason: string;
+} {
+  const { segment, isManualOverride = false, expiryDateStr, referenceDate } = params;
+  const istNow = referenceDate ? getNowInIST(referenceDate) : getNowInIST();
+  const istDateStr = formatPlainDateFromLocal(istNow);
+  const istTimeStr = formatOrderTime(istNow);
+  const dayOfWeek = istNow.getDay();
+  const totalMinutes = istNow.getHours() * 60 + istNow.getMinutes();
+
+  if (dayOfWeek === 0 || dayOfWeek === 6) {
+    return {
+      allowed: false,
+      istTimeStr,
+      istDateStr,
+      reason: `VETOED (Weekend Market Closed): ${istDateStr} ${istTimeStr} IST is a weekend. New entries resume next trading day at 09:15 IST.`,
+    };
+  }
+
+  const holidayName = KNOWN_HOLIDAYS_DD_MMM_YYYY[istDateStr];
+  if (holidayName) {
+    return {
+      allowed: false,
+      istTimeStr,
+      istDateStr,
+      reason: `VETOED (Exchange Holiday — ${holidayName}): Market is closed on ${istDateStr}.`,
+    };
+  }
+
+  const isMcx = segment === 'MCX_FUTURES' || segment === 'MCX_OPTIONS';
+  if (isMcx) {
+    const openMins = 9 * 60; // 09:00 IST
+    const cutoffMins = isManualOverride ? 23 * 60 + 25 : 23 * 60 + 15; // 23:25 manual / 23:15 auto
+    if (totalMinutes < openMins || totalMinutes >= cutoffMins) {
+      return {
+        allowed: false,
+        istTimeStr,
+        istDateStr,
+        reason: `VETOED (MCX Session Cutoff): Current time ${istTimeStr} IST is outside the MCX ${isManualOverride ? 'Manual Override (09:00–23:25 IST)' : 'Autonomous Entry (09:00–23:15 IST)'} window.`,
+      };
+    }
+    return { allowed: true, istTimeStr, istDateStr, reason: 'Within MCX entry window.' };
+  }
+
+  // NSE / BSE (NSE_CASH, BSE_CASH, NSE_FNO)
+  const openMins = 9 * 60 + 15; // 09:15 IST
+  const autoCutoffMins = 15 * 60 + 15; // 15:15 IST
+  const squareOffMins = 15 * 60 + 20;  // 15:20 IST
+  const manualCutoffMins = 15 * 60 + 25; // 15:25 IST
+
+  if (totalMinutes < openMins) {
+    return {
+      allowed: false,
+      istTimeStr,
+      istDateStr,
+      reason: `VETOED (Pre-Market Lockout): Current time ${istTimeStr} IST is prior to 09:15 IST NSE/BSE market open.`,
+    };
+  }
+
+  // Check if contract expires today or in the past
+  const todayMidnightMs = new Date(istNow.getFullYear(), istNow.getMonth(), istNow.getDate(), 0, 0, 0, 0).getTime();
+  const expiryMidnightMs = parseDdMmmYyyyToISTMidnightMs(expiryDateStr);
+  const isExpiringTodayOrPast =
+    expiryMidnightMs !== null && expiryMidnightMs <= todayMidnightMs;
+
+  if (isExpiringTodayOrPast && totalMinutes >= autoCutoffMins) {
+    return {
+      allowed: false,
+      istTimeStr,
+      istDateStr,
+      reason: `VETOED (Expiring Contract 15:15 IST Cutoff): Contract expires on ${expiryDateStr} and current time is ${istTimeStr} IST (>= 15:15 IST). Expiring F&O series cannot be entered after 15:15 IST prior to the 15:20 IST expiry square-off.`,
+    };
+  }
+
+  if (!isManualOverride && totalMinutes >= autoCutoffMins) {
+    return {
+      allowed: false,
+      istTimeStr,
+      istDateStr,
+      reason: `VETOED (15:15 IST Autonomous Cutoff): Autonomous NSE/BSE entries are blocked at or after 15:15 IST (Current: ${istTimeStr} IST). Manual overrides for non-expiring setups are permitted until 15:25 IST.`,
+    };
+  }
+
+  // Intraday Cash MIS must square off at 15:20 IST, so even manual overrides cannot open new intraday MIS at/after 15:20 IST
+  if ((segment === 'NSE_CASH' || segment === 'BSE_CASH') && totalMinutes >= squareOffMins) {
+    return {
+      allowed: false,
+      istTimeStr,
+      istDateStr,
+      reason: `VETOED (15:20 IST Intraday MIS Square-Off Passed): Intraday Cash MIS positions auto square-off at 15:20 IST (Current: ${istTimeStr} IST).`,
+    };
+  }
+
+  if (isManualOverride && totalMinutes >= manualCutoffMins) {
+    return {
+      allowed: false,
+      istTimeStr,
+      istDateStr,
+      reason: `VETOED (15:25 IST Manual Override Cutoff): All new NSE/BSE entries are locked at or after 15:25 IST (Current: ${istTimeStr} IST) ahead of the 15:30 IST market close. Next entry window opens at 09:15 IST.`,
+    };
+  }
+
+  return {
+    allowed: true,
+    istTimeStr,
+    istDateStr,
+    reason: isManualOverride
+      ? `Manual Override Entry Permitted (${istTimeStr} IST < 15:25 IST cutoff).`
+      : `Autonomous Entry Permitted (${istTimeStr} IST < 15:15 IST cutoff).`,
+  };
+}
+
+/**
+ * Evaluates whether an existing `OPEN` order must be deterministically squared off
+ * based on the 15:20 IST Intraday & Expiry Auto Square-Off rule (with full catch-up
+ * if the app is opened after 15:20 IST or on a subsequent day):
+ * - Intraday Cash (`NSE_CASH` / `BSE_CASH`): Squares off at >= 15:20 IST on orderDate, or immediately if orderDate < today.
+ * - Expiring Derivatives (`NSE_FNO` / `MCX_FUTURES` / `MCX_OPTIONS`): Squares off if `expiryDate < today`,
+ *   OR if `expiryDate === today` and current IST time is >= 15:20 IST (23:20 IST for MCX).
+ * - Non-Expiring Derivatives (`expiryDate > today`): Allowed to carry forward overnight (`shouldSquareOff: false`).
+ */
+export function checkShouldAutoSquareOffOrder(params: {
+  segment: 'NSE_FNO' | 'NSE_CASH' | 'BSE_CASH' | 'MCX_FUTURES' | 'MCX_OPTIONS';
+  status: string;
+  orderDate?: string | null;
+  expiryDate?: string | null;
+  referenceDate?: Date;
+}): {
+  shouldSquareOff: boolean;
+  exitReason: string | null;
+  squareOffTimeStr: string;
+  squareOffDateStr: string;
+} {
+  const { segment, status, orderDate, expiryDate, referenceDate } = params;
+  const istNow = referenceDate ? getNowInIST(referenceDate) : getNowInIST();
+  const todayStr = formatPlainDateFromLocal(istNow);
+  const nowTimeStr = formatOrderTime(istNow);
+  const todayMidnightMs = new Date(istNow.getFullYear(), istNow.getMonth(), istNow.getDate(), 0, 0, 0, 0).getTime();
+  const totalMinutes = istNow.getHours() * 60 + istNow.getMinutes();
+
+  if (status !== 'OPEN') {
+    return { shouldSquareOff: false, exitReason: null, squareOffTimeStr: nowTimeStr, squareOffDateStr: todayStr };
+  }
+
+  // 1. Intraday Cash MIS (`NSE_CASH` / `BSE_CASH`) -> Daily 15:20 IST Auto Square-Off
+  if (segment === 'NSE_CASH' || segment === 'BSE_CASH') {
+    const orderMidnightMs = parseDdMmmYyyyToISTMidnightMs(orderDate);
+    if (orderMidnightMs !== null && orderMidnightMs < todayMidnightMs) {
+      return {
+        shouldSquareOff: true,
+        exitReason: `Statutory 15:20 IST Intraday MIS Auto-Square-Off (Session ${orderDate})`,
+        squareOffTimeStr: '[15]:20:00',
+        squareOffDateStr: orderDate || todayStr,
+      };
+    }
+    if (totalMinutes >= 15 * 60 + 20) {
+      return {
+        shouldSquareOff: true,
+        exitReason: 'Statutory 15:20 IST Intraday MIS Auto-Square-Off (Pre-Close Mandate)',
+        squareOffTimeStr: totalMinutes === 15 * 60 + 20 ? nowTimeStr : '[15]:20:00',
+        squareOffDateStr: todayStr,
+      };
+    }
+    return { shouldSquareOff: false, exitReason: null, squareOffTimeStr: nowTimeStr, squareOffDateStr: todayStr };
+  }
+
+  // 2. Derivatives (`NSE_FNO`, `MCX_FUTURES`, `MCX_OPTIONS`) -> Check Expiry Date
+  const expiryMidnightMs = parseDdMmmYyyyToISTMidnightMs(expiryDate);
+  const isMcx = segment === 'MCX_FUTURES' || segment === 'MCX_OPTIONS';
+  const expirySquareOffMins = isMcx ? 23 * 60 + 20 : 15 * 60 + 20;
+
+  if (expiryMidnightMs !== null) {
+    // Already past expiry day -> Immediate catch-up expiry square-off
+    if (expiryMidnightMs < todayMidnightMs) {
+      return {
+        shouldSquareOff: true,
+        exitReason: `Statutory 15:20 IST Expiry Settlement Auto-Square-Off (EXP: ${expiryDate})`,
+        squareOffTimeStr: isMcx ? '[23]:20:00' : '[15]:20:00',
+        squareOffDateStr: expiryDate || todayStr,
+      };
+    }
+    // Today IS the contract's expiry day (e.g. 09-Nov-2026) and IST clock is >= 15:20 IST
+    if (expiryMidnightMs === todayMidnightMs && totalMinutes >= expirySquareOffMins) {
+      return {
+        shouldSquareOff: true,
+        exitReason: `Statutory 15:20 IST Expiry Day Auto-Square-Off (EXP: ${expiryDate})`,
+        squareOffTimeStr: totalMinutes === expirySquareOffMins ? nowTimeStr : (isMcx ? '[23]:20:00' : '[15]:20:00'),
+        squareOffDateStr: todayStr,
+      };
+    }
+  }
+
+  // Non-expiring F&O contract (`expiryMidnightMs > todayMidnightMs`) -> Allowed to carry forward overnight!
+  return { shouldSquareOff: false, exitReason: null, squareOffTimeStr: nowTimeStr, squareOffDateStr: todayStr };
+}
+
+/**
  * Generates the official NSE NIFTY 50 Option Chain expiry dropdown series
  * matching https://www.nseindia.com/option-chain:
  * - NSE NIFTY Weekly Expiry is every TUESDAY (advanced to Monday if Tuesday is an NSE holiday).
- * - From 04-Nov-2026 IST:
- *   1. 09-Nov-2026 (Mon — advanced from Tue 10-Nov-2026 Diwali Balipratipada)
- *   2. 17-Nov-2026 (Tue — Weekly)
- *   3. 23-Nov-2026 (Mon — Monthly, advanced from Tue 24-Nov-2026 Guru Nanak Jayanti)
- *   4. 01-Dec-2026 (Tue — Weekly)
- *   5. 08-Dec-2026 (Tue — Weekly)
- *   6. 29-Dec-2026 (Tue — Dec Monthly)
+ * - Automatically rolls past today's expiry series once the holiday-adjusted expiry date is in the past
+ *   OR is today and current IST time is >= 15:15 IST (`15:15 IST` entry cutoff).
  */
 export function getOfficialNseOptionChainExpiries(referenceDate?: Date): Array<{
   dateStr: string; // e.g., "09-Nov-2026"
@@ -244,6 +470,9 @@ export function getOfficialNseOptionChainExpiries(referenceDate?: Date): Array<{
   wasHolidayAdjusted: boolean;
 }> {
   const istNow = referenceDate ? getNowInIST(referenceDate) : getNowInIST();
+  const todayMidnightMs = new Date(istNow.getFullYear(), istNow.getMonth(), istNow.getDate(), 0, 0, 0, 0).getTime();
+  const totalMinutes = istNow.getHours() * 60 + istNow.getMinutes();
+
   const findLastTuesdayOfMonth = (y: number, m: number): Date => {
     const lastDay = new Date(y, m + 1, 0, 15, 30, 0);
     const diff = (lastDay.getDay() - 2 + 7) % 7; // 2 = Tuesday
@@ -268,11 +497,6 @@ export function getOfficialNseOptionChainExpiries(referenceDate?: Date): Array<{
     probe.setDate(cursor.getDate() + d);
     if (probe.getDay() !== 2) continue; // Only NSE Expiry Tuesdays
 
-    // If today is Tuesday and market already closed (>= 15:30 IST), skip today's expired series
-    if (d === 0 && (istNow.getHours() > 15 || (istNow.getHours() === 15 && istNow.getMinutes() >= 30))) {
-      continue;
-    }
-
     const lastTue = findLastTuesdayOfMonth(probe.getFullYear(), probe.getMonth());
     const isMonthly =
       probe.getFullYear() === lastTue.getFullYear() &&
@@ -280,6 +504,26 @@ export function getOfficialNseOptionChainExpiries(referenceDate?: Date): Array<{
       probe.getDate() === lastTue.getDate();
 
     const { adjusted, wasAdjusted, holidayName, scheduledStr } = stepBackIfWeekendOrHoliday(probe);
+    const adjustedMidnightMs = new Date(
+      adjusted.getFullYear(),
+      adjusted.getMonth(),
+      adjusted.getDate(),
+      0,
+      0,
+      0,
+      0
+    ).getTime();
+
+    // Critical Fix: Check the holiday-adjusted expiry date (e.g. Monday 09-Nov-2026 stepped back from Tue 10-Nov-2026).
+    // If the adjusted expiry date is already in the past, OR is today and IST time is >= 15:15 IST (entry cutoff),
+    // skip this expiring series so new trades use the next active series (17-Nov-2026)!
+    if (adjustedMidnightMs < todayMidnightMs) {
+      continue;
+    }
+    if (adjustedMidnightMs === todayMidnightMs && totalMinutes >= 15 * 60 + 15) {
+      continue;
+    }
+
     const dateStr = formatPlainDateFromLocal(adjusted);
     if (seen.has(dateStr)) continue;
     seen.add(dateStr);

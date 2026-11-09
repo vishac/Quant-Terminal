@@ -90,6 +90,7 @@ export interface InstitutionalStockPick {
     priceToBook: number;
     evToEbitda: number;
   };
+  exactDecimalScore?: number;
 }
 
 // All static picks permanently removed per trading safety policy.
