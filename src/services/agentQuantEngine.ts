@@ -151,11 +151,17 @@ export function deriveLiveAutonomousAgents(
   const otmSellStrike = niftyPct >= 0 ? atmNiftyStrike - 100 : atmNiftyStrike + 100;
   const otmBuyStrike = niftyPct >= 0 ? atmNiftyStrike - 200 : atmNiftyStrike + 200;
 
-  // Find top equity mover in live quotes
-  const equitySymbols = [
-    'RELIANCE.NS', 'TCS.NS', 'HDFCBANK.NS', 'INFY.NS', 'ICICIBANK.NS', 
-    'BHARTIARTL.NS', 'SBIN.NS', 'LT.NS', 'TRENT.NS', 'BEL.NS', 'HAL.NS'
-  ];
+  // Find top equity mover across all live .NS equities in quotes (fallback to core list if empty)
+  const dynamicNseSymbols = Object.keys(quotes).filter(
+    (sym) => sym.endsWith('.NS') && quotes[sym]?.price != null && (quotes[sym]?.price ?? 0) > 0
+  );
+  const equitySymbols =
+    dynamicNseSymbols.length > 0
+      ? dynamicNseSymbols
+      : [
+          'RELIANCE.NS', 'TCS.NS', 'HDFCBANK.NS', 'INFY.NS', 'ICICIBANK.NS',
+          'BHARTIARTL.NS', 'SBIN.NS', 'LT.NS', 'TRENT.NS', 'BEL.NS', 'HAL.NS'
+        ];
   let topEquitySymbol = 'TCS';
   let topEquityQuote = quotes['TCS.NS'];
   let maxAbsChange = -1;

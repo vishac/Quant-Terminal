@@ -209,45 +209,100 @@ const TICK_PERSISTENCE_STORAGE_KEY = 'jarvis_symbol_tick_persistence_v1';
 // ============================================================================
 
 export const SYMBOL_SECTOR_MAP: Record<string, NseSectorCode> = {
-  HDFCBANK: 'BANKING',
-  ICICIBANK: 'BANKING',
-  SBIN: 'BANKING',
-  AXISBANK: 'BANKING',
-  BAJFINANCE: 'BANKING',
-  TCS: 'IT',
-  INFY: 'IT',
-  HCLTECH: 'IT',
-  ONGC: 'ENERGY_UPSTREAM',
-  RELIANCE: 'ENERGY_UPSTREAM',
-  CRUDEOIL: 'ENERGY_UPSTREAM',
-  CRUDEOILM: 'ENERGY_UPSTREAM',
-  ASIANPAINT: 'OIL_PAINT_AVIATION_CONSUMERS',
-  INDIGO: 'OIL_PAINT_AVIATION_CONSUMERS',
-  BPCL: 'OIL_PAINT_AVIATION_CONSUMERS',
-  TATASTEEL: 'METALS',
-  HINDALCO: 'METALS',
-  JSWSTEEL: 'METALS',
-  GOLD: 'METALS',
-  GOLDM: 'METALS',
-  SUNPHARMA: 'PHARMA',
-  CIPLA: 'PHARMA',
-  DRREDDY: 'PHARMA',
-  HAL: 'DEFENSE_CAPEX',
-  BEL: 'DEFENSE_CAPEX',
-  SOLARINDS: 'DEFENSE_CAPEX',
-  COCHINSHIP: 'DEFENSE_CAPEX',
-  LT: 'DEFENSE_CAPEX',
-  NTPC: 'DEFENSE_CAPEX',
-  POLYCAB: 'DEFENSE_CAPEX',
-  ULTRACEMCO: 'CEMENT_INFRA',
-  INDIACEM: 'CEMENT_INFRA',
-  TRENT: 'RETAIL_TELECOM',
-  TITAN: 'RETAIL_TELECOM',
-  BHARTIARTL: 'RETAIL_TELECOM',
-  DIXON: 'RETAIL_TELECOM',
+  // 1. BANKING, PSU BANKS, NBFCs, INSURANCE & CAPITAL MARKETS
+  HDFCBANK: 'BANKING', ICICIBANK: 'BANKING', SBIN: 'BANKING', AXISBANK: 'BANKING', KOTAKBANK: 'BANKING',
+  INDUSINDBK: 'BANKING', BANKBARODA: 'BANKING', PNB: 'BANKING', CANBK: 'BANKING', UNIONBANK: 'BANKING',
+  INDIANB: 'BANKING', BANKINDIA: 'BANKING', MAHABANK: 'BANKING', IOB: 'BANKING', UCOBANK: 'BANKING',
+  CENTRALBK: 'BANKING', FEDERALBNK: 'BANKING', IDFCFIRSTB: 'BANKING', AUBANK: 'BANKING', BANDHANBNK: 'BANKING',
+  YESBANK: 'BANKING', RBLBANK: 'BANKING', KARURVYSYA: 'BANKING', CUB: 'BANKING', BAJFINANCE: 'BANKING',
+  BAJAJFINSV: 'BANKING', JIOFIN: 'BANKING', CHOLAFIN: 'BANKING', SHRIRAMFIN: 'BANKING', PFC: 'BANKING',
+  RECLTD: 'BANKING', IRFC: 'BANKING', HUDCO: 'BANKING', IREDA: 'BANKING', MUTHOOTFIN: 'BANKING',
+  MANAPPURAM: 'BANKING', POONAWALLA: 'BANKING', SUNDARMFIN: 'BANKING', LTF: 'BANKING', ABCAPITAL: 'BANKING',
+  LICHSGFIN: 'BANKING', PNBHOUSING: 'BANKING', AAVAS: 'BANKING', HOMEFIRST: 'BANKING', APTUS: 'BANKING',
+  SBILIFE: 'BANKING', HDFCLIFE: 'BANKING', ICICIPRULI: 'BANKING', ICICIGI: 'BANKING', LICI: 'BANKING',
+  MFSL: 'BANKING', STARHEALTH: 'BANKING', ANGELONE: 'BANKING', BSE: 'BANKING', CDSL: 'BANKING',
+  MCX: 'BANKING', KFINTECH: 'BANKING', CAMS: 'BANKING', MOTILALOFS: 'BANKING', NUVAMA: 'BANKING',
+  ANANDRATHI: 'BANKING', IIFL: 'BANKING', JMFINANCIL: 'BANKING', PAYTM: 'BANKING', POLICYBZR: 'BANKING',
+
+  // 2. IT SERVICES, SOFTWARE & EMS ELECTRONICS
+  TCS: 'IT', INFY: 'IT', HCLTECH: 'IT', WIPRO: 'IT', TECHM: 'IT', LTIM: 'IT', PERSISTENT: 'IT',
+  COFORGE: 'IT', MPHASIS: 'IT', KPITTECH: 'IT', TATAELXSI: 'IT', OFSS: 'IT', NAUKRI: 'IT',
+  DIXON: 'IT', KAYNES: 'IT', SYRMA: 'IT', NETWEB: 'IT', PGEL: 'IT', AMBER: 'IT', SAGILITY: 'IT',
+  FSL: 'IT', BSOFT: 'IT', ZENSARTECH: 'IT', SONATSOFTW: 'IT', LATENTVIEW: 'IT', HAPPSTMNDS: 'IT',
+  INTELLECT: 'IT', TANLA: 'IT', ROUTE: 'IT', AFFLE: 'IT', MAPMYINDIA: 'IT', RATEGAIN: 'IT',
+  TEJASNET: 'IT', HFCL: 'IT', ITI: 'IT', CYIENT: 'IT', MASTEK: 'IT', NEWGEN: 'IT',
+
+  // 3. ENERGY UPSTREAM, OIL & GAS, POWER UTILITIES
+  ONGC: 'ENERGY_UPSTREAM', RELIANCE: 'ENERGY_UPSTREAM', OIL: 'ENERGY_UPSTREAM', GAIL: 'ENERGY_UPSTREAM',
+  PETRONET: 'ENERGY_UPSTREAM', GSPL: 'ENERGY_UPSTREAM', CHENNPETRO: 'ENERGY_UPSTREAM', MRPL: 'ENERGY_UPSTREAM',
+  CRUDEOIL: 'ENERGY_UPSTREAM', CRUDEOILM: 'ENERGY_UPSTREAM', NATURALGAS: 'ENERGY_UPSTREAM',
+
+  // 4. CRUDE CONSUMERS: PAINTS, AVIATION, OMCs, TYRES & CHEMICALS
+  ASIANPAINT: 'OIL_PAINT_AVIATION_CONSUMERS', BERGEPAINT: 'OIL_PAINT_AVIATION_CONSUMERS',
+  KANSAINER: 'OIL_PAINT_AVIATION_CONSUMERS', INDIGO: 'OIL_PAINT_AVIATION_CONSUMERS',
+  BPCL: 'OIL_PAINT_AVIATION_CONSUMERS', IOC: 'OIL_PAINT_AVIATION_CONSUMERS', HINDPETRO: 'OIL_PAINT_AVIATION_CONSUMERS',
+  IGL: 'OIL_PAINT_AVIATION_CONSUMERS', MGL: 'OIL_PAINT_AVIATION_CONSUMERS', GUJGASLTD: 'OIL_PAINT_AVIATION_CONSUMERS',
+  PIDILITIND: 'OIL_PAINT_AVIATION_CONSUMERS', SRF: 'OIL_PAINT_AVIATION_CONSUMERS', PIIND: 'OIL_PAINT_AVIATION_CONSUMERS',
+  UPL: 'OIL_PAINT_AVIATION_CONSUMERS', COROMANDEL: 'OIL_PAINT_AVIATION_CONSUMERS', DEEPAKNTR: 'OIL_PAINT_AVIATION_CONSUMERS',
+  TATACHEM: 'OIL_PAINT_AVIATION_CONSUMERS', AARTIIND: 'OIL_PAINT_AVIATION_CONSUMERS', ATUL: 'OIL_PAINT_AVIATION_CONSUMERS',
+  NAVINFLUOR: 'OIL_PAINT_AVIATION_CONSUMERS', CLEAN: 'OIL_PAINT_AVIATION_CONSUMERS', MRF: 'OIL_PAINT_AVIATION_CONSUMERS',
+  APOLLOTYRE: 'OIL_PAINT_AVIATION_CONSUMERS', BALKRISIND: 'OIL_PAINT_AVIATION_CONSUMERS', CEATLTD: 'OIL_PAINT_AVIATION_CONSUMERS',
+
+  // 5. METALS, MINING & PRECIOUS BULLION
+  TATASTEEL: 'METALS', JSWSTEEL: 'METALS', HINDALCO: 'METALS', VEDL: 'METALS', JINDALSTEL: 'METALS',
+  COALINDIA: 'METALS', NMDC: 'METALS', SAIL: 'METALS', NATIONALUM: 'METALS', HINDCOPPER: 'METALS',
+  APLAPOLLO: 'METALS', LLOYDSME: 'METALS', GRAVITA: 'METALS', RKFORGE: 'METALS', HINDZINC: 'METALS',
+  JSL: 'METALS', WELCORP: 'METALS', RATNAMANI: 'METALS', GOLD: 'METALS', GOLDM: 'METALS', SILVER: 'METALS', SILVERM: 'METALS',
+
+  // 6. PHARMA, CDMO, API & HEALTHCARE HOSPITALS
+  SUNPHARMA: 'PHARMA', CIPLA: 'PHARMA', DRREDDY: 'PHARMA', DIVISLAB: 'PHARMA', APOLLOHOSP: 'PHARMA',
+  LUPIN: 'PHARMA', AUROPHARMA: 'PHARMA', TORNTPHARM: 'PHARMA', ZYDUSLIFE: 'PHARMA', BIOCON: 'PHARMA',
+  LAURUSLABS: 'PHARMA', ALKEM: 'PHARMA', MANKIND: 'PHARMA', MAXHEALTH: 'PHARMA', FORTIS: 'PHARMA',
+  SYNGENE: 'PHARMA', JBCHEPHARM: 'PHARMA', GLENMARK: 'PHARMA', GRANULES: 'PHARMA', NATCOPHARM: 'PHARMA',
+  AJANTPHARM: 'PHARMA', ERIS: 'PHARMA', CAPLIPOINT: 'PHARMA', SUVENPHAR: 'PHARMA', PIRAMALPH: 'PHARMA',
+  RAINBOW: 'PHARMA', KIMS: 'PHARMA', ASTERDM: 'PHARMA', MEDANTA: 'PHARMA', NH: 'PHARMA',
+  METROPOLIS: 'PHARMA', LALPATHLAB: 'PHARMA', VIJAYA: 'PHARMA', WOCKPHARMA: 'PHARMA', NEULANDLAB: 'PHARMA',
+
+  // 7. DEFENCE, SOVEREIGN CAPEX, RAILWAYS, POWER & CAPITAL GOODS
+  HAL: 'DEFENSE_CAPEX', BEL: 'DEFENSE_CAPEX', BDL: 'DEFENSE_CAPEX', MAZDOCK: 'DEFENSE_CAPEX',
+  COCHINSHIP: 'DEFENSE_CAPEX', GRSE: 'DEFENSE_CAPEX', SOLARINDS: 'DEFENSE_CAPEX', DATAPATTNS: 'DEFENSE_CAPEX',
+  ZENTEC: 'DEFENSE_CAPEX', PARAS: 'DEFENSE_CAPEX', MTARTECH: 'DEFENSE_CAPEX', ASTRAMICRO: 'DEFENSE_CAPEX',
+  BEML: 'DEFENSE_CAPEX', BHEL: 'DEFENSE_CAPEX', RVNL: 'DEFENSE_CAPEX', IRCON: 'DEFENSE_CAPEX',
+  RAILTEL: 'DEFENSE_CAPEX', TITAGARH: 'DEFENSE_CAPEX', JWL: 'DEFENSE_CAPEX', LT: 'DEFENSE_CAPEX',
+  NTPC: 'DEFENSE_CAPEX', POWERGRID: 'DEFENSE_CAPEX', ADANIPOWER: 'DEFENSE_CAPEX', TATAPOWER: 'DEFENSE_CAPEX',
+  JSWENERGY: 'DEFENSE_CAPEX', NHPC: 'DEFENSE_CAPEX', SJVN: 'DEFENSE_CAPEX', NLCINDIA: 'DEFENSE_CAPEX',
+  TORNTPOWER: 'DEFENSE_CAPEX', CESC: 'DEFENSE_CAPEX', ADANIENSOL: 'DEFENSE_CAPEX', ADANIGREEN: 'DEFENSE_CAPEX',
+  SUZLON: 'DEFENSE_CAPEX', INOXWIND: 'DEFENSE_CAPEX', KPIGREEN: 'DEFENSE_CAPEX', WAAREEENER: 'DEFENSE_CAPEX',
+  PREMIERENE: 'DEFENSE_CAPEX', ABB: 'DEFENSE_CAPEX', SIEMENS: 'DEFENSE_CAPEX', CUMMINSIND: 'DEFENSE_CAPEX',
+  CGPOWER: 'DEFENSE_CAPEX', POLYCAB: 'DEFENSE_CAPEX', KEI: 'DEFENSE_CAPEX', HAVELLS: 'DEFENSE_CAPEX',
+  THERMAX: 'DEFENSE_CAPEX', ELECON: 'DEFENSE_CAPEX', TRITURBINE: 'DEFENSE_CAPEX', JYOTICNC: 'DEFENSE_CAPEX',
+
+  // 8. CEMENT, REALTY & URBAN INFRASTRUCTURE
+  ULTRACEMCO: 'CEMENT_INFRA', GRASIM: 'CEMENT_INFRA', AMBUJACEM: 'CEMENT_INFRA', SHREECEM: 'CEMENT_INFRA',
+  ACC: 'CEMENT_INFRA', DALBHARAT: 'CEMENT_INFRA', JKCEMENT: 'CEMENT_INFRA', RAMCOCEM: 'CEMENT_INFRA',
+  INDIACEM: 'CEMENT_INFRA', ADANIPORTS: 'CEMENT_INFRA', ADANIENT: 'CEMENT_INFRA', CONCOR: 'CEMENT_INFRA',
+  JSWINFRA: 'CEMENT_INFRA', GMRINFRA: 'CEMENT_INFRA', DLF: 'CEMENT_INFRA', GODREJPROP: 'CEMENT_INFRA',
+  MACROTECH: 'CEMENT_INFRA', OBEROIRLTY: 'CEMENT_INFRA', PRESTIGE: 'CEMENT_INFRA', PHOENIXLTD: 'CEMENT_INFRA',
+  BRIGADE: 'CEMENT_INFRA', NBCC: 'CEMENT_INFRA', NCC: 'CEMENT_INFRA', PNCINFRA: 'CEMENT_INFRA',
+  KNRCON: 'CEMENT_INFRA', HGINFRA: 'CEMENT_INFRA', ASTRAL: 'CEMENT_INFRA', SUPREMEIND: 'CEMENT_INFRA',
+
+  // 9. RETAIL, CONSUMER, AUTO, TELECOM & JEWELLERY
+  TRENT: 'RETAIL_TELECOM', TITAN: 'RETAIL_TELECOM', KALYANKJIL: 'RETAIL_TELECOM', SENCO: 'RETAIL_TELECOM',
+  BHARTIARTL: 'RETAIL_TELECOM', INDUSTOWER: 'RETAIL_TELECOM', IDEA: 'RETAIL_TELECOM', ITC: 'RETAIL_TELECOM',
+  HINDUNILVR: 'RETAIL_TELECOM', NESTLEIND: 'RETAIL_TELECOM', BRITANNIA: 'RETAIL_TELECOM', TATACONSUM: 'RETAIL_TELECOM',
+  GODREJCP: 'RETAIL_TELECOM', DABUR: 'RETAIL_TELECOM', MARICO: 'RETAIL_TELECOM', COLPAL: 'RETAIL_TELECOM',
+  VBL: 'RETAIL_TELECOM', UNITDSPR: 'RETAIL_TELECOM', RADICO: 'RETAIL_TELECOM', PAGEIND: 'RETAIL_TELECOM',
+  JUBLFOOD: 'RETAIL_TELECOM', DEVYANI: 'RETAIL_TELECOM', ZOMATO: 'RETAIL_TELECOM', SWIGGY: 'RETAIL_TELECOM',
+  DMART: 'RETAIL_TELECOM', NYKAA: 'RETAIL_TELECOM', INDHOTEL: 'RETAIL_TELECOM', EIHOTEL: 'RETAIL_TELECOM',
+  CHALET: 'RETAIL_TELECOM', VOLTAS: 'RETAIL_TELECOM', BLUESTARCO: 'RETAIL_TELECOM', CROMPTON: 'RETAIL_TELECOM',
+  MARUTI: 'RETAIL_TELECOM', 'M&M': 'RETAIL_TELECOM', MM: 'RETAIL_TELECOM', TATAMOTORS: 'RETAIL_TELECOM',
+  BAJAJAUTO: 'RETAIL_TELECOM', EICHERMOT: 'RETAIL_TELECOM', TVSMOTOR: 'RETAIL_TELECOM', HEROMOTOCO: 'RETAIL_TELECOM',
+  ASHOKLEY: 'RETAIL_TELECOM', BHARATFORG: 'RETAIL_TELECOM', MOTHERSON: 'RETAIL_TELECOM', BOSCHLTD: 'RETAIL_TELECOM',
+  TIINDIA: 'RETAIL_TELECOM', EXIDEIND: 'RETAIL_TELECOM', AMARAJABAT: 'RETAIL_TELECOM', SONACOMS: 'RETAIL_TELECOM',
+  ENDURANCE: 'RETAIL_TELECOM', UNOMINDA: 'RETAIL_TELECOM', OLECTRA: 'RETAIL_TELECOM', DELHIVERY: 'RETAIL_TELECOM',
 };
 
-export function resolveSymbolSector(symbol: string): NseSectorCode {
+export function resolveSymbolSector(symbol: string, rawName?: string): NseSectorCode {
   const clean = symbol
     .toUpperCase()
     .replace('.NS', '')
@@ -257,9 +312,24 @@ export function resolveSymbolSector(symbol: string): NseSectorCode {
   if (clean.includes('NIFTY') || clean.includes('BANKNIFTY') || clean.includes('SENSEX')) {
     return 'BANKING';
   }
-  if (clean.includes('CRUDE')) return 'ENERGY_UPSTREAM';
-  if (clean.includes('GOLD') || clean.includes('SILVER')) return 'METALS';
-  return SYMBOL_SECTOR_MAP[clean] || 'DEFENSE_CAPEX';
+  if (clean.includes('CRUDE') || clean === 'BZF' || clean === 'NGF') return 'ENERGY_UPSTREAM';
+  if (clean.includes('GOLD') || clean.includes('SILVER') || clean === 'GCF' || clean === 'SIF') return 'METALS';
+
+  if (SYMBOL_SECTOR_MAP[clean]) {
+    return SYMBOL_SECTOR_MAP[clean];
+  }
+
+  // Fallback keyword classification on symbol + company name so unknown Chartink stocks map accurately
+  const combined = `${clean} ${rawName || ''}`.toLowerCase();
+  if (/pharma|drug|lab|health|hospital|med|bio|life|clinic|remed/i.test(combined)) return 'PHARMA';
+  if (/bank|fin|credit|housing|insur|brok|wealth|capital|muthoo|chola/i.test(combined)) return 'BANKING';
+  if (/tech|info|soft|digital|comput|cyber|data|electr|ems/i.test(combined)) return 'IT';
+  if (/steel|metal|alumin|copper|zinc|iron|mine|mining|coal|alloy|smelt/i.test(combined)) return 'METALS';
+  if (/paint|chem|fert|agro|tyre|aviation|airline|petro/i.test(combined)) return 'OIL_PAINT_AVIATION_CONSUMERS';
+  if (/cement|realty|prop|build|port|logist|concor/i.test(combined)) return 'CEMENT_INFRA';
+  if (/oil|gas|ongc|hydrocarbon/i.test(combined)) return 'ENERGY_UPSTREAM';
+  if (/retail|jewel|consumer|food|hotel|motor|auto|telecom|fashion|apparel/i.test(combined)) return 'RETAIL_TELECOM';
+  return 'DEFENSE_CAPEX';
 }
 
 // ============================================================================
@@ -566,62 +636,149 @@ export function evaluateElevenVectorMacroMatrix(
   const silverPrice = quotes['SI=F']?.price ?? 32.65;
   const silverChg = cfg.silverOverrideChangePct ?? quotes['SI=F']?.changePct ?? 0.65;
 
-  // Dynamic War & Geopolitical Escalation Index (blends live VIX + Gold + Brent spikes with stress config)
-  const liveGeopoliticalPulse = Math.max(
-    0,
-    Math.round(
-      (vixPrice > 18 ? (vixPrice - 18) * 6 : 0) +
-      (brentChg > 2.5 ? brentChg * 4 : 0) +
-      (goldChg > 1.5 ? goldChg * 5 : 0)
+  // When in LIVE_EXCHANGE_FEED mode (and not a custom preset), compute all macro vectors & FII/DII baskets dynamically from live ticks so nothing is static
+  const isPureLiveFeed = cfg.mode === 'LIVE_EXCHANGE_FEED' && cfg.presetId === 'LIVE_EXCHANGE_FEED';
+
+  // Compute live cross-sectional NSE breadth & dynamic sector baskets across all .NS stocks in quotes
+  const allNseEntries = Object.entries(quotes).filter(
+    ([sym, q]) => sym.endsWith('.NS') && q && typeof q.price === 'number' && q.price > 0 && typeof q.changePct === 'number'
+  );
+  const advCount = allNseEntries.filter(([, q]) => (q.changePct ?? 0) > 0).length;
+  const decCount = allNseEntries.filter(([, q]) => (q.changePct ?? 0) < 0).length;
+  const totalNseCount = Math.max(1, allNseEntries.length);
+  const breadthRatioPct = Number((((advCount - decCount) / totalNseCount) * 100).toFixed(1));
+
+  // Dynamic FII Heavyweight Basket (Banking + IT + Energy Upstream leaders)
+  const fiiSectorEntries = allNseEntries.filter(([sym, q]) => {
+    const sec = resolveSymbolSector(sym, q.name);
+    return sec === 'BANKING' || sec === 'IT' || sec === 'ENERGY_UPSTREAM';
+  });
+  const fiiHeavyweightBasketChg =
+    fiiSectorEntries.length >= 3
+      ? Number(
+          (
+            fiiSectorEntries.reduce((acc, [, q]) => acc + (q.changePct ?? 0), 0) /
+            fiiSectorEntries.length
+          ).toFixed(2)
+        )
+      : ((quotes['HDFCBANK.NS']?.changePct ?? niftyChg) +
+          (quotes['ICICIBANK.NS']?.changePct ?? niftyChg) +
+          (quotes['RELIANCE.NS']?.changePct ?? niftyChg) +
+          (quotes['TCS.NS']?.changePct ?? niftyChg)) /
+        4;
+
+  // Dynamic DII Capex & PSU Basket (Defense/Capex + Cement/Infra + Pharma)
+  const diiSectorEntries = allNseEntries.filter(([sym, q]) => {
+    const sec = resolveSymbolSector(sym, q.name);
+    return sec === 'DEFENSE_CAPEX' || sec === 'CEMENT_INFRA' || sec === 'PHARMA';
+  });
+  const diiCapexBasketChg =
+    diiSectorEntries.length >= 3
+      ? Number(
+          (
+            diiSectorEntries.reduce((acc, [, q]) => acc + (q.changePct ?? 0), 0) /
+            diiSectorEntries.length
+          ).toFixed(2)
+        )
+      : ((quotes['HAL.NS']?.changePct ?? niftyChg) +
+          (quotes['BEL.NS']?.changePct ?? niftyChg) +
+          (quotes['LT.NS']?.changePct ?? niftyChg) +
+          (quotes['SBIN.NS']?.changePct ?? niftyChg) +
+          (quotes['CIPLA.NS']?.changePct ?? niftyChg)) /
+        5;
+
+  // Dynamic War & Geopolitical Escalation Index (derived continuously from live VIX, Brent, Gold & DXY in LIVE_EXCHANGE_FEED mode)
+  const liveGeopoliticalPulse = Math.min(
+    100,
+    Math.max(
+      6,
+      Math.round(
+        Math.max(0, vixPrice - 11.5) * 3.4 +
+          Math.max(0, brentChg) * 5.2 +
+          Math.max(0, goldChg) * 4.8 +
+          Math.max(0, dxyChg) * 4.5
+      )
     )
   );
-  const warIndex = Math.min(100, Math.max(cfg.warEscalationIndex, liveGeopoliticalPulse));
+  const warIndex = isPureLiveFeed
+    ? liveGeopoliticalPulse
+    : Math.min(100, Math.max(cfg.warEscalationIndex, liveGeopoliticalPulse));
 
   // Check if session has any realized stop-out loss -> activates +2.50% Recovery Hurdle
   const closedLosses = existingOrders.filter((o) => o.status !== 'OPEN' && (o.pnlINR || 0) < 0);
   const postLossRecoveryHurdleActive = closedLosses.length > 0 || warIndex >= 65 || cfg.fedRateShockBps >= 35;
   const requiredMinNetProfitPct = postLossRecoveryHurdleActive ? 2.50 : 2.00;
 
-  // Build the 11 Vector Signals
+  const bankNiftyChg = quotes['^NSEBANK']?.changePct ?? niftyChg;
+
+  // Build the 12 Vector Signals (100% Dynamic in LIVE_EXCHANGE_FEED mode)
   const v1Score = Math.max(-100, Math.min(100, Math.round(niftyChg * 32 - (vixPrice - 14.5) * 6)));
-  const v2Score = warIndex >= 65 ? -75 : cfg.govtPolicyStance === 'WINDFALL_TAX_SEBI_TIGHTENING' ? -55 : 42;
+  const v2Score = isPureLiveFeed
+    ? warIndex >= 65
+      ? -75
+      : Math.max(
+          -90,
+          Math.min(
+            92,
+            Math.round(
+              breadthRatioPct * 0.55 +
+                niftyChg * 14 +
+                diiCapexBasketChg * 8 -
+                Math.max(0, brentChg) * 4.5 -
+                Math.max(0, vixChg) * 2.5
+            )
+          )
+        )
+    : warIndex >= 65
+    ? -75
+    : cfg.govtPolicyStance === 'WINDFALL_TAX_SEBI_TIGHTENING'
+    ? -55
+    : 42;
   const v3DollarScore = Math.max(-100, Math.min(100, Math.round(-(dxyChg * 28 + usdinrChg * 35))));
   const v4GlobalScore = Math.max(-100, Math.min(100, Math.round(globalAvgChg * 28)));
-  const v5PolicyScore =
-    cfg.govtPolicyStance === 'PRO_CAPEX_PLI_BOOST'
-      ? 68
-      : cfg.govtPolicyStance === 'WINDFALL_TAX_SEBI_TIGHTENING'
-      ? -72
-      : 18;
+  const v5PolicyScore = isPureLiveFeed
+    ? Math.max(
+        -85,
+        Math.min(
+          88,
+          Math.round(
+            24 +
+              diiCapexBasketChg * 16 +
+              bankNiftyChg * 9 -
+              brentChg * 4.2 -
+              (us10yYield - 4.25) * 14
+          )
+        )
+      )
+    : cfg.govtPolicyStance === 'PRO_CAPEX_PLI_BOOST'
+    ? 68
+    : cfg.govtPolicyStance === 'WINDFALL_TAX_SEBI_TIGHTENING'
+    ? -72
+    : 18;
   const v6FedScore = fedYieldShockScore;
-  const v7JobsScore =
-    cfg.usJobsNfpSurpriseK < -50 || cfg.usUnemploymentRatePct >= 4.5
-      ? -64
-      : cfg.usJobsNfpSurpriseK > 80
-      ? -25 // Overheating jobs delays Fed cuts
-      : 45; // Goldilocks jobs
+  const yieldCurveSlopeBps = Math.round((us10yYield - us13wYield) * 100);
+  const v7JobsScore = isPureLiveFeed
+    ? Math.max(
+        -85,
+        Math.min(
+          85,
+          Math.round(
+            sp500Chg * 18 +
+              nasdaqChg * 14 -
+              Math.abs(us10yYield - 4.25) * 22 +
+              (yieldCurveSlopeBps >= -25 ? 16 : -18)
+          )
+        )
+      )
+    : cfg.usJobsNfpSurpriseK < -50 || cfg.usUnemploymentRatePct >= 4.5
+    ? -64
+    : cfg.usJobsNfpSurpriseK > 80
+    ? -25 // Overheating jobs delays Fed cuts
+    : 45; // Goldilocks jobs
   const v8MetalsScore = Math.max(-100, Math.min(100, Math.round((goldChg + silverChg) * 18)));
   const v9EnergyScore = Math.max(-100, Math.min(100, Math.round(-(brentChg * 6.5 + natGasChg * 2.5))));
   const v10WarScore = Math.max(-100, Math.min(100, Math.round(50 - warIndex * 1.45)));
 
-  // Vector 11: 3-Layer FII/DII/Pro vs Retail Flow Score (100% Dynamic Tick Derivation in LIVE_EXCHANGE_FEED mode)
-  const bankNiftyChg = quotes['^NSEBANK']?.changePct ?? niftyChg;
-  const fiiHeavyweightBasketChg =
-    ((quotes['HDFCBANK.NS']?.changePct ?? niftyChg) +
-      (quotes['ICICIBANK.NS']?.changePct ?? niftyChg) +
-      (quotes['RELIANCE.NS']?.changePct ?? niftyChg) +
-      (quotes['TCS.NS']?.changePct ?? niftyChg)) /
-    4;
-  const diiCapexBasketChg =
-    ((quotes['HAL.NS']?.changePct ?? 0.4) +
-      (quotes['BEL.NS']?.changePct ?? 0.5) +
-      (quotes['LT.NS']?.changePct ?? 0.3) +
-      (quotes['SBIN.NS']?.changePct ?? 0.2) +
-      (quotes['CIPLA.NS']?.changePct ?? 0.6)) /
-    5;
-
-  // When in LIVE_EXCHANGE_FEED mode (and not a custom preset), compute FII/DII/Pro/Retail dynamically from live ticks so nothing is static
-  const isPureLiveFeed = cfg.mode === 'LIVE_EXCHANGE_FEED' && cfg.presetId === 'LIVE_EXCHANGE_FEED';
   const liveDynamicFiiCashCrINR = isPureLiveFeed
     ? Math.round(
         fiiHeavyweightBasketChg * 1450 +

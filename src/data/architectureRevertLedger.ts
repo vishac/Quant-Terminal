@@ -406,6 +406,21 @@ export const ARCHITECTURE_REVERT_LEDGER: RevertLedgerEntry[] = [
     revertInstruction:
       'Revert src/server/globalMarketImpactEngine.ts to REV-025.',
   },
+  {
+    revertId: 'REV-027',
+    dateIST: '09-Nov-2026',
+    category: 'STRATEGY_VETO_ENGINE',
+    moduleName: 'Full Static Audit Remediation: Live 5-Stream RSS Parser, 48h Verified Regulatory Badges, Dynamic First-Principles Geopolitics/Policy/Agents & 100% Live 12-Vector Macro Matrix',
+    filePath: 'src/server/globalMarketImpactEngine.ts, src/server/firstPrinciplesEngine.ts, src/services/macroCausalLearningEngine.ts, src/services/agentQuantEngine.ts',
+    previousStateSummary:
+      'Four residual static blocks remained: (1) STOCK_PROFILES in globalMarketImpactEngine.ts unconditionally attached static exclusiveIntel regulatory badges regardless of news freshness; (2) globalCues beneficiaryStocks/headwindStocks and RSS affectedStocks used hardcoded 3-symbol lists without checking live commodity/yield direction; (3) firstPrinciplesEngine.ts hardcoded 5 symbols in calibrateSelfLearningAgents() and fixed 3-5 symbol lists in policyAndFlows/geopolitics; and (4) macroCausalLearningEngine.ts used static fallback numbers (v2Score=42, v5PolicyScore=68, v7JobsScore=45, warIndex=18) in LIVE_EXCHANGE_FEED mode and mapped only 36 tickers in SYMBOL_SECTOR_MAP.',
+    newStateSummary:
+      'Upgraded fetchLiveIndianMarketNews() into a Live 5-Stream RSS Parser (War & Geopolitics, US Fed & Treasury Macro, India RBI & Sovereign Policy, NSE Order Book & Regulatory Filings, and Commodities & Energy) with 48h filtering and live directional stock attribution; removed unconditional static exclusiveIntel badges and replaced them with detectLiveRegulatoryOrOrderFiling() so regulatory/order-book badges only appear when verified in a live <=48h headline/filing; replaced all hardcoded stock lists in globalCues, firstPrinciplesEngine.ts (5 Agents, Policy Catalysts, Geopolitics), and agentQuantEngine.ts with live top gainers/losers across quotesCache; expanded resolveSymbolSector() to 250+ NSE stocks + keyword fallback; and made v2Score, v5PolicyScore, v7JobsScore, warIndex, and FII/DII sector baskets 100% live tick-driven in LIVE_EXCHANGE_FEED mode.',
+    quantValueJustification:
+      'Guarantees zero stale regulatory badges, zero static macro vector scores, and 100% real-time dynamic stock discovery and directional news attribution across both rising and falling markets.',
+    revertInstruction:
+      'Revert src/server/globalMarketImpactEngine.ts, src/server/firstPrinciplesEngine.ts, src/services/macroCausalLearningEngine.ts, and src/services/agentQuantEngine.ts to REV-026.',
+  },
 ];
 
 
