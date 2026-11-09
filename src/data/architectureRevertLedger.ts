@@ -361,6 +361,21 @@ export const ARCHITECTURE_REVERT_LEDGER: RevertLedgerEntry[] = [
     revertInstruction:
       'Revert src/server/marketData.ts, src/components/InstitutionalEquityRadar.tsx, src/services/scriptLearningEngine.ts, and src/components/MacroPolicyThesis.tsx to REV-022.',
   },
+  {
+    revertId: 'REV-024',
+    dateIST: '09-Nov-2026',
+    category: 'WIRED_LIVE_OMS_ACTION',
+    moduleName: 'Quant Dossier (SPLIT_DOSSIER) Card Compression Fix & Font Hierarchy Standardization',
+    filePath: 'src/components/InstitutionalEquityRadar.tsx',
+    previousStateSummary:
+      'In Quant Dossier mode (viewMode === "SPLIT_DOSSIER"), the left-column scrollable list used flex flex-col max-h-[920px] while each stock card had overflow-hidden without shrink-0, causing Flexbox to compress all 60 cards into 920px (~15px content height per card) and vertically clip the ticker font (PNB, DATAPATTNS, UNIONBANK, DIVISLAB) right through the middle of the text while hiding company name, strategy model, conviction score, and driver.',
+    newStateSummary:
+      'Changed the left-column scroll container to space-y-3 max-h-[920px] overflow-y-auto pr-1.5, added shrink-0 and removed overflow-hidden on each card (using rounded-l-xl on the active indicator bar), standardized font sizes and line heights across left-column cards and right-column dossier headers (text-sm sm:text-base font-mono leading-snug for ticker/LTP, text-[10px] leading-none for badges, text-xs leading-normal for company name & conviction score), and updated the Market Cap Bracket sublabel to SEBI / AMFI Rank & Chartink MCap.',
+    quantValueJustification:
+      'Restores full vertical card height and crisp, unclipped institutional typography across all 60+ qualified stocks in Quant Dossier (Split) mode.',
+    revertInstruction:
+      'Revert the SPLIT_DOSSIER section in src/components/InstitutionalEquityRadar.tsx to REV-023.',
+  },
 ];
 
 

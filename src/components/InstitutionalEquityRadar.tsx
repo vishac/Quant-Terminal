@@ -1061,12 +1061,12 @@ export const InstitutionalEquityRadar: React.FC = () => {
         <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
           {/* Left Column: Qualified Stocks List (4 Cols) */}
           <div className="xl:col-span-4 flex flex-col gap-3">
-            <div className="flex items-center justify-between text-xs px-1 text-slate-400">
-              <span>QUALIFIED STOCKS ({filteredStocks.length})</span>
-              <span className="text-[10px] text-cyan-400">SORT: CONVICTION SCORE</span>
+            <div className="flex items-center justify-between text-xs px-1 text-slate-300 font-mono">
+              <span className="font-bold tracking-wide">QUALIFIED STOCKS ({filteredStocks.length})</span>
+              <span className="text-[11px] text-cyan-400 font-semibold">SORT: CONVICTION SCORE</span>
             </div>
 
-            <div className="flex flex-col gap-2.5 max-h-[920px] overflow-y-auto pr-1">
+            <div className="space-y-3 max-h-[920px] overflow-y-auto pr-1.5">
               {filteredStocks.map((stock) => {
                 const isSelected = activeStock ? stock.id === activeStock.id : false;
                 const stockQuote = quotes[stock.symbol] || {
@@ -1081,21 +1081,23 @@ export const InstitutionalEquityRadar: React.FC = () => {
                   <div
                     key={stock.id}
                     onClick={() => setSelectedStockId(stock.id)}
-                    className={`p-4 rounded-xl border transition-all cursor-pointer relative overflow-hidden ${isSelected
+                    className={`shrink-0 p-4 rounded-xl border transition-all cursor-pointer relative ${isSelected
                         ? 'bg-slate-900 border-cyan-400 shadow-[0_0_20px_rgba(0,240,255,0.18)]'
-                        : 'bg-[#080d1a]/85 border-slate-800/80 hover:border-cyan-500/40 hover:bg-slate-900/40'
+                        : 'bg-[#080d1a]/90 border-slate-800/90 hover:border-cyan-500/40 hover:bg-slate-900/50'
                       }`}
                   >
                     {isSelected && (
-                      <div className="absolute top-0 left-0 bottom-0 w-1 bg-cyan-400 shadow-[0_0_8px_#00f0ff]" />
+                      <div className="absolute top-0 left-0 bottom-0 w-1.5 rounded-l-xl bg-cyan-400 shadow-[0_0_8px_#00f0ff]" />
                     )}
 
-                    <div className="flex items-start justify-between">
-                      <div>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="text-base font-bold text-slate-100 font-sans">{stock.ticker}</span>
+                          <span className="text-sm sm:text-base font-bold text-slate-100 font-mono tracking-tight leading-snug">
+                            {stock.ticker}
+                          </span>
                           <span
-                            className={`text-[9px] px-1.5 py-0.5 rounded font-mono font-semibold border ${
+                            className={`text-[10px] leading-none px-2 py-1 rounded font-mono font-semibold border ${
                               stock.sector === 'LARGE_CAP'
                                 ? 'bg-cyan-950/60 text-cyan-200 border-cyan-500/35'
                                 : stock.sector === 'MID_CAP'
@@ -1105,31 +1107,35 @@ export const InstitutionalEquityRadar: React.FC = () => {
                           >
                             {stock.capCategory}
                           </span>
-                          <span className={`text-[9px] px-1.5 py-0.5 rounded font-mono font-bold ${stock.horizon === 'SHORT_TERM' ? 'bg-cyan-950/80 text-cyan-300 border border-cyan-500/30' : 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/30'}`}>
+                          <span className={`text-[10px] leading-none px-2 py-1 rounded font-mono font-bold ${stock.horizon === 'SHORT_TERM' ? 'bg-cyan-950/80 text-cyan-300 border border-cyan-500/30' : 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/30'}`}>
                             {stock.horizon === 'SHORT_TERM' ? 'SWING' : 'COMPOUNDER'}
                           </span>
                         </div>
-                        <div className="text-[11px] text-slate-400 truncate max-w-[190px] font-sans">{stock.name}</div>
-                        <div className="text-[10px] text-cyan-400/90 font-mono mt-0.5 truncate max-w-[210px]">
+                        <div className="text-xs text-slate-300 leading-normal truncate mt-1 font-sans">
+                          {stock.name}
+                        </div>
+                        <div className="text-[11px] text-cyan-400/95 font-mono leading-normal mt-0.5 truncate">
                           {stock.institutionalStrategy.modelName}
                         </div>
                       </div>
 
-                      <div className="text-right">
+                      <div className="text-right shrink-0">
                         {(() => {
                           const itemLtp = stockQuote?.price ?? stock.ltp ?? 0;
                           const itemChgPct = stockQuote?.changePct ?? stock.changePct ?? 0;
                           const itemChgVal = stockQuote?.change ?? (itemLtp && itemChgPct ? Number(((itemLtp * itemChgPct) / 100).toFixed(2)) : 0);
                           return (
                             <>
-                              <div className="text-sm font-bold text-cyan-200 tabular-nums flex items-center justify-end gap-1">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                              <div className="text-sm sm:text-base font-bold text-cyan-200 tabular-nums font-mono leading-snug flex items-center justify-end gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
                                 <span>₹{itemLtp.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                               </div>
-                              <div className={`text-[10px] font-bold ${itemChgPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                              <div className={`text-[11px] font-bold font-mono leading-normal mt-0.5 ${itemChgPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                 {itemChgPct >= 0 ? '+' : ''}₹{Math.abs(itemChgVal).toFixed(2)} ({itemChgPct >= 0 ? '+' : ''}{itemChgPct.toFixed(2)}%)
                               </div>
-                              <span className="text-[8px] text-slate-500 font-mono">Vol: {((stock.volume ?? 0) / 1000).toFixed(0)}k · NSE</span>
+                              <div className="text-[10px] text-slate-400 font-mono leading-normal mt-0.5">
+                                Vol: {((stock.volume ?? 0) / 1000).toFixed(0)}k · NSE
+                              </div>
                             </>
                           );
                         })()}
@@ -1137,20 +1143,22 @@ export const InstitutionalEquityRadar: React.FC = () => {
                     </div>
 
                     {/* Prominent Conviction Score & Factor Mini-Bar */}
-                    <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between text-[11px]">
+                    <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between gap-2 text-xs">
                       <div className="flex items-center gap-1.5">
-                        <span className={`px-2 py-0.5 rounded-lg font-bold font-mono text-xs ${isHighTier
+                        <span className={`px-2.5 py-1 rounded-lg font-bold font-mono text-xs leading-none ${isHighTier
                             ? 'bg-emerald-950/90 border border-emerald-500/40 text-emerald-300'
                             : 'bg-cyan-950/90 border border-cyan-500/40 text-cyan-300'
                           }`}>
                           {isHighTier ? '✓ EXEC ≥88: ' : 'WATCHLIST: '}{q.compositeScore}/100
                         </span>
                       </div>
-                      <div className="text-emerald-400 font-bold text-[10px]">T1: +{stock.tacticalLevels.target1.upsidePct}%</div>
+                      <div className="text-emerald-400 font-bold font-mono text-xs">
+                        T1: +{stock.tacticalLevels.target1.upsidePct}%
+                      </div>
                     </div>
 
-                    <div className="mt-2 text-[10px] text-slate-400 font-sans line-clamp-1">
-                      <strong className="text-slate-300">Driver:</strong> {q.primaryDriver}
+                    <div className="mt-2 text-[11px] text-slate-300 font-sans leading-normal line-clamp-1">
+                      <strong className="text-slate-200">Driver:</strong> {q.primaryDriver}
                     </div>
                   </div>
                 );
@@ -1165,33 +1173,33 @@ export const InstitutionalEquityRadar: React.FC = () => {
                 {/* Main Stock Header Card with Massive Conviction Pod */}
                 <div className="bg-[#080d1a]/95 rounded-2xl p-6 border border-cyan-500/25 shadow-2xl relative overflow-hidden">
               <div className="flex flex-wrap items-start justify-between gap-4 pb-4 border-b border-slate-800">
-                <div className="flex-1 min-w-[280px]">
-                  <div className="flex items-center gap-2 mb-1 flex-wrap">
-                    <span className="text-2xl font-bold text-cyan-100 font-sans">{activeStock.ticker}</span>
+                <div className="flex-1 min-w-[260px]">
+                  <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                    <span className="text-xl sm:text-2xl font-bold text-cyan-100 font-mono tracking-tight leading-snug">{activeStock.ticker}</span>
                     <span className="text-xs text-slate-400 font-mono">({activeStock.symbol})</span>
-                    <span className="px-2 py-0.5 rounded bg-emerald-950/60 border border-emerald-500/40 text-emerald-400 text-xs font-bold">
+                    <span className="px-2.5 py-0.5 rounded bg-emerald-950/60 border border-emerald-500/40 text-emerald-400 text-xs font-bold">
                       {activeQuant.tierLabel}
                     </span>
-                    <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300 text-xs font-mono">
+                    <span className="px-2.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300 text-xs font-mono">
                       {activeStock.capCategory}
                     </span>
                   </div>
-                  <h2 className="text-sm text-slate-300 font-sans font-medium">{activeStock.name} • NSE Listed</h2>
-                  <div className="mt-1 flex items-center gap-2 text-xs">
-                    <span className="text-slate-400">STRATEGY:</span>
+                  <h2 className="text-sm sm:text-base text-slate-200 font-sans font-medium leading-normal">{activeStock.name} • NSE Listed</h2>
+                  <div className="mt-1.5 flex items-center gap-2 text-xs">
+                    <span className="text-slate-400 font-mono">STRATEGY:</span>
                     <span className="text-cyan-300 font-bold">{activeStock.institutionalStrategy.modelName}</span>
                   </div>
                 </div>
 
                 {/* Big Conviction Score Gauge Pod */}
-                <div className="flex items-center gap-4 p-3 rounded-2xl bg-slate-950/90 border border-cyan-500/30 shadow-[0_0_20px_rgba(0,240,255,0.15)]">
+                <div className="flex items-center gap-4 p-3.5 rounded-2xl bg-slate-950/90 border border-cyan-500/30 shadow-[0_0_20px_rgba(0,240,255,0.15)]">
                   <div className="text-center">
-                    <div className="text-[10px] text-slate-400 uppercase tracking-widest">QUANT CONVICTION</div>
-                    <div className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-emerald-400 font-mono">
+                    <div className="text-[10px] text-slate-400 uppercase tracking-widest font-mono">QUANT CONVICTION</div>
+                    <div className="text-2xl sm:text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-emerald-400 font-mono leading-tight">
                       {activeQuant.compositeScore}
                       <span className="text-sm text-slate-400 font-normal"> / 100</span>
                     </div>
-                    <div className="text-[9px] text-emerald-400 font-bold uppercase tracking-wider">
+                    <div className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider mt-0.5">
                       {activeQuant.convictionTier ? activeQuant.convictionTier.replace(/_/g, ' ') : 'HIGH CONVICTION'}
                     </div>
                   </div>
@@ -1200,7 +1208,7 @@ export const InstitutionalEquityRadar: React.FC = () => {
 
                   {/* Current Price */}
                   <div className="flex flex-col items-end">
-                    <div className="text-xl font-bold text-cyan-200 tabular-nums font-mono flex items-center gap-1.5">
+                    <div className="text-lg sm:text-xl font-bold text-cyan-200 tabular-nums font-mono leading-snug flex items-center gap-1.5">
                       <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                       <span>{activeLtp != null ? `₹${activeLtp.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}</span>
                       <button
@@ -1211,10 +1219,10 @@ export const InstitutionalEquityRadar: React.FC = () => {
                         <Info className="w-3.5 h-3.5 text-cyan-400" />
                       </button>
                     </div>
-                    <div className={`text-xs font-bold ${activeChangePct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    <div className={`text-xs font-bold font-mono mt-0.5 ${activeChangePct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                       {activeChangePct >= 0 ? '+' : ''}₹{Math.abs(activeChangeVal).toFixed(2)} ({activeChangePct >= 0 ? '+' : ''}{activeChangePct.toFixed(2)}%)
                     </div>
-                    <span className="text-[9px] text-cyan-400/90 mt-0.5 flex items-center gap-1 font-mono">
+                    <span className="text-[10px] text-cyan-400/90 mt-0.5 flex items-center gap-1 font-mono">
                       Live NSE Tick · {(activeVolume / 1000).toFixed(0)}k Shares
                     </span>
                   </div>
@@ -1513,7 +1521,7 @@ export const InstitutionalEquityRadar: React.FC = () => {
                 <div className="p-3 rounded-xl bg-slate-950 border border-emerald-500/30">
                   <span className="text-[10px] text-slate-400 block uppercase">MARKET CAP BRACKET</span>
                   <span className="text-sm text-emerald-400 font-bold">{activeStock.capCategory}</span>
-                  <span className="text-[9px] text-slate-400 block mt-0.5">Based on Live LTP ₹{activeLtp}</span>
+                  <span className="text-[9px] text-slate-400 block mt-0.5">SEBI / AMFI Rank &amp; Chartink MCap</span>
                 </div>
 
                 <div className="p-3 rounded-xl bg-slate-950 border border-cyan-500/30">

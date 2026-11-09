@@ -187,3 +187,12 @@ This document records every surgical UI/module pruning action, static data remov
   4. **Mobile Inline LTP & `% Change` Visibility + Cap Tier Badges Across All `1. Market Finder` Views**: Added a mobile-only (`sm:hidden`) live `₹LTP`, `% Change`, and `Volume` pill inside the primary stock column in `InstitutionalEquityRadar.tsx`, updated the Cap Tier filter dropdown and modal to display SEBI/AMFI Market Cap definitions, and added color-coded `Large Cap` / `Mid Cap` / `Small Cap` badges to `MacroPolicyThesis.tsx`.
 - **How to Revert**: Revert `src/server/marketData.ts`, `src/components/InstitutionalEquityRadar.tsx`, `src/services/scriptLearningEngine.ts`, and `src/components/MacroPolicyThesis.tsx` to `REV-022`.
 
+### `REV-024` — Quant Dossier (`SPLIT_DOSSIER`) Card Compression Fix & Font Hierarchy Standardization (`src/components/InstitutionalEquityRadar.tsx`)
+- **File Modified**: `src/components/InstitutionalEquityRadar.tsx`
+- **Previous Behavior**: In `QUANT DOSSIER (SPLIT)` mode (`viewMode === 'SPLIT_DOSSIER'`), the left-column scrollable list used `flex flex-col max-h-[920px]` while each stock card had `overflow-hidden` without `shrink-0`. CSS Flexbox compressed all 60 cards into `920px` (~15px content height per card), slicing right through the bottom half of the `text-base` ticker letters (`PNB`, `DATAPATTNS`, `UNIONBANK`, `DIVISLAB`) and cutting off the company name, strategy model, `% change`, volume, conviction score badge, and driver.
+- **New Behavior**:
+  1. **Eliminated Flexbox Vertical Card Compression**: Changed the left-column scroll container to `space-y-3 max-h-[920px] overflow-y-auto pr-1.5` and added `shrink-0` to each stock card while removing `overflow-hidden` (using `rounded-l-xl` on the active left indicator bar), ensuring every card renders at its full natural height (~142px).
+  2. **Standardized Institutional Font Sizes & Line Heights**: Set ticker and live LTP to `text-sm sm:text-base font-bold font-mono leading-snug`, Cap/Horizon badges to `text-[10px] leading-none px-2 py-1`, company name to `text-xs text-slate-300 leading-normal`, strategy model and ₹/% change to `text-[11px] font-mono leading-normal`, conviction score & T1 upside to `text-xs font-mono`, and primary driver to `text-[11px] leading-normal`, while updating the Right-Column Market Cap Bracket pod sublabel to `SEBI / AMFI Rank & Chartink MCap`.
+- **How to Revert**: Revert the `SPLIT_DOSSIER` section in `src/components/InstitutionalEquityRadar.tsx` to `REV-023`.
+
+

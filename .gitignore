@@ -6,7 +6,6 @@
 .env.*.local
 *.pem
 *.key
-firebase-applet-config.json
 
 # AI Studio Tooling Artifacts
 /.aistudio/
