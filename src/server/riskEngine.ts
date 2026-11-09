@@ -63,7 +63,7 @@ export interface EvaluateResult {
 
 const DEFAULT_CONFIG: RiskConfig = {
   capitalInr: 1_000_000,
-  maxDailyLossInr: 25_000,
+  maxDailyLossInr: 15_000,
   maxOpenPositions: 5,
   maxOrderNotionalInr: 2_000_000,
   maxPositionNotionalInr: 3_000_000,

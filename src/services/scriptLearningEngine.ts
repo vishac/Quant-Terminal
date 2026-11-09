@@ -755,11 +755,28 @@ export function evaluateBottomAccumulationAndBearPutMatrix(
     const isHardVetoSector = sectorFlow?.verdict === 'HARD_VETO_OUTFLOW';
 
     // -------------------------------------------------------------------------
+    // DETERMINISTIC REGIME & RELATIVE-STRENGTH ARBITER (MODE A vs MODE B)
+    // Prevents opposing theses (buying 52W-low cash long AND buying Put PE on the same symbol).
+    // - Mode A (52W-Low Accumulation Long) is selected ONLY when:
+    //   (1) Sector is NOT under a hard macro outflow veto,
+    //   (2) Stock sits in the 52W value zone (<=14.5% from 52W Low or >=14% off 52W High), AND
+    //   (3) Shows positive institutional absorption & relative strength vs NIFTY (deliveryRatio >= 1.25 and holding >= min(-0.15%, niftyChg)).
+    // - Mode B (Bear-Market Put PE) is mutually exclusive (`else if`) and triggers ONLY on confirmed breakdown / distribution.
+    // -------------------------------------------------------------------------
+    const qualifiesForModeALong =
+      !isHardVetoSector &&
+      (distanceFrom52WLowPct <= 14.5 || drawdownFrom52WHighPct >= 14.0) &&
+      deliveryRatio >= 1.25 &&
+      effectiveChangePct >= Math.min(-0.15, niftyChg);
+
+    const qualifiesForModeBPut =
+      !qualifiesForModeALong &&
+      (effectiveChangePct <= -0.25 || isHardVetoSector || (niftyChg < -0.25 && effectiveChangePct < niftyChg));
+
+    // -------------------------------------------------------------------------
     // MODE A: 52W-LOW INSTITUTIONAL BOTTOM ACCUMULATION (LONG GROWTH REVERSAL)
     // -------------------------------------------------------------------------
-    // Criteria: Stock has corrected meaningfully from 52W High (drawdown >= 12%) or sits within 12% of 52W Low,
-    // AND shows institutional accumulation / positive sector flow (not a quarantined falling knife).
-    if (!isHardVetoSector && (distanceFrom52WLowPct <= 14.5 || drawdownFrom52WHighPct >= 14.0)) {
+    if (qualifiesForModeALong) {
       const entryPrice = spotLtp;
       // Tight 0.68% stop loss so 1R <= ₹380 (<= 0.08% of ₹5L capital)
       const stopLossPrice = Number((entryPrice * 0.9932).toFixed(2));
@@ -829,16 +846,9 @@ export function evaluateBottomAccumulationAndBearPutMatrix(
             : sectorCode === 'PHARMA'
             ? 'US Primary / Mid-Term Generic Drug Shortage & Biosecure Act Tailwinds'
             : 'FII/DII Value Absorption Near 52-Week Structural Support',
-        rationale: `Trading ${distanceFrom52WLowPct}% above 52W Low (₹${est52WLow}, -${drawdownFrom52WHighPct}% off 52W High ₹${est52WHigh}) with ${deliveryRatio.toFixed(2)}x institutional delivery absorption. Structured for T1 ₹${t1Price} / T2 ₹${t2Price} / T3 ₹${t3Price}.`,
+        rationale: `[Arbiter: Mode A Absorption Verified] Trading ${distanceFrom52WLowPct}% above 52W Low (₹${est52WLow}, -${drawdownFrom52WHighPct}% off 52W High ₹${est52WHigh}) with ${deliveryRatio.toFixed(2)}x institutional delivery absorption & relative strength vs NIFTY. Structured for T1 ₹${t1Price} / T2 ₹${t2Price} / T3 ₹${t3Price}.`,
       });
-    }
-
-    // -------------------------------------------------------------------------
-    // MODE B: BEAR-MARKET / WEAK-SCRIPT PUT (PE) F&O (PROFIT WHEN MARKET IS LOW)
-    // -------------------------------------------------------------------------
-    // Criteria: Script is weak/negative intraday OR in a macro/election headwind sector (IT under US Primary H-1B rhetoric,
-    // Paints/Aviation under Oil shock, Metals under China slowdown) where buying ATM/Slightly-OTM Put (PE) captures downside velocity.
-    if (effectiveChangePct < 0.25 || isHardVetoSector || niftyChg < 0) {
+    } else if (qualifiesForModeBPut) {
       const step = spotLtp > 2000 ? 50 : spotLtp > 500 ? 20 : 10;
       const putStrike = Math.round(spotLtp / step) * step;
       // Deterministic Black-Scholes-style option premium proxy anchored to spotLtp & India VIX

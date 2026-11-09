@@ -271,6 +271,37 @@ export const ARCHITECTURE_REVERT_LEDGER: RevertLedgerEntry[] = [
     revertInstruction:
       'Revert core labels in Header.tsx/Sidebar.tsx/App.tsx, remove evaluateBottomAccumulationAndBearPutMatrix() in scriptLearningEngine.ts, and remove getStatutoryTaxRuleCalendar() in statutoryVetoEngine.ts.',
   },
+  {
+    revertId: 'REV-018',
+    dateIST: '08-Nov-2026',
+    category: 'WIRED_LIVE_OMS_ACTION',
+    moduleName: 'Persistent Viewport Watermark & Dynamic Marquee "DO NOT USE" Maintenance Banner',
+    filePath: 'src/components/DoNotUseWatermarkBanner.tsx, src/App.tsx, src/index.css',
+    previousStateSummary:
+      'No global maintenance watermark or dynamic scrolling advisory existed across the terminal pages to warn users not to rely on live outputs while known issues are being resolved.',
+    newStateSummary:
+      'Implemented DoNotUseWatermarkBanner.tsx with a dual-layer warning system: (1) A fixed top marquee ticker warning "DO NOT USE — THIS APPLICATION HAS ISSUES WHICH ARE CURRENTLY BEING INVESTIGATED & FIXED"; (2) A prominent persistent diagonal red "DO NOT USE" watermark stamp (matching user design screenshot) that follows the user viewport continuously on every page as they scroll.',
+    quantValueJustification:
+      'Prevents unintended capital allocation or live order placement while backend algorithms, data feeds, and strategy engines are undergoing active hotfixes.',
+    revertInstruction:
+      'Remove <DoNotUseWatermarkBanner /> from src/App.tsx and reset top header/sidebar offsets.',
+  },
+  {
+    revertId: 'REV-019',
+    dateIST: '09-Nov-2026',
+    category: 'STRATEGY_VETO_ENGINE',
+    moduleName: 'Full Claude Quantitative Audit Remediation: Backtester Math/Costs/Stops, 1-Lot Sizer Fix, Mode A/B Arbiter & Automated Sync CLI',
+    filePath: 'src/server/backtester.ts, src/services/positionSizer.ts, src/server/riskEngine.ts, src/services/scriptLearningEngine.ts, scripts/sync-data.ts, USER_GUIDE_STRENGTHS_AND_LIMITATIONS.md',
+    previousStateSummary:
+      'backtester.ts did not subtract the 6.5% risk-free rate in Sharpe, passed annualized Sharpe into PSR, counted open positions in win rate/expectancy, checked stops only on close without trailing, and omitted cash-delivery statutory costs; positionSizer.ts forced 1 lot via Math.max(1, ...) even when 1 lot breached maxRiskInr; riskEngine.ts defaulted to 2.5% daily loss vs documented 1.5%; and Mode A vs Mode B lacked a mutually-exclusive arbiter.',
+    newStateSummary:
+      'Fixed Sharpe/Sortino (6.5% rf subtracted) and PSR (per-period daily Sharpe + daily skew/kurtosis); excluded open positions from closed trade stats; implemented Next-Bar Open + 5 bps slippage entries, intraday Low stop checks with Gap-Through-Stop fills at Open, monotonic High-Water-Mark ATR trailing stops, and 0.2222% cash-delivery statutory taxes in backtester.ts; removed forced 1-lot floor in positionSizer.ts; synchronized riskEngine.ts maxDailyLossInr to 1.5% (₹15,000); enforced a mutually-exclusive Mode A vs Mode B Regime & Absorption Arbiter; and added npm run data:sync (scripts/sync-data.ts).',
+    quantValueJustification:
+      'Eliminates every mathematical, execution-simulation, risk-cap, and documentation defect identified in the external quantitative audit.',
+    revertInstruction:
+      'Revert src/server/backtester.ts, src/services/positionSizer.ts, src/server/riskEngine.ts, and src/services/scriptLearningEngine.ts to REV-018.',
+  },
 ];
+
 
 

@@ -205,13 +205,21 @@ Under no circumstances should dummy, mock, or hardcoded static seed trades be in
   - Upgraded Vector #12 (`vec_us_midterms`) to simultaneously evaluate India Lok Sabha / State Assembly elections and US Primary / Mid-Term / Presidential elections.
   - Built the Dual-Mode 52W-Low Institutional Bottom Accumulation & Bear-Market Put (`PE`) F&O Scanner (`evaluateBottomAccumulationAndBearPutMatrix`) with `T1 / T2 / T3` targets and 4-stage Non-Erosion Step-Ratchet exits.
   - Implemented the Calendarized T-1 Pre-Market Statutory Tax, SEBI & Brokerage Rule Radar (`getStatutoryTaxRuleCalendar`) with manual pre-market approval and permanent Before/After order version stamping (`taxRuleVersionId`).
-  - Created `/USER_GUIDE_STRENGTHS_AND_LIMITATIONS.md` and Sub-Tab `06. User Guide & Strengths/Weaknesses` in `4. Order Book`.
+- [x] **Persistent Viewport Watermark & Dynamic Marquee "DO NOT USE" Maintenance Banner (`REV-018`)**:
+  - Added `DoNotUseWatermarkBanner.tsx` featuring a fixed top scrolling ticker warning against live trading while issues are addressed and a bold diagonal red "DO NOT USE" watermark stamp that dynamically scrolls and follows the user's viewport on every page.
+  - Provided a minimization toggle in the top bar for authorized operator inspection.
+- [x] **Full Quantitative & Logic Audit Remediation (`REV-019`) (`src/server/backtester.ts`, `src/services/positionSizer.ts`, `src/server/riskEngine.ts`, `src/services/scriptLearningEngine.ts`, `scripts/sync-data.ts`)**:
+  - Remediated all `backtester.ts` defects: subtracted 6.50% risk-free rate in Sharpe/Sortino; passed per-period daily Sharpe + daily skew/kurtosis into López de Prado `PSR`; excluded open unrealized positions from closed trade Win Rate/Profit Factor/Expectancy/t-stat; implemented Next-Bar Open + 5 bps slippage entries, intraday Low stop checks across all 5 strategies, Gap-Through-Stop fills at Open, monotonic High-Water-Mark ATR trailing stops, and 0.2222% Indian Cash-Delivery round-trip statutory costs.
+  - Removed forced 1-lot floor (`Math.max(1, ...)`) in `positionSizer.ts` so trades whose 1-lot risk exceeds `maxRiskInr` or `maxOrderNotionalInr` are rejected cleanly.
+  - Synchronized `maxDailyLossInr` in `src/server/riskEngine.ts` to `15,000` (`1.50%`).
+  - Added mutually-exclusive Regime & Relative-Strength Absorption Arbiter between Mode A (`52W-Low Long`) and Mode B (`Bear Put PE`) in `src/services/scriptLearningEngine.ts`.
+  - Built dependency-free `scripts/sync-data.ts` (`npm run data:sync`) and reconciled all documentation disclosures in `USER_GUIDE_STRENGTHS_AND_LIMITATIONS.md` and `README.md`.
 
 ### 9.3 Current Progress & Live System Status
 - **Type Safety & Build**: `compile_applet` and `lint_applet` (`tsc --noEmit`) pass with 0 errors across the entire codebase.
-- **Revert & Audit Ledger**: `REV-001` through `REV-017` are logged in both `PROJECT_CHANGELOG_AND_REVERT_LEDGER.md` and `src/data/architectureRevertLedger.ts` (accessible inside the app under `4. Order Book` -> `04. Architecture Revert Ledger`).
+- **Revert & Audit Ledger**: `REV-001` through `REV-019` are logged in both `PROJECT_CHANGELOG_AND_REVERT_LEDGER.md` and `src/data/architectureRevertLedger.ts` (accessible inside the app under `4. Order Book` -> `04. Architecture Revert Ledger`).
 - **10-Point Brutal Stress Audit**: Passing `10 / 10` checks in `2. Stress Lab` (`BrutalStressTestLab.tsx`).
 
 ### 9.4 Immediate Next Steps & Future Roadmap
+- [ ] **Out-of-Sample Walk-Forward Validation**: Run `npm run data:sync` against full historical universe and review `.data/latest_walkforward_sync.json`.
 - [ ] **Live Upstox WebSocket Stream**: Wire streaming WebSocket feed in `src/services/useMarketWebSocket.ts` for sub-second order book updates.
-- [ ] **Multi-User Desk Real-Time Sync**: Connect Firebase Firestore / SQLite backend for concurrent multi-seat paper trade journals.

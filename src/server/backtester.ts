@@ -455,182 +455,191 @@ export async function runBacktest(symbol: string, strategyId: string, range = '1
   const rsi14 = calcRSI(closes, 14);
   const atr14 = calcATR(allCandles, 14);
 
+  // Cash-Delivery Statutory Cost & Slippage Model (Indian NSE/BSE Delivery Segment)
+  // - STT: 0.10% on buy + 0.10% on sell = 0.2000%
+  // - Exchange Transaction Charge: 0.00297% * 2 = 0.00594%
+  // - SEBI Turnover Fee: 0.0001% * 2 = 0.0002%
+  // - Stamp Duty: 0.015% on buy = 0.0150%
+  // - GST (18% on Exchange + SEBI): 0.0011%
+  // - Slippage: 0.05% per leg = 0.1000% round-trip
+  const ENTRY_SLIPPAGE_PCT = 0.0005; // 5 bps entry slippage
+  const EXIT_SLIPPAGE_PCT = 0.0005;  // 5 bps exit slippage
+  const DELIVERY_STATUTORY_TAX_PCT = 0.2222; // 0.2222% round-trip statutory taxes (STT + Exch + Stamp + SEBI + GST)
+  const ROUND_TRIP_COST_PCT = DELIVERY_STATUTORY_TAX_PCT + (ENTRY_SLIPPAGE_PCT + EXIT_SLIPPAGE_PCT) * 100; // ~0.3222%
+
   // Execute strategy rules across evaluation window
+  // Signal on bar i-1 enters at bar i Open + slippage; stops checked against bar i Open (gap-through) and bar i Low (intraday)
   const pos = new Array(n).fill(0);
   let inPos = 0;
+  let pendingEntrySignal = false;
   let entryPrice = 0;
   let entryIndex = 0;
+  let trailingStopPrice = 0;
+  let highestHighSinceEntry = 0;
 
   // Track trade exits with transparent reasons
   const trades: BacktestResult['trades'] = [];
 
-  for (let i = evalStartIndex; i < n; i++) {
-    const c = closes[i];
-    const prevC = closes[i - 1];
-    const atr = atr14[i] || (c * 0.015);
+  const getInitialAtrStopMult = (strat: string): number => {
+    if (strat === 'kuber') return 3.5;
+    if (strat === 'vidura') return 2.0;
+    return 2.5;
+  };
 
+  for (let i = evalStartIndex; i < n; i++) {
+    const o = allCandles[i].open;
+    const h = highs[i];
+    const l = lows[i];
+    const c = closes[i];
+    const atr = atr14[i] || (c * 0.015);
+    const atrMult = getInitialAtrStopMult(strategyId);
+
+    // 1. If a buy signal was generated on bar i-1 close, enter at bar i Open + slippage
+    if (inPos === 0 && pendingEntrySignal) {
+      inPos = 1;
+      pendingEntrySignal = false;
+      entryPrice = o * (1 + ENTRY_SLIPPAGE_PCT);
+      entryIndex = i;
+      highestHighSinceEntry = Math.max(o, h);
+      trailingStopPrice = entryPrice - atrMult * atr;
+    }
+
+    // 2. If in position, update trailing stop monotonically and check intraday stop-loss (including overnight gap-through-stop at Open)
+    if (inPos === 1) {
+      // Check stop-loss against current bar's Low BEFORE updating trailing stop from current bar's High (conservative bar ordering)
+      if (l <= trailingStopPrice) {
+        // Gap-through-stop fill at Open if bar opened below stopLoss; otherwise fill at trailingStopPrice less exit slippage
+        const rawStopFill = o < trailingStopPrice ? o : trailingStopPrice;
+        const netExitPrice = rawStopFill * (1 - EXIT_SLIPPAGE_PCT);
+        const grossRetPct = ((netExitPrice - entryPrice) / entryPrice) * 100;
+        const netRetPct = grossRetPct - DELIVERY_STATUTORY_TAX_PCT;
+        inPos = 0;
+        trades.push({
+          entryDate: allCandles[entryIndex].date,
+          exitDate: allCandles[i].date,
+          entryPrice: Math.round(entryPrice * 100) / 100,
+          exitPrice: Math.round(netExitPrice * 100) / 100,
+          returnPct: Math.round(netRetPct * 100) / 100,
+          bars: Math.max(1, i - entryIndex),
+          exitReason:
+            o < trailingStopPrice
+              ? `Gap-Through Stop at Open (${atrMult}×ATR Trailing)`
+              : `Intraday Trailing Stop (${atrMult}×ATR)`,
+        });
+      } else {
+        // Ratchet trailing stop upward monotonically as new highs are achieved
+        if (h > highestHighSinceEntry) {
+          highestHighSinceEntry = h;
+        }
+        const candidateTrail = highestHighSinceEntry - atrMult * atr;
+        if (candidateTrail > trailingStopPrice) {
+          trailingStopPrice = candidateTrail;
+        }
+      }
+    }
+
+    // 3. Evaluate end-of-bar strategy target / reversal exits or new entry signals
     switch (strategyId) {
       case 'chanakya': {
-        // Bollinger Mean Reversion
         const mid = sma20[i];
         const sd = std20[i];
         const rsi = rsi14[i];
         if (mid != null && sd != null) {
           const lower = mid - 2 * sd;
           if (inPos === 0 && c < lower && (rsi == null || rsi < 42)) {
-            inPos = 1;
-            entryPrice = c;
-            entryIndex = i;
-          } else if (inPos === 1) {
-            const stopLoss = entryPrice - 2.5 * atr;
-            if (c >= mid) {
-              inPos = 0;
-              trades.push({
-                entryDate: allCandles[entryIndex].date,
-                exitDate: allCandles[i].date,
-                entryPrice: Math.round(entryPrice * 100) / 100,
-                exitPrice: Math.round(c * 100) / 100,
-                returnPct: Math.round(((c - entryPrice) / entryPrice) * 10000) / 100,
-                bars: i - entryIndex,
-                exitReason: 'Mean Reversion Target (20-SMA)',
-              });
-            } else if (c <= stopLoss) {
-              inPos = 0;
-              trades.push({
-                entryDate: allCandles[entryIndex].date,
-                exitDate: allCandles[i].date,
-                entryPrice: Math.round(entryPrice * 100) / 100,
-                exitPrice: Math.round(c * 100) / 100,
-                returnPct: Math.round(((c - entryPrice) / entryPrice) * 10000) / 100,
-                bars: i - entryIndex,
-                exitReason: 'Protective Stop Loss (2.5×ATR)',
-              });
-            }
+            pendingEntrySignal = true;
+          } else if (inPos === 1 && c >= mid) {
+            const netExitPrice = c * (1 - EXIT_SLIPPAGE_PCT);
+            const netRetPct = ((netExitPrice - entryPrice) / entryPrice) * 100 - DELIVERY_STATUTORY_TAX_PCT;
+            inPos = 0;
+            trades.push({
+              entryDate: allCandles[entryIndex].date,
+              exitDate: allCandles[i].date,
+              entryPrice: Math.round(entryPrice * 100) / 100,
+              exitPrice: Math.round(netExitPrice * 100) / 100,
+              returnPct: Math.round(netRetPct * 100) / 100,
+              bars: Math.max(1, i - entryIndex),
+              exitReason: 'Mean Reversion Target (20-SMA)',
+            });
           }
         }
         break;
       }
 
       case 'bhishma': {
-        // Trend Following: EMA 12 / 26 crossover with 50-SMA trend filter
         const f = ema12[i];
         const s = ema26[i];
         const trend = sma50[i] || sma20[i];
         if (f != null && s != null) {
           if (inPos === 0 && f > s && (trend == null || c > trend)) {
-            inPos = 1;
-            entryPrice = c;
-            entryIndex = i;
-          } else if (inPos === 1) {
-            const stopLoss = entryPrice - 2.5 * atr;
-            if (f < s) {
-              inPos = 0;
-              trades.push({
-                entryDate: allCandles[entryIndex].date,
-                exitDate: allCandles[i].date,
-                entryPrice: Math.round(entryPrice * 100) / 100,
-                exitPrice: Math.round(c * 100) / 100,
-                returnPct: Math.round(((c - entryPrice) / entryPrice) * 10000) / 100,
-                bars: i - entryIndex,
-                exitReason: 'Bearish Trend Reversal (EMA Cross)',
-              });
-            } else if (c <= stopLoss) {
-              inPos = 0;
-              trades.push({
-                entryDate: allCandles[entryIndex].date,
-                exitDate: allCandles[i].date,
-                entryPrice: Math.round(entryPrice * 100) / 100,
-                exitPrice: Math.round(c * 100) / 100,
-                returnPct: Math.round(((c - entryPrice) / entryPrice) * 10000) / 100,
-                bars: i - entryIndex,
-                exitReason: 'Trailing Stop Loss (2.5×ATR)',
-              });
-            }
+            pendingEntrySignal = true;
+          } else if (inPos === 1 && f < s) {
+            const netExitPrice = c * (1 - EXIT_SLIPPAGE_PCT);
+            const netRetPct = ((netExitPrice - entryPrice) / entryPrice) * 100 - DELIVERY_STATUTORY_TAX_PCT;
+            inPos = 0;
+            trades.push({
+              entryDate: allCandles[entryIndex].date,
+              exitDate: allCandles[i].date,
+              entryPrice: Math.round(entryPrice * 100) / 100,
+              exitPrice: Math.round(netExitPrice * 100) / 100,
+              returnPct: Math.round(netRetPct * 100) / 100,
+              bars: Math.max(1, i - entryIndex),
+              exitReason: 'Bearish Trend Reversal (EMA Cross)',
+            });
           }
         }
         break;
       }
 
       case 'arjuna': {
-        // Donchian Breakout Momentum: 20-day high breakout, 10-day low exit
         if (i >= 20) {
           const hh = Math.max(...highs.slice(i - 20, i));
           const ll = Math.min(...lows.slice(i - 10, i));
           if (inPos === 0 && c > hh) {
-            inPos = 1;
-            entryPrice = c;
-            entryIndex = i;
-          } else if (inPos === 1) {
-            const stopLoss = entryPrice - 2.5 * atr;
-            if (c < ll) {
-              inPos = 0;
-              trades.push({
-                entryDate: allCandles[entryIndex].date,
-                exitDate: allCandles[i].date,
-                entryPrice: Math.round(entryPrice * 100) / 100,
-                exitPrice: Math.round(c * 100) / 100,
-                returnPct: Math.round(((c - entryPrice) / entryPrice) * 10000) / 100,
-                bars: i - entryIndex,
-                exitReason: 'Donchian 10-Day Channel Breakdown',
-              });
-            } else if (c <= stopLoss) {
-              inPos = 0;
-              trades.push({
-                entryDate: allCandles[entryIndex].date,
-                exitDate: allCandles[i].date,
-                entryPrice: Math.round(entryPrice * 100) / 100,
-                exitPrice: Math.round(c * 100) / 100,
-                returnPct: Math.round(((c - entryPrice) / entryPrice) * 10000) / 100,
-                bars: i - entryIndex,
-                exitReason: 'Protective Stop Loss (2.5×ATR)',
-              });
-            }
+            pendingEntrySignal = true;
+          } else if (inPos === 1 && c < ll) {
+            const netExitPrice = c * (1 - EXIT_SLIPPAGE_PCT);
+            const netRetPct = ((netExitPrice - entryPrice) / entryPrice) * 100 - DELIVERY_STATUTORY_TAX_PCT;
+            inPos = 0;
+            trades.push({
+              entryDate: allCandles[entryIndex].date,
+              exitDate: allCandles[i].date,
+              entryPrice: Math.round(entryPrice * 100) / 100,
+              exitPrice: Math.round(netExitPrice * 100) / 100,
+              returnPct: Math.round(netRetPct * 100) / 100,
+              bars: Math.max(1, i - entryIndex),
+              exitReason: 'Donchian 10-Day Channel Breakdown',
+            });
           }
         }
         break;
       }
 
       case 'kuber': {
-        // RSI Swing & Value Accumulation
         const r = rsi14[i];
         const prevR = rsi14[i - 1];
         if (r != null && prevR != null) {
           if (inPos === 0 && r < 36 && r > prevR) {
-            inPos = 1;
-            entryPrice = c;
-            entryIndex = i;
-          } else if (inPos === 1) {
-            const stopLoss = entryPrice - 3.5 * atr;
-            if (r > 62) {
-              inPos = 0;
-              trades.push({
-                entryDate: allCandles[entryIndex].date,
-                exitDate: allCandles[i].date,
-                entryPrice: Math.round(entryPrice * 100) / 100,
-                exitPrice: Math.round(c * 100) / 100,
-                returnPct: Math.round(((c - entryPrice) / entryPrice) * 10000) / 100,
-                bars: i - entryIndex,
-                exitReason: 'RSI Target Reached (>62)',
-              });
-            } else if (c <= stopLoss) {
-              inPos = 0;
-              trades.push({
-                entryDate: allCandles[entryIndex].date,
-                exitDate: allCandles[i].date,
-                entryPrice: Math.round(entryPrice * 100) / 100,
-                exitPrice: Math.round(c * 100) / 100,
-                returnPct: Math.round(((c - entryPrice) / entryPrice) * 10000) / 100,
-                bars: i - entryIndex,
-                exitReason: 'Trailing Value Stop (3.5×ATR)',
-              });
-            }
+            pendingEntrySignal = true;
+          } else if (inPos === 1 && r > 62) {
+            const netExitPrice = c * (1 - EXIT_SLIPPAGE_PCT);
+            const netRetPct = ((netExitPrice - entryPrice) / entryPrice) * 100 - DELIVERY_STATUTORY_TAX_PCT;
+            inPos = 0;
+            trades.push({
+              entryDate: allCandles[entryIndex].date,
+              exitDate: allCandles[i].date,
+              entryPrice: Math.round(entryPrice * 100) / 100,
+              exitPrice: Math.round(netExitPrice * 100) / 100,
+              returnPct: Math.round(netRetPct * 100) / 100,
+              bars: Math.max(1, i - entryIndex),
+              exitReason: 'RSI Target Reached (>62)',
+            });
           }
         }
         break;
       }
 
       case 'vidura': {
-        // Defensive Regime Filter: secular bull regime only; flat in bear regime
         const s200 = sma200[i] || sma50[i];
         const s50 = sma50[i];
         const e20 = ema20[i] || sma20[i];
@@ -638,34 +647,20 @@ export async function runBacktest(symbol: string, strategyId: string, range = '1
           const isBullRegime = c > s200;
           const isPullback = Math.abs(c - e20) / e20 < 0.02 && c > s50;
           if (inPos === 0 && isBullRegime && isPullback) {
-            inPos = 1;
-            entryPrice = c;
-            entryIndex = i;
-          } else if (inPos === 1) {
-            const stopLoss = entryPrice - 2.0 * atr;
-            if (c < s50 || !isBullRegime) {
-              inPos = 0;
-              trades.push({
-                entryDate: allCandles[entryIndex].date,
-                exitDate: allCandles[i].date,
-                entryPrice: Math.round(entryPrice * 100) / 100,
-                exitPrice: Math.round(c * 100) / 100,
-                returnPct: Math.round(((c - entryPrice) / entryPrice) * 10000) / 100,
-                bars: i - entryIndex,
-                exitReason: 'Regime Risk-Off Filter Breakdown',
-              });
-            } else if (c <= stopLoss) {
-              inPos = 0;
-              trades.push({
-                entryDate: allCandles[entryIndex].date,
-                exitDate: allCandles[i].date,
-                entryPrice: Math.round(entryPrice * 100) / 100,
-                exitPrice: Math.round(c * 100) / 100,
-                returnPct: Math.round(((c - entryPrice) / entryPrice) * 10000) / 100,
-                bars: i - entryIndex,
-                exitReason: 'Defensive Stop Loss (2.0×ATR)',
-              });
-            }
+            pendingEntrySignal = true;
+          } else if (inPos === 1 && (c < s50 || !isBullRegime)) {
+            const netExitPrice = c * (1 - EXIT_SLIPPAGE_PCT);
+            const netRetPct = ((netExitPrice - entryPrice) / entryPrice) * 100 - DELIVERY_STATUTORY_TAX_PCT;
+            inPos = 0;
+            trades.push({
+              entryDate: allCandles[entryIndex].date,
+              exitDate: allCandles[i].date,
+              entryPrice: Math.round(entryPrice * 100) / 100,
+              exitPrice: Math.round(netExitPrice * 100) / 100,
+              returnPct: Math.round(netRetPct * 100) / 100,
+              bars: Math.max(1, i - entryIndex),
+              exitReason: 'Regime Risk-Off Filter Breakdown',
+            });
           }
         }
         break;
@@ -674,7 +669,11 @@ export async function runBacktest(symbol: string, strategyId: string, range = '1
     pos[i] = inPos;
   }
 
-  // If trade is still open at the last bar, record as active open position
+  // Separate closed trades from any still-open position at the end of the window
+  const closedTrades = [...trades];
+
+  // If trade is still open at the last bar, record for display in trade blotter ONLY
+  // (Strictly excluded from win-rate, expectancy, profit factor, and t-stat calculations)
   if (inPos === 1) {
     const lastBar = allCandles[n - 1];
     trades.push({
@@ -682,14 +681,14 @@ export async function runBacktest(symbol: string, strategyId: string, range = '1
       exitDate: `${lastBar.date} (Open Position)`,
       entryPrice: Math.round(entryPrice * 100) / 100,
       exitPrice: Math.round(lastBar.close * 100) / 100,
-      returnPct: Math.round(((lastBar.close - entryPrice) / entryPrice) * 10000) / 100,
-      bars: n - 1 - entryIndex,
-      exitReason: 'Active Open Position (Unrealized)',
+      returnPct: Math.round((((lastBar.close - entryPrice) / entryPrice) * 100 - DELIVERY_STATUTORY_TAX_PCT / 2) * 100) / 100,
+      bars: Math.max(1, n - 1 - entryIndex),
+      exitReason: 'Active Open Position (Unrealized — Excluded from Closed Stats)',
     });
   }
 
   // ---------------------------------------------------------------------------
-  // EQUITY CURVE & PERFORMANCE METRICS
+  // EQUITY CURVE & PERFORMANCE METRICS (NET OF DELIVERY COSTS & SLIPPAGE)
   // ---------------------------------------------------------------------------
 
   const evalCandles = allCandles.slice(evalStartIndex);
@@ -704,8 +703,14 @@ export async function runBacktest(symbol: string, strategyId: string, range = '1
 
   for (let i = evalStartIndex + 1; i < n; i++) {
     const dayRet = (closes[i] - closes[i - 1]) / closes[i - 1];
-    // Position enters next bar after signal
-    const stratRet = pos[i - 1] === 1 ? dayRet : 0;
+    const wasInPos = pos[i - 1] === 1;
+    const isNowInPos = pos[i] === 1;
+    // Deduct half round-trip cost on entry transition and half on exit transition
+    let transitionCost = 0;
+    if (!wasInPos && isNowInPos) transitionCost += (ROUND_TRIP_COST_PCT / 100) * 0.5;
+    if (wasInPos && !isNowInPos) transitionCost += (ROUND_TRIP_COST_PCT / 100) * 0.5;
+
+    const stratRet = (isNowInPos || wasInPos ? dayRet : 0) - transitionCost;
     equity *= (1 + stratRet);
     buyHold = 100 * (closes[i] / initialClose);
     dailyStrategyReturns.push(stratRet);
@@ -727,18 +732,24 @@ export async function runBacktest(symbol: string, strategyId: string, range = '1
 
   const round = (val: number, p = 2) => Math.round(val * Math.pow(10, p)) / Math.pow(10, p);
 
-  // Sharpe & Downside / Sortino Metrics
+  // Sharpe & Downside / Sortino Metrics (Subtracting 6.50% Annualized Risk-Free Rate)
+  const rf = 0.065 / 252; // Daily risk-free rate
   const dailyMean = dailyStrategyReturns.reduce((s, r) => s + r, 0) / (dailyStrategyReturns.length || 1);
-  const dailyVar = dailyStrategyReturns.reduce((s, r) => s + (r - dailyMean) ** 2, 0) / (dailyStrategyReturns.length || 1);
+  const dailyVar =
+    dailyStrategyReturns.length > 1
+      ? dailyStrategyReturns.reduce((s, r) => s + (r - dailyMean) ** 2, 0) / (dailyStrategyReturns.length - 1)
+      : 0;
   const dailySd = Math.sqrt(dailyVar);
-  const annualSharpe = dailySd > 0 ? (dailyMean / dailySd) * Math.sqrt(252) : 0;
+  const perPeriodSharpe = dailySd > 0 ? (dailyMean - rf) / dailySd : 0;
+  const annualSharpe = perPeriodSharpe * Math.sqrt(252);
 
-  // Downside deviation (only negative returns)
-  const downsideVar = dailyStrategyReturns
-    .filter((r) => r < 0)
-    .reduce((s, r) => s + r ** 2, 0) / (dailyStrategyReturns.length || 1);
+  // Downside deviation (returns below daily risk-free rate)
+  const downsideVar =
+    dailyStrategyReturns
+      .filter((r) => r < rf)
+      .reduce((s, r) => s + (r - rf) ** 2, 0) / (dailyStrategyReturns.length || 1);
   const downsideSd = Math.sqrt(downsideVar);
-  const sortino = downsideSd > 0 ? (dailyMean / downsideSd) * Math.sqrt(252) : (annualSharpe > 0 ? annualSharpe * 1.3 : 0);
+  const sortino = downsideSd > 0 ? ((dailyMean - rf) / downsideSd) * Math.sqrt(252) : (annualSharpe > 0 ? annualSharpe * 1.3 : 0);
 
   // Calmar ratio
   const totalReturnPct = equity - 100;
@@ -748,31 +759,31 @@ export async function runBacktest(symbol: string, strategyId: string, range = '1
   const annualizedReturn = years > 0 ? ((equity / 100) ** (1 / years) - 1) * 100 : totalReturnPct;
   const calmar = maxDd > 0 ? round(annualizedReturn / (maxDd * 100)) : round(annualizedReturn > 0 ? 5.0 : 0);
 
-  // Trades performance
-  const numTrades = trades.length;
-  const wins = trades.filter((t) => t.returnPct > 0).length;
-  const losses = trades.filter((t) => t.returnPct < 0).length;
+  // Closed Trades performance (Strictly excludes unrealized open positions)
+  const numTrades = closedTrades.length;
+  const wins = closedTrades.filter((t) => t.returnPct > 0).length;
+  const losses = closedTrades.filter((t) => t.returnPct <= 0).length;
   const winRate = numTrades > 0 ? wins / numTrades : 0;
   const winRatePct = round(winRate * 100);
 
-  // Exact Wilson score interval
+  // Exact Wilson score interval on closed trades
   const { lower: winRateLowerBound, upper: winRateUpperBound } = calcWilsonScoreInterval(wins, numTrades);
 
-  // Profit factor
-  const grossProfit = trades.filter((t) => t.returnPct > 0).reduce((s, t) => s + t.returnPct, 0);
-  const grossLoss = Math.abs(trades.filter((t) => t.returnPct < 0).reduce((s, t) => s + t.returnPct, 0));
+  // Profit factor on closed trades
+  const grossProfit = closedTrades.filter((t) => t.returnPct > 0).reduce((s, t) => s + t.returnPct, 0);
+  const grossLoss = Math.abs(closedTrades.filter((t) => t.returnPct <= 0).reduce((s, t) => s + t.returnPct, 0));
   const profitFactor = grossLoss > 0 ? round(grossProfit / grossLoss) : round(grossProfit > 0 ? 9.99 : 1.0);
 
-  // Expectancy (per trade mathematical expectation)
+  // Expectancy (per closed trade mathematical expectation net of delivery costs)
   const avgWin = wins > 0 ? grossProfit / wins : 0;
   const avgLoss = losses > 0 ? grossLoss / losses : 0;
   const expectancyPct = round((winRate * avgWin) - ((1 - winRate) * avgLoss));
 
-  // Max consecutive losses
+  // Max consecutive losses on closed trades
   let maxConsecLosses = 0;
   let currConsecLosses = 0;
-  for (const t of trades) {
-    if (t.returnPct < 0) {
+  for (const t of closedTrades) {
+    if (t.returnPct <= 0) {
       currConsecLosses++;
       if (currConsecLosses > maxConsecLosses) maxConsecLosses = currConsecLosses;
     } else {
@@ -780,15 +791,13 @@ export async function runBacktest(symbol: string, strategyId: string, range = '1
     }
   }
 
-  // Skewness & Kurtosis of trade returns
-  const tradeReturns = trades.map((t) => t.returnPct);
-  const skew = calcSkewness(tradeReturns);
-  const kurt = calcKurtosis(tradeReturns);
+  // Skewness & Kurtosis of daily returns (matched in frequency to perPeriodSharpe for López de Prado PSR)
+  const dailySkew = calcSkewness(dailyStrategyReturns);
+  const dailyKurt = calcKurtosis(dailyStrategyReturns);
+  const probabilisticSharpeRatioPct = calcPSR(perPeriodSharpe, dailyStrategyReturns.length, dailySkew, dailyKurt, 0);
 
-  // Probabilistic Sharpe Ratio (López de Prado)
-  const probabilisticSharpeRatioPct = calcPSR(annualSharpe, numTrades, skew, kurt);
-
-  // Student's t-statistic on trade returns
+  // Student's t-statistic on closed trade returns
+  const tradeReturns = closedTrades.map((t) => t.returnPct);
   const meanTrade = tradeReturns.length > 0 ? tradeReturns.reduce((a, b) => a + b, 0) / tradeReturns.length : 0;
   const varTrade = tradeReturns.length > 1
     ? tradeReturns.reduce((a, b) => a + (b - meanTrade) ** 2, 0) / (tradeReturns.length - 1)
@@ -801,15 +810,10 @@ export async function runBacktest(symbol: string, strategyId: string, range = '1
   // Sample size adequacy
   const sampleSizeAdequate = numTrades >= 15;
   const sampleNote = sampleSizeAdequate
-    ? `Sample size (N=${numTrades} trades) fulfills statistical requirements for asymptotic confidence.`
-    : `Sample size (N=${numTrades} trades) is developing. Consider testing across 2Y or 5Y range for higher statistical power.`;
+    ? `Sample size (N=${numTrades} closed trades) fulfills statistical requirements for asymptotic confidence.`
+    : `Sample size (N=${numTrades} closed trades) is developing. Consider testing across 2Y or 5Y range for higher statistical power.`;
 
   // COMPOSITE STATISTICAL CONFIDENCE SCORE (0-100%)
-  // Formulated transparently without artificial clamping:
-  // - 35% Probabilistic Sharpe Ratio (PSR)
-  // - 25% Sample size confidence (ratio of N/20 up to 100%)
-  // - 20% Profit Factor & Expectancy quality
-  // - 20% Drawdown discipline (penalty if DD > 20%)
   const psrComponent = (probabilisticSharpeRatioPct / 100) * 35;
   const sampleComponent = Math.min(1, numTrades / 20) * 25;
   const pfComponent = Math.min(20, Math.max(0, (profitFactor / 2.0) * 20));
@@ -866,13 +870,13 @@ export async function runBacktest(symbol: string, strategyId: string, range = '1
       latestFeedTimestamp: new Date().toISOString(),
       recentCandlesAudit: evalCandles.slice(-8),
       methodologyNotes: [
-        'Deterministic Daily-Proxy Backtest (Long/Flat) executed bar-by-bar at Next-Bar Open/Close.',
-        'Technical indicator warm-up: Prior historical bars used to calculate 200-SMA, 50-SMA, and RSI from day one.',
-        'Probabilistic Sharpe Ratio (PSR) formulated by Marcos López de Prado (AFML Chapter 14).',
-        'Wilson Score 95% Confidence Interval for Win Rate (exact statistical binomial interval).',
-        'Risk-free rate assumed at 6.50% annualized based on RBI 10-Year Government Securities benchmark.',
+        'Entries executed at Next-Bar Open + 5 bps slippage; exits include 5 bps slippage and full Indian Cash-Delivery statutory friction (~0.222% STT/Stamp/Exchange/SEBI/GST).',
+        'Stops evaluated against intraday Lows with Gap-Through-Stop fills at the Open when a bar gaps below the trailing stop.',
+        'Monotonic High-Water-Mark ATR Trailing Stops active across trend/swing strategies.',
+        'Open unrealized positions at the end of the sample are excluded from Win Rate, Profit Factor, Expectancy, and Student t-statistics.',
+        'Probabilistic Sharpe Ratio (PSR) computed on per-period (daily) excess returns (6.50% annualized RBI G-Sec risk-free rate subtracted).',
       ],
     },
-    disclaimer: 'Institutional daily-proxy backtest (long/flat), not option-level derivative P&L. Authentic live data feed from exchange daily bars. No brokerage commissions or slippage modelled. Past statistical performance is not an endorsement of future gains.',
+    disclaimer: 'Institutional daily-proxy backtest (long/flat) net of Indian cash-delivery statutory taxes (0.222%) and 10 bps round-trip slippage. Past statistical performance does not guarantee future results.',
   };
 }

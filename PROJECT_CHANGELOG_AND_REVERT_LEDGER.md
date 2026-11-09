@@ -133,5 +133,24 @@ This document records every surgical UI/module pruning action, static data remov
   3. **Dual-Mode 52W-Low Institutional Bottom Accumulation & Bear-Market Put (`PE`) F&O Scanner (`evaluateBottomAccumulationAndBearPutMatrix`)**: Identifies both 52W-Low accumulation longs (`BOTTOM_ACCUMULATION_LONG`) and Bear-Market Put F&O setups (`BEAR_MARKET_PUT_FNO`) with explicit `T1 / T2 / T3` targets and a 4-stage **Non-Erosion Step-Ratchet Exit Plan** (`Cost+Friction at T1 -> Lock T1 at T2 -> 1.5x ATR Runner at T3`).
   4. **Calendarized T-1 Pre-Market Statutory Tax, SEBI & Brokerage Rule Radar + Before/After Order Ledger**: Stages upcoming tax/SEBI/brokerage changes `T-1 Day` before Go-Live for manual user approval before `09:15 IST` market open, and stamps `taxRuleVersionId` onto every order so historical trades preserve their **Before** calculation while post-approval trades use the **After** calculation.
   5. **Auto-Updated User Guide & Strengths/Weaknesses**: Added standalone `/USER_GUIDE_STRENGTHS_AND_LIMITATIONS.md` and Sub-Tab `06. User Guide & Strengths/Weaknesses` in `4. Order Book`.
-- **How to Revert**: Revert core labels in `Header.tsx`/`Sidebar.tsx`/`App.tsx`, remove `evaluateBottomAccumulationAndBearPutMatrix()` in `scriptLearningEngine.ts`, and remove `getStatutoryTaxRuleCalendar()` in `statutoryVetoEngine.ts`.
+### `REV-018` — Persistent Viewport Watermark & Dynamic Scrolling "DO NOT USE" Maintenance Banner
+- **Files Modified**: `src/components/DoNotUseWatermarkBanner.tsx`, `src/App.tsx`, `src/index.css`, `src/data/architectureRevertLedger.ts`
+- **New Behavior**:
+  1. **Fixed Top Dynamic Scrolling Ticker**: Added a persistent, marquee-scrolling red warning banner across the top of all pages (`DO NOT USE — THIS APPLICATION HAS ISSUES WHICH ARE CURRENTLY BEING INVESTIGATED & FIXED • DO NOT PLACE REAL TRADES OR RELY ON SIGNALS / ORDER BOOK OUTPUTS • ENGINEERING HOTFIXES IN PROGRESS ACROSS ALL 4 CORES`).
+  2. **Prominent Viewport Diagonal Watermark**: Implemented a bold diagonal red "DO NOT USE" stamp (`font-black text-red-600 text-6xl sm:text-8xl md:text-9xl`) with an authentic maintenance border that stays locked in the center of the user's viewport dynamically as they scroll across any page or tab.
+  3. **Viewport Minimizer**: Added a top-bar control allowing authorized operators to dim/minimize the central watermark stamp when conducting code diagnostics without obscuring underlying tables.
+- **How to Revert**: Remove `<DoNotUseWatermarkBanner />` from `src/App.tsx` and reset top header/sidebar offsets.
+
+### `REV-019` — Full Quantitative & Logic Audit Remediation (`src/server/backtester.ts`, `src/services/positionSizer.ts`, `src/server/riskEngine.ts`, `src/services/scriptLearningEngine.ts`, `scripts/sync-data.ts`)
+- **Files Modified**: `src/server/backtester.ts`, `src/services/positionSizer.ts`, `src/server/riskEngine.ts`, `src/services/scriptLearningEngine.ts`, `scripts/sync-data.ts`, `package.json`, `USER_GUIDE_STRENGTHS_AND_LIMITATIONS.md`, `README.md`, `.gitignore`, `LICENSE`
+- **New Behavior**:
+  1. **Sharpe, Sortino & López de Prado PSR Fix (`src/server/backtester.ts`)**: Subtracts daily risk-free rate (`rf = 0.065 / 252`) in Sharpe and Sortino, and passes per-period (daily) Sharpe along with daily return skewness/kurtosis and daily sample count into `calcPSR()`.
+  2. **Closed-Only Trade Statistics (`src/server/backtester.ts`)**: Separates `closedTrades` from any unrealized open position at the end of the test window so Win Rate, Wilson 95% CI, Profit Factor, Expectancy, Consecutive Losses, and Student's *t*-statistic are never polluted by open trades.
+  3. **Next-Bar Open + Slippage, Gap-Through-Stop Fills, Monotonic Trailing Stops & Cash-Delivery Statutory Costs (`src/server/backtester.ts`)**: Enters at Next-Bar Open + `5 bps` slippage; checks stops against `candle.low` on all 5 strategies; fills overnight gap-downs below stop at `candle.open` (less `5 bps` slippage); ratchets `trailingStopPrice` monotonically upward using `highestHighSinceEntry`; and deducts `0.2222%` Indian Cash-Delivery statutory taxes (`0.20%` round-trip STT + Stamp Duty + Exchange + SEBI + 18% GST) on every trade and equity curve transition.
+  4. **Hard Risk Cap in Lot Sizer (`src/services/positionSizer.ts`)**: Removed `Math.max(1, ...)` so `calculatePositionSize()` returns `isValid: false, lots: 0` whenever 1 lot exceeds `maxRiskInr` or `maxOrderNotionalInr`.
+  5. **Synchronized `1.50%` Daily Loss Cap (`src/server/riskEngine.ts`)**: Changed `maxDailyLossInr` from `25,000` (`2.5%`) to `15,000` (`1.5%` of `₹10,00,000` capital) to match documentation.
+  6. **Mutually-Exclusive Mode A vs. Mode B Arbiter (`src/services/scriptLearningEngine.ts`)**: Enforced `qualifiesForModeALong` vs. `else if (qualifiesForModeBPut)` so no stock can simultaneously be recommended as a 52W-Low Cash Long and a Bear Put (`PE`).
+  7. **Automated Native-Fetch Data & Walk-Forward Sync CLI (`scripts/sync-data.ts`)**: Added `npm run data:sync` using native `fetch` and `runBacktest` to output `.data/latest_walkforward_sync.json`.
+- **How to Revert**: Revert the listed files to `REV-018`.
+
 

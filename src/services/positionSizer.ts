@@ -152,9 +152,17 @@ export function calculatePositionSize(input: SizingInput): SizingOutput {
   // --- Raw quantity (in shares / units)
   const rawQty = maxRiskInr / priceDistance;
 
-  // --- Round down to nearest lot
+  // --- Round down to nearest lot (NEVER force 1 lot if 1 lot exceeds maxRiskInr)
   const rawLots = rawQty / lotSize;
-  let lots = Math.max(1, Math.floor(rawLots));
+  let lots = Math.floor(rawLots);
+
+  if (lots < 1) {
+    const oneLotRiskInr = lotSize * priceDistance;
+    const oneLotRiskPct = (oneLotRiskInr / input.capitalInr) * 100;
+    return invalid(
+      `1 lot (${lotSize} units) risks ₹${Math.round(oneLotRiskInr).toLocaleString('en-IN')} (${oneLotRiskPct.toFixed(2)}% of capital), which exceeds your max risk cap of ₹${Math.round(maxRiskInr).toLocaleString('en-IN')} (${rawRiskPct}%). Increase capital or tighten stop-loss.`
+    );
+  }
 
   // --- Cap at maxLotsPerOrder
   if (lots > maxLots) {
@@ -165,9 +173,15 @@ export function calculatePositionSize(input: SizingInput): SizingOutput {
   const qty = lots * lotSize;
   const notionalInr = qty * input.entryPrice;
 
-  // --- Cap at maxOrderNotionalInr
+  // --- Cap at maxOrderNotionalInr (NEVER force 1 lot if 1 lot exceeds maxNotional)
   if (notionalInr > maxNotional) {
-    const capped = Math.max(1, Math.floor(maxNotional / (input.entryPrice * lotSize)));
+    const capped = Math.floor(maxNotional / (input.entryPrice * lotSize));
+    if (capped < 1) {
+      const oneLotNotional = lotSize * input.entryPrice;
+      return invalid(
+        `1 lot (${lotSize} units) notional ₹${Math.round(oneLotNotional).toLocaleString('en-IN')} exceeds max order notional cap ₹${maxNotional.toLocaleString('en-IN')}.`
+      );
+    }
     warnings.push(
       `Lots reduced from ${lots} to ${capped} — notional ₹${Math.round(notionalInr).toLocaleString('en-IN')} exceeded cap ₹${maxNotional.toLocaleString('en-IN')}.`
     );
@@ -196,12 +210,6 @@ export function calculatePositionSize(input: SizingInput): SizingOutput {
       break;
     default:
       capitalAllocatedInr = finalNotional;
-  }
-
-  if (finalQty === 0 || lots === 0) {
-    return invalid(
-      `Calculated qty is zero. Risk ₹${Math.round(maxRiskInr)} ÷ price distance ₹${priceDistance.toFixed(2)} = ${rawQty.toFixed(1)} units, which rounds to 0 lots. Increase capital, raise risk %, or widen stop-loss.`
-    );
   }
 
   return {

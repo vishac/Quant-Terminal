@@ -49,10 +49,18 @@
     - Automatically stages upcoming statutory tax, SEBI turnover, exchange fee, and brokerage rules **`T-1 Day` before Go-Live** with a prominent pre-market alert banner so the operator can manually **Approve** or **Defer** the rule before `09:15 IST` market open.
     - Permanently stamps `taxRuleVersionId` and `taxRuleVersionLabel` onto every executed order so historical trades preserve their exact **Before** statutory calculation while post-approval trades use the **After** calculation.
 
-11. **5-Stage Inter-Agent Consensus Council, Universal `> 2.00%` Net Profit Veto Gate & `<= 1.50%` (`< 2.00%`) Drawdown Quarter-Kelly Sizer**:
-    - Every automated and manual trade across all 4 Cores passes through the sequential 5-Stage Council and pre-trade statutory friction veto (`Net Profit > 2.00%`, `Gross/Friction >= 3.0x`, `Max Daily Drawdown <= 1.50%`).
+11. **5-Stage Inter-Agent Consensus Council, Universal `> 2.00%` Net Profit Veto Gate & `<= 1.50%` Intraday Drawdown Sizer**:
+    - Every automated and manual trade across all 4 Cores passes through the sequential 5-Stage Council and pre-trade statutory friction veto (`Net Profit > 2.00%`, `Gross/Friction >= 3.0x`, `Max Daily Intraday Drawdown <= 1.50%` synchronized across both frontend and `src/server/riskEngine.ts`).
+    - **Overnight Gap vs. Intraday Stop Disclosure**: While intraday drawdown is capped at `<= 1.50%` during market hours, overnight cash equity positions can gap through stops at the `09:15 IST` open (explicitly modelled as gap-through-stop fills at the Open in `src/server/backtester.ts`).
+    - **Strict Lot-Sizing Cap (`src/services/positionSizer.ts`)**: Never forces `1 lot` when 1 lot exceeds the operator's `maxRiskInr` or `maxOrderNotionalInr` cap.
 
-12. **Standalone & In-App User Guide + Complete Revert Ledger (`REV-001` – `REV-017`)**:
-    - See `USER_GUIDE_STRENGTHS_AND_LIMITATIONS.md` (and Sub-Tab `06` inside **`4. Order Book`**) for the operational workflow, strengths, and honest structural limitations.
-    - All architectural changes (`REV-001` through `REV-017`) are documented in `PROJECT_CHANGELOG_AND_REVERT_LEDGER.md` and `src/data/architectureRevertLedger.ts`.
+12. **Remediated Backtester (`src/server/backtester.ts`) & Automated Data Sync CLI (`npm run data:sync`)**:
+    - Models **Next-Bar Open + 5 bps slippage** entries, **intraday Low (`candle.low`) stop checks**, **Gap-Through-Stop fills at the Open**, **monotonic High-Water-Mark ATR trailing stops**, and **Indian Cash-Delivery round-trip statutory costs (`0.2222%`) + `10 bps` slippage**.
+    - Excludes unrealized open positions from Win Rate, Profit Factor, Expectancy, and *t*-statistics; subtracts the `6.50%` annualized risk-free rate in Sharpe/Sortino; and computes López de Prado `PSR` using per-period (daily) Sharpe and daily skewness/kurtosis.
+    - Run `npm run data:sync` (`scripts/sync-data.ts`) to execute automated historical candle validation and write results to `.data/latest_walkforward_sync.json`.
+
+13. **Standalone & In-App User Guide + Complete Revert Ledger (`REV-001` – `REV-019`)**:
+    - See `USER_GUIDE_STRENGTHS_AND_LIMITATIONS.md` (and Sub-Tab `06` inside **`4. Order Book`**) for reconciled feed disclosures (Upstox real-time when paired vs. Yahoo Finance delayed fallback when unpaired), heuristic prior disclaimers, and structural limitations.
+    - All architectural changes (`REV-001` through `REV-019`) are documented in `PROJECT_CHANGELOG_AND_REVERT_LEDGER.md` and `src/data/architectureRevertLedger.ts`.
+
 

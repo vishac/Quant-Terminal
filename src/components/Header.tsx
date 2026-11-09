@@ -78,7 +78,7 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <>
-      <header className={`fixed top-0 right-0 h-16 bg-[#090e19]/90 backdrop-blur-xl border-b border-cyan-500/15 shadow-[0_1px_12px_rgba(0,240,255,0.06)] z-40 flex items-center justify-between px-3 sm:px-6 font-mono transition-all duration-300 ease-in-out ${
+      <header className={`fixed top-8 right-0 h-16 bg-[#090e19]/90 backdrop-blur-xl border-b border-cyan-500/15 shadow-[0_1px_12px_rgba(0,240,255,0.06)] z-40 flex items-center justify-between px-3 sm:px-6 font-mono transition-all duration-300 ease-in-out ${
         userRole === 'admin' && isSidebarOpen ? 'left-0 lg:left-64' : 'left-0'
       }`}>
         {/* Left items: Breadcrumb Button, Info Icon & Live Feed Telemetry */}
