@@ -370,10 +370,12 @@ export function deriveLiveAutonomousAgents(
   const actualGainers = validQuotes
     .filter((item) => {
       const clean = item.rec.symbol;
+      const hasOpenLoss = openLosingSymbols.has(clean);
+      const isAutoLiftedOrHighConviction =
+        Boolean((item.rec.convictionScore && item.rec.convictionScore >= 88) || item.rec.isQuarantineAutoLifted);
       const isQuarantined =
-        item.rec.isQuarantined ||
-        Boolean(learnedMemory[clean]?.quarantined) ||
-        openLosingSymbols.has(clean);
+        hasOpenLoss ||
+        (!isAutoLiftedOrHighConviction && (item.rec.isQuarantined || Boolean(learnedMemory[clean]?.quarantined)));
       return item.rec.changePct > 0 && !isQuarantined;
     })
     .sort((a, b) => b.rec.learnedScore - a.rec.learnedScore || b.rec.changePct - a.rec.changePct);
@@ -381,11 +383,14 @@ export function deriveLiveAutonomousAgents(
   const actualDecliners = validQuotes
     .filter((item) => {
       const clean = item.rec.symbol;
+      const hasOpenLoss = openLosingSymbols.has(clean);
+      const isAutoLiftedOrHighConviction =
+        Boolean((item.rec.convictionScore && item.rec.convictionScore >= 88) || item.rec.isQuarantineAutoLifted);
       const isQuarantined =
-        item.rec.isQuarantined ||
-        Boolean(learnedMemory[clean]?.quarantined) ||
-        openLosingSymbols.has(clean);
-      return item.rec.changePct < 0 || isQuarantined;
+        hasOpenLoss ||
+        (!isAutoLiftedOrHighConviction && (item.rec.isQuarantined || Boolean(learnedMemory[clean]?.quarantined)));
+      // Only include stocks that are genuinely declining OR quarantined with negative/flat performance; never short positive high-conviction leaders!
+      return item.rec.changePct < 0 || (isQuarantined && item.rec.changePct <= 0.1);
     })
     .sort((a, b) => a.rec.learnedScore - b.rec.learnedScore || a.rec.changePct - b.rec.changePct);
 

@@ -253,4 +253,19 @@ This document records every surgical UI/module pruning action, static data remov
   3. **Simplified Minimal Terminology**: Purged user-facing instances of "Jarvis", "Institutional", and "Quant" in favor of clean, minimal labels ("Terminal", "Engine", "Radar", "Stock Dossier", "Strategy"), while preserving internal `localStorage` keys and custom events for uninterrupted state continuity.
 - **How to Revert**: Revert `index.html`, `src/components/Header.tsx`, `src/components/Sidebar.tsx`, and modified component files to `REV-028`.
 
+### `REV-030` — Conviction-Driven Quarantine Auto-Lift, Script Learning Session Rollover, and Stock Card Release UI
+- **Files Modified**: `src/services/scriptLearningEngine.ts`, `src/services/agentQuantEngine.ts`, `src/components/InstitutionalEquityRadar.tsx`, `src/components/FirstPrinciplesMarketEngine.tsx`, `src/components/TradeHistory.tsx`, `src/data/architectureRevertLedger.ts`
+- **Root Cause Identified**:
+  1. High-conviction breakout stocks like `UNIONBANK` (scoring 95/100 conviction with +5.68% gain) were permanently quarantined in `localStorage` (`jarvis_script_learning_ledger_v1`) by `scriptLearningEngine.ts` if they had any prior paper loss or macro sector headwind. The recovery condition was overly rigid, requiring `intradayRangePct >= 75%` and zero macro sector headwinds.
+  2. In `src/services/agentQuantEngine.ts` (lines 370–390), `isQuarantined` caused positive breakout stocks to be excluded from `actualGainers` and dumped into `actualDecliners` to be shorted!
+  3. Loss memory was never date-partitioned, causing paper losses from previous days to stay sticky indefinitely.
+  4. Radar cards, First Principles cards, and Order Book tables gave no visible indication of why an asset was blocked nor a way to release it.
+- **New Behavior**:
+  1. **Execution Gate (≥88/100) Quarantine Auto-Lift (`evaluateAdaptiveScriptLearningMatrix`)**: Evaluates the stock's 5-pillar composite conviction score via `getStrategyQuantification(symbol)`. If conviction is `>= 88` (or relative alpha breakout `>= 1.25%` with alpha `>= 0.8%`) without active open loss (`sessionOpenPnlINR >= -35`), quarantine is automatically lifted (`isQuarantined = false`, `quarantineReason = null`, `isQuarantineAutoLifted = true`), unblocking autonomous deployment immediately.
+  2. **Non-Contradictory Gainer/Decliner Engine Filtering (`agentQuantEngine.ts`)**: Quarantined stocks with positive momentum or `>=88` conviction are strictly kept in `actualGainers` and never forced into `actualDecliners` to be shorted.
+  3. **Daily Session Slate Rollover (`loadPersistedScriptMemory`)**: Automatically tracks the active trading date via `Asia/Kolkata` timezone (`jarvis_script_learning_session_date_v1`). At the start of each daily session, stale quarantine flags and past loss tallies reset to clean slate.
+  4. **Interactive `QUARANTINED` Badges with 1-Click Release**: Stock cards in Radar (Table and Split Dossier modes) and First Principles Market Engine (Rising and Falling cards) display an amber/rose `QUARANTINED` badge with a 1-click `Release` button that clears the quarantine in persistent memory and emits `jarvis:script-memory-updated` to re-sync all UI components without reload. Also added a `RELEASE ALL` button in the Radar toolbar and a `Reset Learning Memory` button in Trade History.
+- **How to Revert**: Revert `src/services/scriptLearningEngine.ts`, `src/services/agentQuantEngine.ts`, `src/components/InstitutionalEquityRadar.tsx`, `src/components/FirstPrinciplesMarketEngine.tsx`, and `src/components/TradeHistory.tsx` to `REV-029`.
+
+
 

@@ -451,6 +451,22 @@ export const ARCHITECTURE_REVERT_LEDGER: RevertLedgerEntry[] = [
     revertInstruction:
       'Revert index.html, src/components/Header.tsx, src/components/Sidebar.tsx, and related component files to REV-028.',
   },
+  {
+    revertId: 'REV-030',
+    dateIST: '10-Nov-2026',
+    category: 'STRATEGY_VETO_ENGINE',
+    moduleName: 'Conviction-Driven Quarantine Auto-Lift, Script Learning Session Rollover, and Stock Card Release UI',
+    filePath:
+      'src/services/scriptLearningEngine.ts, src/services/agentQuantEngine.ts, src/components/InstitutionalEquityRadar.tsx, src/components/FirstPrinciplesMarketEngine.tsx, src/components/TradeHistory.tsx',
+    previousStateSummary:
+      'High-conviction breakout stocks like UNIONBANK (95/100 conviction, +5.68% gain) were permanently quarantined in localStorage by scriptLearningEngine.ts if they had any prior paper loss or macro sector headwind. Additionally, agentQuantEngine.ts pushed all quarantined stocks into actualDecliners to be shorted, loss memory never reset between daily sessions, and stock cards gave no visible indication of why an asset was blocked nor a way to release it.',
+    newStateSummary:
+      'Implemented automatic quarantine lifting in evaluateAdaptiveScriptLearningMatrix() whenever a script scores >=88/100 (Execution Gate) or has strong relative breakout alpha without active open loss. Fixed actualGainers and actualDecliners filtering in agentQuantEngine.ts so positive high-conviction breakout leaders are never classified as decliners. Implemented Asia/Kolkata date rollover auto-reset for script loss memory in loadPersistedScriptMemory(), and added interactive QUARANTINED badges with 1-click Release actions directly on stock cards across Radar, First Principles, and Trade History, plus a top-level Reset Learning Memory action.',
+    quantValueJustification:
+      'Eliminates the paradox where Tier-1 Alpha leaders with >=88 conviction are blocked by stale loss memory or erroneously shorted, while guaranteeing daily session slate refresh and user-controlled release overrides.',
+    revertInstruction:
+      'Revert src/services/scriptLearningEngine.ts, src/services/agentQuantEngine.ts, src/components/InstitutionalEquityRadar.tsx, src/components/FirstPrinciplesMarketEngine.tsx, and src/components/TradeHistory.tsx to REV-029.',
+  },
 ];
 
 

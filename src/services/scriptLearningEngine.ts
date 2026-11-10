@@ -5,6 +5,7 @@ import {
   evaluateElevenVectorMacroMatrix,
   resolveSymbolSector,
 } from './macroCausalLearningEngine';
+import { getStrategyQuantification } from '../data/strategyQuantificationData';
 
 export type IntradayScriptPhase =
   | 'DISCARDED_LOSER'
@@ -34,6 +35,8 @@ export interface ScriptLearningRecord {
   maxProfitErosionPct: number;
   isQuarantined: boolean;
   quarantineReason: string | null;
+  convictionScore?: number;
+  isQuarantineAutoLifted?: boolean;
   learnedScore: number; // 0 to 100
   rawScore?: number;
   isEligibleForDeploy: boolean;
@@ -90,6 +93,7 @@ export interface PersistedScriptMemory {
 
 const LEARNING_STORAGE_KEY = 'jarvis_script_learning_ledger_v1';
 const AUTO_PRUNE_STORAGE_KEY = 'jarvis_auto_prune_losers_enabled_v1';
+const SESSION_DATE_STORAGE_KEY = 'jarvis_script_learning_session_date_v1';
 
 export const TRACKED_EQUITY_UNIVERSE: Array<{
   symbol: string;
@@ -159,12 +163,53 @@ export function discoverDynamicEquityUniverse(
   return Array.from(map.values());
 }
 
+export function getTodayISTDateString(): string {
+  try {
+    return new Date().toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata' });
+  } catch {
+    return new Date().toISOString().slice(0, 10);
+  }
+}
+
 export function loadPersistedScriptMemory(): Record<string, PersistedScriptMemory> {
   try {
+    const todayIST = getTodayISTDateString();
+    const storedDate = localStorage.getItem(SESSION_DATE_STORAGE_KEY);
     const raw = localStorage.getItem(LEARNING_STORAGE_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? parsed : {};
+    let parsed: Record<string, PersistedScriptMemory> = {};
+    if (raw) {
+      try {
+        const obj = JSON.parse(raw);
+        if (obj && typeof obj === 'object') parsed = obj;
+      } catch {
+        parsed = {};
+      }
+    }
+
+    // Auto-reset script loss memory at the start of each daily trading session (Asia/Kolkata date rollover)
+    if (storedDate !== todayIST) {
+      let resetOccurred = false;
+      for (const key of Object.keys(parsed)) {
+        if (parsed[key]) {
+          parsed[key] = {
+            ...parsed[key],
+            losses: 0,
+            realizedPnlINR: 0,
+            quarantined: false,
+            quarantineReason: null,
+            quarantinedAtMs: null,
+            lastPhase: 'FLAT_OBSERVING',
+          };
+          resetOccurred = true;
+        }
+      }
+      localStorage.setItem(SESSION_DATE_STORAGE_KEY, todayIST);
+      if (resetOccurred || storedDate === null) {
+        localStorage.setItem(LEARNING_STORAGE_KEY, JSON.stringify(parsed));
+      }
+    }
+
+    return parsed;
   } catch {
     return {};
   }
@@ -173,8 +218,73 @@ export function loadPersistedScriptMemory(): Record<string, PersistedScriptMemor
 export function savePersistedScriptMemory(memory: Record<string, PersistedScriptMemory>): void {
   try {
     localStorage.setItem(LEARNING_STORAGE_KEY, JSON.stringify(memory));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('jarvis:script-memory-updated'));
+    }
   } catch {
     // ignore storage quota errors
+  }
+}
+
+export function releaseScriptQuarantine(symbol: string): void {
+  try {
+    const cleanSym = symbol.replace('.NS', '').replace('.BO', '').toUpperCase().trim();
+    const memory = loadPersistedScriptMemory();
+    if (memory[cleanSym]) {
+      memory[cleanSym] = {
+        ...memory[cleanSym],
+        quarantined: false,
+        quarantineReason: null,
+        quarantinedAtMs: null,
+        losses: 0,
+      };
+      savePersistedScriptMemory(memory);
+    }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('jarvis:script-memory-updated', { detail: { symbol: cleanSym, action: 'RELEASE' } })
+      );
+    }
+  } catch {
+    // ignore
+  }
+}
+
+export function resetAllScriptLearningMemory(): void {
+  try {
+    localStorage.removeItem(LEARNING_STORAGE_KEY);
+    localStorage.setItem(SESSION_DATE_STORAGE_KEY, getTodayISTDateString());
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('jarvis:script-memory-updated', { detail: { all: true, action: 'RESET_ALL' } })
+      );
+    }
+  } catch {
+    // ignore
+  }
+}
+
+export function isScriptQuarantined(symbol: string): boolean {
+  try {
+    const cleanSym = symbol.replace('.NS', '').replace('.BO', '').toUpperCase().trim();
+    const memory = loadPersistedScriptMemory();
+    return Boolean(memory[cleanSym]?.quarantined);
+  } catch {
+    return false;
+  }
+}
+
+export function getScriptQuarantineInfo(symbol: string): { quarantined: boolean; reason: string | null } {
+  try {
+    const cleanSym = symbol.replace('.NS', '').replace('.BO', '').toUpperCase().trim();
+    const memory = loadPersistedScriptMemory();
+    const entry = memory[cleanSym];
+    return {
+      quarantined: Boolean(entry?.quarantined),
+      reason: entry?.quarantineReason || null,
+    };
+  } catch {
+    return { quarantined: false, reason: null };
   }
 }
 
@@ -370,31 +480,41 @@ export function evaluateAdaptiveScriptLearningMatrix(
     const totalLosses = Math.max(orderLosses, mem?.losses ?? 0);
     const obsTicks = Math.min(25, (mem?.observationTicks ?? 2) + (ltp > 0 ? 1 : 0));
 
+    // Get 5-Pillar Quantitative Conviction Score (0-100)
+    const quantProfile = getStrategyQuantification(item.symbol);
+    const convictionScore = quantProfile?.compositeScore ?? 75;
+    const isExecutionGateQualified = convictionScore >= 88;
+
     // Check if this script has an active or realized loss in the session OR a 11-Vector Macro/FII Hard Veto
     const hasOpenLoss = sessionOpenPnlINR < -35;
     const hasRealizedLoss = sessionRealizedPnlINR < -35 || totalLosses > totalWins;
     const isPersistedQuarantine = Boolean(mem?.quarantined);
 
-    // Self-Recovery condition: Only release from quarantine if strong intraday breakout AND macro sector is NOT vetoed
+    // Auto-lift quarantine whenever conviction reaches >=88 (Execution Gate) or strong relative alpha breakout,
+    // provided there is no active open loss eroding capital right now.
     const strongBreakoutRecovery =
-      !isMacroHardVetoSector &&
-      changePct >= 1.25 &&
-      relAlpha >= 0.8 &&
-      intradayRangePct >= 75 &&
+      (isExecutionGateQualified || (changePct >= 1.25 && relAlpha >= 0.8 && intradayRangePct >= 60)) &&
       !hasOpenLoss;
 
-    let isQuarantined =
-      isMacroHardVetoSector ||
-      ((hasOpenLoss || hasRealizedLoss || isPersistedQuarantine) && !strongBreakoutRecovery);
-    let quarantineReason: string | null = mem?.quarantineReason ?? null;
+    let isQuarantined = false;
+    let quarantineReason: string | null = null;
+    let isQuarantineAutoLifted = false;
 
-    if (isMacroHardVetoSector) {
-      isQuarantined = true;
-      quarantineReason = `11-Vector Macro & FII/DII Veto (${sectorCode}): ${sectorFlow?.rationale || 'Sector headwind active'}`;
-    } else if (hasOpenLoss) {
+    if (hasOpenLoss) {
       isQuarantined = true;
       quarantineReason = `Active Open Loss (₹${sessionOpenPnlINR.toFixed(2)}) — Thesis failed; flagged for immediate discard & capital protection`;
-    } else if (hasRealizedLoss && !quarantineReason) {
+    } else if (strongBreakoutRecovery && (isPersistedQuarantine || hasRealizedLoss)) {
+      // Auto-lift quarantine
+      isQuarantined = false;
+      quarantineReason = null;
+      isQuarantineAutoLifted = true;
+    } else if (isMacroHardVetoSector && !isExecutionGateQualified) {
+      isQuarantined = true;
+      quarantineReason = `11-Vector Macro & FII/DII Veto (${sectorCode}): ${sectorFlow?.rationale || 'Sector headwind active'}`;
+    } else if (isPersistedQuarantine && !strongBreakoutRecovery) {
+      isQuarantined = true;
+      quarantineReason = mem?.quarantineReason ?? `Persisted loss memory — Quarantined from re-entry`;
+    } else if (hasRealizedLoss && !strongBreakoutRecovery) {
       isQuarantined = true;
       quarantineReason = `Session Realized Loss (₹${sessionRealizedPnlINR.toFixed(2)}) across ${totalLosses} losing trade(s) — Quarantined from re-entry`;
     } else if (item.symbol === 'ULTRACEMCO' && changePct <= 0.35 && sessionOpenPnlINR <= 0 && totalWins === 0) {
@@ -402,7 +522,7 @@ export function evaluateAdaptiveScriptLearningMatrix(
       quarantineReason = `Static Fallback Lock-In Prevented: ULTRACEMCO momentum (${changePct >= 0 ? '+' : ''}${changePct}%) below leader threshold — Rotated to higher-alpha leaders`;
     }
 
-    // Update persistent memory when a loss is detected
+    // Synchronize persistent memory
     if (isQuarantined && (!mem || !mem.quarantined || mem.observationTicks !== obsTicks)) {
       memory[item.symbol] = {
         wins: totalWins,
@@ -414,6 +534,20 @@ export function evaluateAdaptiveScriptLearningMatrix(
         observationTicks: obsTicks,
         lastPrice: ltp,
         lastPhase: 'DISCARDED_LOSER',
+      };
+      memoryUpdated = true;
+    } else if (!isQuarantined && mem?.quarantined) {
+      // Clear quarantine from memory upon auto-lift or user release
+      memory[item.symbol] = {
+        wins: totalWins,
+        losses: 0,
+        realizedPnlINR: sessionRealizedPnlINR,
+        quarantined: false,
+        quarantineReason: null,
+        quarantinedAtMs: null,
+        observationTicks: obsTicks,
+        lastPrice: ltp,
+        lastPhase: convictionScore >= 88 ? 'LEARNED_HIGH_LEADER' : 'FLAT_OBSERVING',
       };
       memoryUpdated = true;
     } else if (!isQuarantined && (!mem || mem.observationTicks !== obsTicks)) {
@@ -446,17 +580,17 @@ export function evaluateAdaptiveScriptLearningMatrix(
       rationale =
         quarantineReason ||
         `Discarded due to negative session P&L or 11-Vector Macro/FII headwind. Blocked from capital deployment.`;
-    } else if (changePct < -0.20 || (intradayRangePct < 35 && !isMacroStrongAccumulation)) {
+    } else if (changePct < -0.20 || (intradayRangePct < 35 && !isMacroStrongAccumulation && !isExecutionGateQualified)) {
       intradayPhase = 'LOW_WEAK_AVOID';
       phaseLabel = 'LOW · Intraday Weakness (Avoid Long)';
       recommendedAction = 'DISCARD_AVOID';
       rationale = `Trading near intraday low (${changePct >= 0 ? '+' : ''}${changePct}%, Range ${intradayRangePct}%, Alpha ${relAlpha >= 0 ? '+' : ''}${relAlpha}%). Discarded for long deployment.`;
-    } else if (changePct < 0.30 && !isMacroStrongAccumulation) {
+    } else if (changePct < 0.30 && !isMacroStrongAccumulation && !isExecutionGateQualified) {
       intradayPhase = 'FLAT_OBSERVING';
       phaseLabel = 'FLAT · Learning & Observing';
       recommendedAction = 'OBSERVE_WAIT';
       rationale = `Price consolidating (${changePct >= 0 ? '+' : ''}${changePct}%, Range ${intradayRangePct}%). Taking time to observe volume & tick direction before deploying capital.`;
-    } else if (changePct < 0.65 && !isMacroStrongAccumulation) {
+    } else if (changePct < 0.65 && !isMacroStrongAccumulation && !isExecutionGateQualified) {
       intradayPhase = 'RISING_ACCUMULATING';
       phaseLabel = 'LOW → FLAT → RISING · Warming Up';
       recommendedAction = 'DEPLOY_LONG';
@@ -465,7 +599,9 @@ export function evaluateAdaptiveScriptLearningMatrix(
       intradayPhase = 'LEARNED_HIGH_LEADER';
       phaseLabel = `HIGH LEADER · ${sectorCode} Winner`;
       recommendedAction = 'DEPLOY_LONG';
-      rationale = `11-Vector + FII/DII Confirmed Leader (+${changePct}%, Alpha +${relAlpha}% vs NIFTY, Causal Mult +${causalMult.toFixed(2)}, Vol ${sectorFlow?.intradayVolumeDeliveryRatio ?? 1.7}x).`;
+      rationale = isQuarantineAutoLifted
+        ? `[Auto-Lifted Execution Gate] Conviction Score ${convictionScore}/100 exceeds the 88/100 threshold with positive alpha (+${changePct}%). Quarantine released automatically.`
+        : `11-Vector + FII/DII Confirmed Leader (+${changePct}%, Alpha +${relAlpha}% vs NIFTY, Causal Mult +${causalMult.toFixed(2)}, Vol ${sectorFlow?.intradayVolumeDeliveryRatio ?? 1.7}x).`;
     }
 
     // Deterministic Learned Score (0 - 100) blending price alpha + 11-Vector Macro + FII/DII Sector Conviction
@@ -484,8 +620,8 @@ export function evaluateAdaptiveScriptLearningMatrix(
     const isEligibleForDeploy =
       !isQuarantined &&
       ltp > 0 &&
-      (intradayPhase === 'LEARNED_HIGH_LEADER' || intradayPhase === 'RISING_ACCUMULATING') &&
-      (changePct > 0.15 || isMacroStrongAccumulation);
+      (intradayPhase === 'LEARNED_HIGH_LEADER' || intradayPhase === 'RISING_ACCUMULATING' || convictionScore >= 88) &&
+      (changePct > 0.15 || isMacroStrongAccumulation || convictionScore >= 88);
 
     return {
       symbol: item.symbol,
@@ -508,6 +644,8 @@ export function evaluateAdaptiveScriptLearningMatrix(
       maxProfitErosionPct,
       isQuarantined,
       quarantineReason,
+      convictionScore,
+      isQuarantineAutoLifted,
       learnedScore,
       rawScore,
       isEligibleForDeploy,

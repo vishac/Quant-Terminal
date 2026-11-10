@@ -20,7 +20,9 @@ import {
   quarantineLosingScript,
   recordWinningScriptOutcome,
   extractBaseSymbolFromOrder,
-  resetScriptQuarantineMemory
+  resetScriptQuarantineMemory,
+  releaseScriptQuarantine,
+  resetAllScriptLearningMemory,
 } from '../services/scriptLearningEngine';
 import {
   executeIntelligentScanAndDeploy,
@@ -130,6 +132,17 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({ onNavigateToAgents }
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [autoPruneEnabled, setAutoPruneEnabled] = useState<boolean>(() => isAutoPruneLosersEnabled());
   const [learningRefreshTick, setLearningRefreshTick] = useState<number>(0);
+
+  useEffect(() => {
+    const handleMemoryUpdated = () => {
+      setLearningRefreshTick((t) => t + 1);
+    };
+    window.addEventListener('jarvis:script-memory-updated', handleMemoryUpdated);
+    return () => {
+      window.removeEventListener('jarvis:script-memory-updated', handleMemoryUpdated);
+    };
+  }, []);
+
   const [statutoryCalendar, setStatutoryCalendar] = useState<StatutoryRuleScheduleItem[]>(() =>
     getStatutoryTaxRuleCalendar()
   );
@@ -982,14 +995,14 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({ onNavigateToAgents }
               </button>
               <button
                 onClick={() => {
-                  resetScriptQuarantineMemory();
+                  resetAllScriptLearningMemory();
                   setLearningRefreshTick(t => t + 1);
-                  setToastMessage('Script Quarantine Memory reset. Observing fresh intraday ticks.');
+                  setToastMessage('Script Learning Memory reset to clean session slate.');
                   setTimeout(() => setToastMessage(null), 3500);
                 }}
                 className="px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 text-xs font-semibold transition cursor-pointer"
               >
-                Reset Quarantine Ledger
+                Reset Learning Memory
               </button>
             </div>
           </div>
@@ -1013,11 +1026,32 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({ onNavigateToAgents }
                   return (
                     <tr key={row.symbol} className="hover:bg-slate-900/60">
                       <td className="py-3 px-3">
-                        <div className="font-bold text-white flex items-center gap-1.5">
+                        <div className="font-bold text-white flex items-center gap-1.5 flex-wrap">
                           <span>{row.symbol}</span>
                           {row.isQuarantined && (
-                            <span className="px-1.5 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-500/40 text-[9px] font-bold">
-                              QUARANTINED
+                            <div className="flex items-center gap-1">
+                              <span className="px-1.5 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-500/40 text-[9px] font-bold">
+                                QUARANTINED
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  releaseScriptQuarantine(row.symbol);
+                                  setLearningRefreshTick((t) => t + 1);
+                                  setToastMessage(`Quarantine released for ${row.symbol}.`);
+                                  setTimeout(() => setToastMessage(null), 3000);
+                                }}
+                                className="px-1.5 py-0.5 rounded bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-500/40 text-[9px] font-bold transition cursor-pointer"
+                                title="Release quarantine & allow execution"
+                              >
+                                Release
+                              </button>
+                            </div>
+                          )}
+                          {row.isQuarantineAutoLifted && (
+                            <span className="px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-500/40 text-[9px] font-bold" title="Auto-lifted by Conviction Gate (≥88/100)">
+                              AUTO-LIFTED (≥88)
                             </span>
                           )}
                           {row.isEligibleForDeploy && (

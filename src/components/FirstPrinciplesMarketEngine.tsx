@@ -24,6 +24,7 @@ import {
   Zap,
   Sliders,
   X,
+  AlertCircle,
 } from 'lucide-react';
 import type { MarketQuote, PaperTradeOrder } from '../types/quant';
 import type {
@@ -44,6 +45,11 @@ import {
   evaluateInterAgentConsensusPipeline,
 } from '../services/macroCausalLearningEngine';
 import { getStoredPaperTrades, persistPaperTrades } from '../services/paperTradeService';
+import {
+  loadPersistedScriptMemory,
+  releaseScriptQuarantine,
+  type PersistedScriptMemory,
+} from '../services/scriptLearningEngine';
 import { formatOrderDate, formatOrderTime } from '../utils/orderFormatters';
 import { AutonomousSchedulerHub } from './AutonomousSchedulerHub';
 
@@ -129,6 +135,28 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
   });
 
   const [feedbackNotice, setFeedbackNotice] = useState<string | null>(null);
+
+  // Script Learning Memory sync & Quarantine Release
+  const [scriptMemory, setScriptMemory] = useState<Record<string, PersistedScriptMemory>>(() =>
+    loadPersistedScriptMemory()
+  );
+
+  useEffect(() => {
+    const handleMemoryUpdate = () => {
+      setScriptMemory(loadPersistedScriptMemory());
+    };
+    window.addEventListener('jarvis:script-memory-updated', handleMemoryUpdate);
+    return () => {
+      window.removeEventListener('jarvis:script-memory-updated', handleMemoryUpdate);
+    };
+  }, []);
+
+  const handleReleaseQuarantine = (symbol: string) => {
+    releaseScriptQuarantine(symbol);
+    setScriptMemory(loadPersistedScriptMemory());
+    setFeedbackNotice(`Quarantine released for ${symbol.replace('.NS', '')}. Autonomous execution unblocked.`);
+    setTimeout(() => setFeedbackNotice(null), 3500);
+  };
 
   // Interactive Institutional Trade Setup & 2026 Tax/Risk Blueprint Modal state
   const [activeSetupContext, setActiveSetupContext] = useState<SetupModalContext | null>(null);
@@ -962,6 +990,10 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
                         ? 'units (NSE F&O)'
                         : 'shares';
 
+                const cleanSym = stock.symbol.replace('.NS', '').replace('.BO', '').toUpperCase().trim();
+                const mem = scriptMemory[cleanSym];
+                const isQuarantined = Boolean(mem?.quarantined);
+
                 return (
                   <div
                     key={stock.symbol}
@@ -984,6 +1016,23 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
                               }`}
                             >
                               {stock.capCategory}
+                            </span>
+                          )}
+                          {isQuarantined && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-950/90 text-rose-300 border border-rose-500/40 font-mono">
+                              <AlertCircle className="w-2.5 h-2.5 text-rose-400" />
+                              QUARANTINED
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleReleaseQuarantine(stock.symbol);
+                                }}
+                                className="ml-1 px-1.5 py-0.2 rounded bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-500/50 transition cursor-pointer"
+                                title="Release quarantine & allow autonomous execution"
+                              >
+                                Release
+                              </button>
                             </span>
                           )}
                         </div>
@@ -1113,6 +1162,10 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
                         ? 'units (NSE F&O)'
                         : 'shares';
 
+                const cleanSym = stock.symbol.replace('.NS', '').replace('.BO', '').toUpperCase().trim();
+                const mem = scriptMemory[cleanSym];
+                const isQuarantined = Boolean(mem?.quarantined);
+
                 return (
                   <div
                     key={stock.symbol}
@@ -1135,6 +1188,23 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
                               }`}
                             >
                               {stock.capCategory}
+                            </span>
+                          )}
+                          {isQuarantined && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-950/90 text-rose-300 border border-rose-500/40 font-mono">
+                              <AlertCircle className="w-2.5 h-2.5 text-rose-400" />
+                              QUARANTINED
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleReleaseQuarantine(stock.symbol);
+                                }}
+                                className="ml-1 px-1.5 py-0.2 rounded bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-500/50 transition cursor-pointer"
+                                title="Release quarantine & allow autonomous execution"
+                              >
+                                Release
+                              </button>
                             </span>
                           )}
                         </div>
