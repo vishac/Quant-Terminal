@@ -483,7 +483,24 @@ export const ARCHITECTURE_REVERT_LEDGER: RevertLedgerEntry[] = [
     revertInstruction:
       'Revert server.ts, src/server/auth.ts, firestore.rules, src/context/DeskAuthContext.tsx, and related UI components to REV-030.',
   },
+  {
+    revertId: 'REV-032',
+    dateIST: '10-Nov-2026',
+    category: 'STRATEGY_VETO_ENGINE',
+    moduleName: 'Markov First-Passage Target Achievement Probability (T1 / T2 / T3 Hit Prob & EV %) Across Radar and Engine',
+    filePath:
+      'src/data/institutionalEquityData.ts, src/server/marketData.ts, src/components/InstitutionalEquityRadar.tsx, src/components/MacroPolicyThesis.tsx, src/components/FirstPrinciplesMarketEngine.tsx',
+    previousStateSummary:
+      'Tactical price targets (T1, T2, T3) displayed price and percentage upside (e.g. T1: ₹149.03 (+12.76%), T2: ₹160.51 (+21.44%)) without quantifying the statistical probability of reaching each target before hitting the stop-loss barrier.',
+    newStateSummary:
+      'Implemented deterministic Markov First-Passage / Drift-Diffusion Barrier Hit Probability Model (computeTargetHitProbabilities & getStockTargetProbabilities) that calculates P(Hit T1 before SL), conditional continuation P(Hit T2 | T1) -> P(T2), P(Hit T3 | T2) -> P(T3), and Expected Value (EV %) from reward-to-risk ratio (R), target excursion distance drag, and 5-pillar drift strength (conviction, order flow, momentum). Wired probabilities into the live server screener (/api/screener/chartink) and across all Radar views (Table Matrix T1/T2 column, Split Dossier left list & right 3-card Target Matrix, Quick Dossier Modal, CSV export, Tab 02 52W-Low & Bear Put strips) and First-Principles Market Engine Trade Setup Blueprint cards.',
+    quantValueJustification:
+      'Provides transparent, mathematically monotonic (P(T1) > P(T2) > P(T3)) first-passage barrier probabilities and net expected value for every strategy target, distinguishing tight high-conviction swing targets (~72-76% T1 prob) from wide multi-week structural excursion targets (~56-62% T1 prob).',
+    revertInstruction:
+      'Revert src/data/institutionalEquityData.ts, src/server/marketData.ts, src/components/InstitutionalEquityRadar.tsx, src/components/MacroPolicyThesis.tsx, and src/components/FirstPrinciplesMarketEngine.tsx to REV-031.',
+  },
 ];
+
 
 
 

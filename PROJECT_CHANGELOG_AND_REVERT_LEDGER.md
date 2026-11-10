@@ -282,5 +282,22 @@ This document records every surgical UI/module pruning action, static data remov
      - Added 8 automated regression tests in `tests/security_p0.test.ts` running via `npm test` (all 8 passed).
 - **How to Revert**: Revert `server.ts`, `src/server/auth.ts`, `firestore.rules`, `src/context/DeskAuthContext.tsx`, and modified UI files to `REV-030`.
 
+### `REV-032` — Markov First-Passage Target Achievement Probability (`T1` / `T2` / `T3` Hit Prob & `EV %`) Across Radar and Engine
+- **Files Modified**: `src/data/institutionalEquityData.ts`, `src/server/marketData.ts`, `src/components/InstitutionalEquityRadar.tsx`, `src/components/MacroPolicyThesis.tsx`, `src/components/FirstPrinciplesMarketEngine.tsx`, `src/data/architectureRevertLedger.ts`
+- **Previous Behavior**:
+  - Strategy targets (`T1`, `T2`, `T3`) in the Radar Table Matrix (`Targets (T1 / T2)`), Split Dossier, Quick Dossier Modal, Tab 02 52W-Low/Bear Put strips, and First-Principles Market Engine displayed target prices and upside percentages (e.g., `T1: ₹149.03 (+12.76%)`, `T2: ₹160.51 (+21.44%)`) without showing the probability that the stock will achieve those targets before hitting its stop-loss.
+- **New Behavior**:
+  1. **Deterministic Markov First-Passage Barrier Hit Probability Engine (`computeTargetHitProbabilities` & `getStockTargetProbabilities`)**:
+     - Computes `t1HitProbPct`, `t2HitProbPct`, `t3HitProbPct`, and net Expected Value (`t1ExpectedValuePct`, `t2ExpectedValuePct`, `t3ExpectedValuePct`) for any stock setup:
+       - **Zero-Drift Barrier Baseline**: $P_0(T_1) = \frac{1}{1 + R_1^\gamma}$ where $R_1 = \frac{\text{Upside}_1\%}{\text{StopRisk}\%}$ and $\gamma = 0.72$, adjusted for absolute excursion distance drag ($\text{Upside}_1\% \times 0.038$) so wider multi-week targets (`+12.76%` / `+21.44%`) carry realistic multi-day path discount compared to tight swing targets (`+3.5%` / `+5.8%`).
+       - **5-Pillar Positive Drift ($\mu$)**: Incorporates composite conviction (`overallConviction`), order-flow & RVOL score (`orderFlowScore`), momentum & RS (`momentumScore`), and risk-reward geometry (`riskRewardScore`) into the log-odds drift parameter.
+       - **Strong Markov Conditional Continuation ($P(T_1) > P(T_2) > P(T_3)$)**: Once price reaches $T_1$ and the stop-loss ratchets to breakeven ($E$), the conditional probability of continuing from $T_1 \to T_2$ before falling back to $E$ is $P(T_2 \mid T_1)$, giving $P(T_2) = P(T_1) \times P(T_2 \mid T_1)$, and similarly $P(T_3) = P(T_2) \times P(T_3 \mid T_2)$.
+  2. **End-to-End Backend & Frontend Integration**:
+     - **Live Server Screener (`src/server/marketData.ts`)**: Populates `hitProbabilityPct` and `expectedValuePct` on `tacticalLevels.target1`, `target2`, and `target3` for all live NSE/Chartink equities.
+     - **Radar Table Matrix (`src/components/InstitutionalEquityRadar.tsx`)**: Updated the `TARGETS (T1 / T2) · HIT PROB` column to display color-coded `[XX.X% Prob]` badges right beside `T1` and `T2` with a hover tooltip showing the Markov First-Passage breakdown and Expected Value (`EV %`).
+     - **Radar Split Dossier & Quick Modal**: Added `Hit Prob: XX.X%`, visual probability progress bars, and `EV: +X.XX%` to the 3-card `TARGET 1`, `TARGET 2`, and `TARGET 3` matrix, left stock list, Quick Dossier Modal, and CSV export (`T1 Hit Prob Pct`, `T2 Hit Prob Pct`, `T3 Hit Prob Pct`).
+     - **Tab 02 Macro Policy Thesis (`src/components/MacroPolicyThesis.tsx`) & First-Principles Engine (`src/components/FirstPrinciplesMarketEngine.tsx`)**: Added `XX.X% Prob` badges to all `T1 / T2 / T3` target cards.
+- **How to Revert**: Revert `src/data/institutionalEquityData.ts`, `src/server/marketData.ts`, `src/components/InstitutionalEquityRadar.tsx`, `src/components/MacroPolicyThesis.tsx`, and `src/components/FirstPrinciplesMarketEngine.tsx` to `REV-031`.
+
 
 

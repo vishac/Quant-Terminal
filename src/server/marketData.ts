@@ -6,6 +6,7 @@
 
 import type { MarketQuote } from '../types/quant.ts';
 import { TRACKED_SYMBOLS } from '../data/symbols.ts';
+import { computeTargetHitProbabilities } from '../data/institutionalEquityData.ts';
 
 export { TRACKED_SYMBOLS };
 
@@ -767,6 +768,16 @@ function computeDynamicStrategyQuantification(
   const target2Price = Math.round(priceBase * (1 + target2Upside / 100) * 100) / 100;
   const target3Price = Math.round(priceBase * (1 + target3Upside / 100) * 100) / 100;
 
+  const probMetrics = computeTargetHitProbabilities({
+    compositeScore,
+    orderFlowScore,
+    momentumScore,
+    riskPct,
+    t1UpsidePct: target1Upside,
+    t2UpsidePct: target2Upside,
+    t3UpsidePct: target3Upside,
+  });
+
   return {
     exactDecimalScore: Number(blendedRawScore.toFixed(3)),
     tacticalLevels: {
@@ -778,9 +789,27 @@ function computeDynamicStrategyQuantification(
       support2: Math.round(priceBase * (1 - intradayAtrPct * 0.02) * 100) / 100,
       resistance1: Math.round(priceBase * (1 + target1Upside * 0.006) * 100) / 100,
       resistance2: Math.round(priceBase * (1 + target1Upside * 0.01) * 100) / 100,
-      target1: { price: target1Price, upsidePct: target1Upside, label: `Target 1 (+${target1Upside}%)` },
-      target2: { price: target2Price, upsidePct: target2Upside, label: `Target 2 (+${target2Upside}%)` },
-      target3: { price: target3Price, upsidePct: target3Upside, label: `Target 3 (+${target3Upside}%)` },
+      target1: {
+        price: target1Price,
+        upsidePct: target1Upside,
+        label: `Target 1 (+${target1Upside}% · ${probMetrics.t1ProbabilityPct}% Hit Prob)`,
+        hitProbabilityPct: probMetrics.t1ProbabilityPct,
+        expectedValuePct: probMetrics.t1ExpectedValuePct,
+      },
+      target2: {
+        price: target2Price,
+        upsidePct: target2Upside,
+        label: `Target 2 (+${target2Upside}% · ${probMetrics.t2ProbabilityPct}% Hit Prob)`,
+        hitProbabilityPct: probMetrics.t2ProbabilityPct,
+        expectedValuePct: probMetrics.t2ExpectedValuePct,
+      },
+      target3: {
+        price: target3Price,
+        upsidePct: target3Upside,
+        label: `Target 3 (+${target3Upside}% · ${probMetrics.t3ProbabilityPct}% Hit Prob)`,
+        hitProbabilityPct: probMetrics.t3ProbabilityPct,
+        expectedValuePct: probMetrics.t3ExpectedValuePct,
+      },
       riskRewardRatio: riskRewardRatio,
       confidenceScore: compositeScore,
       institutionalRating: isExecutionQualified

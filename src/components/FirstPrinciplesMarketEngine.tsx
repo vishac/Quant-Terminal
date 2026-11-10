@@ -45,6 +45,7 @@ import {
   evaluateInterAgentConsensusPipeline,
 } from '../services/macroCausalLearningEngine';
 import { getStoredPaperTrades, persistPaperTrades } from '../services/paperTradeService';
+import { computeTargetHitProbabilities } from '../data/institutionalEquityData';
 import {
   loadPersistedScriptMemory,
   releaseScriptQuarantine,
@@ -2005,25 +2006,51 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
                 </div>
               </div>
 
-              <div className="p-3 rounded-lg bg-slate-950 border border-emerald-500/30">
-                <div className="text-[10px] text-emerald-400">Target 1 (1.5R Lock)</div>
-                <div className="text-sm font-bold text-emerald-300 mt-0.5 tabular-nums">
-                  ₹{activeBlueprint.instrumentTarget1.toLocaleString('en-IN')}
-                </div>
-                <div className="text-[10px] text-slate-400">
-                  Spot T1: ₹{activeBlueprint.target1Price.toLocaleString('en-IN')}
-                </div>
-              </div>
+              {(() => {
+                const spotEntry = Math.max(1, activeBlueprint.spotEntryPrice);
+                const riskPct = (Math.abs(activeBlueprint.stopLossPrice - spotEntry) / spotEntry) * 100;
+                const t1Pct = (Math.abs(activeBlueprint.target1Price - spotEntry) / spotEntry) * 100;
+                const t2Pct = (Math.abs(activeBlueprint.target2Price - spotEntry) / spotEntry) * 100;
+                const bpProbs = computeTargetHitProbabilities({
+                  compositeScore: 89,
+                  riskPct: -riskPct,
+                  t1UpsidePct: t1Pct,
+                  t2UpsidePct: t2Pct,
+                });
+                return (
+                  <>
+                    <div className="p-3 rounded-lg bg-slate-950 border border-emerald-500/30">
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className="text-emerald-400">Target 1 (1.5R Lock)</span>
+                        <span className="px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/40 font-mono font-bold">
+                          {bpProbs.t1ProbabilityPct}% Prob
+                        </span>
+                      </div>
+                      <div className="text-sm font-bold text-emerald-300 mt-0.5 tabular-nums">
+                        ₹{activeBlueprint.instrumentTarget1.toLocaleString('en-IN')}
+                      </div>
+                      <div className="text-[10px] text-slate-400">
+                        Spot T1: ₹{activeBlueprint.target1Price.toLocaleString('en-IN')}
+                      </div>
+                    </div>
 
-              <div className="p-3 rounded-lg bg-slate-950 border border-emerald-500/40">
-                <div className="text-[10px] text-emerald-400">Target 2 (Full)</div>
-                <div className="text-sm font-bold text-emerald-400 mt-0.5 tabular-nums">
-                  ₹{activeBlueprint.instrumentTarget2.toLocaleString('en-IN')}
-                </div>
-                <div className="text-[10px] text-emerald-300">
-                  +₹{activeBlueprint.taxAudit.grossWinAtTarget2.toLocaleString('en-IN')} Gross
-                </div>
-              </div>
+                    <div className="p-3 rounded-lg bg-slate-950 border border-emerald-500/40">
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className="text-emerald-400">Target 2 (Full)</span>
+                        <span className="px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-500/40 font-mono font-bold">
+                          {bpProbs.t2ProbabilityPct}% Prob
+                        </span>
+                      </div>
+                      <div className="text-sm font-bold text-emerald-400 mt-0.5 tabular-nums">
+                        ₹{activeBlueprint.instrumentTarget2.toLocaleString('en-IN')}
+                      </div>
+                      <div className="text-[10px] text-emerald-300">
+                        +₹{activeBlueprint.taxAudit.grossWinAtTarget2.toLocaleString('en-IN')} Gross
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
 
               <div className="p-3 rounded-lg bg-slate-950 border border-rose-500/30">
                 <div className="text-[10px] text-rose-400">Hard Stop-Loss</div>
