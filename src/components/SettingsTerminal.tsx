@@ -532,12 +532,12 @@ export const SettingsTerminal: React.FC = () => {
                     IMMUTABLE GOVERNANCE &amp; PARAMETER CHANGE AUDIT LOG
                   </h3>
                   <span className="text-[11px] text-slate-400 font-sans">
-                    Full institutional lineage: Who changed which parameter, when, old → new value, version bump, and signed rationale.
+                    Full audit lineage: Who changed which parameter, when, old → new value, version bump, and signed rationale.
                   </span>
                 </div>
               </div>
               <span className="text-[10px] px-2.5 py-1 rounded bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 font-bold">
-                SEBI / INSTITUTIONAL AUDIT COMPLIANT
+                SEBI AUDIT COMPLIANT
               </span>
             </div>
 

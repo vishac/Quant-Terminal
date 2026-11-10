@@ -197,7 +197,7 @@ export const MarketImpactAnalysis: React.FC<MarketImpactAnalysisProps> = ({
     const primaryDragNames = topDragStocks.map(s => `${s.name} (${s.changePct.toFixed(2)}%)`).join(', ');
 
     if (marketDirection === 'RISING') {
-      return `NIFTY 50 is advancing (+${niftyChangePct.toFixed(2)}% / +${Math.round(niftyChange)} pts) driven primarily by institutional accumulation in ${primarySupportNames || 'key index heavyweights'}. Market breadth is constructive with ${breadthStats.advancers} advancers vs ${breadthStats.decliners} decliners (A/D Ratio: ${breadthStats.adRatio}). India VIX is subdued at ${vixPrice.toFixed(2)}, confirming low hedging demand, while dynamic Put Writing at ₹${putFloorStrike.toLocaleString('en-IN')} establishes a firm intraday support floor.`;
+      return `NIFTY 50 is advancing (+${niftyChangePct.toFixed(2)}% / +${Math.round(niftyChange)} pts) driven primarily by market accumulation in ${primarySupportNames || 'key index heavyweights'}. Market breadth is constructive with ${breadthStats.advancers} advancers vs ${breadthStats.decliners} decliners (A/D Ratio: ${breadthStats.adRatio}). India VIX is subdued at ${vixPrice.toFixed(2)}, confirming low hedging demand, while dynamic Put Writing at ₹${putFloorStrike.toLocaleString('en-IN')} establishes a firm intraday support floor.`;
     } else if (marketDirection === 'DECLINING') {
       return `NIFTY 50 is declining (${niftyChangePct.toFixed(2)}% / ${Math.round(niftyChange)} pts) pressured by profit booking and selling drag in ${primaryDragNames || 'key index constituents'}. Decliners (${breadthStats.decliners}) outpace advancers (${breadthStats.advancers}) across the universe. India VIX is trading at ${vixPrice.toFixed(2)}, indicating defensive hedging posture, with Call Writing resistance capping upside at ₹${callCeilingStrike.toLocaleString('en-IN')}.`;
     } else {
@@ -571,7 +571,7 @@ export const MarketImpactAnalysis: React.FC<MarketImpactAnalysisProps> = ({
 
             <div className="space-y-3 text-xs text-slate-300 leading-relaxed font-sans">
               <p>
-                This module continuously tracks why Indian markets are rising or declining using <strong>four strictly verifiable mathematical and quantitative pillars</strong>:
+                This module continuously tracks why Indian markets are rising or declining using <strong>four strictly verifiable mathematical and market pillars</strong>:
               </p>
 
               <div className="space-y-2 font-mono text-[11px]">

@@ -544,23 +544,23 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
                 <span>How Conviction Score Relates to the 88/100 Execution Gate</span>
               </div>
               <p>
-                The <strong>Conviction Score (0–100)</strong> is the weighted composite of the 5 quantitative pillars below. <strong>88/100 is the minimum Execution Qualification Gate</strong>: stocks scoring <strong>&ge;88/100</strong> qualify for autonomous/desk deployment (<em>Tier 1 Alpha</em>), while stocks scoring <strong>80–87/100</strong> sit on the <em>High Conviction Watchlist</em> awaiting intraday volume or momentum thrust to cross 88.
+                The <strong>Conviction Score (0–100)</strong> is the weighted composite of the 5 strategy pillars below. <strong>88/100 is the minimum Execution Qualification Gate</strong>: stocks scoring <strong>&ge;88/100</strong> qualify for autonomous/desk deployment (<em>Tier 1 Alpha</em>), while stocks scoring <strong>80–87/100</strong> sit on the <em>High Conviction Watchlist</em> awaiting intraday volume or momentum thrust to cross 88.
               </p>
             </div>
 
             <div className="space-y-3">
               <div className="text-xs font-bold text-slate-300 uppercase tracking-wider font-mono">
-                The 5 Orthogonal Quantitative Pillars &amp; Continuous Formulas
+                The 5 Orthogonal Strategy Pillars &amp; Continuous Formulas
               </div>
               <div className="grid grid-cols-1 gap-2.5">
                 <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 flex items-start justify-between">
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="font-mono font-bold text-cyan-400 text-xs">O · 20% Weight</span>
-                      <span className="font-bold text-slate-200 text-xs">Institutional Order Flow &amp; Delivery Velocity</span>
+                      <span className="font-bold text-slate-200 text-xs">Order Flow &amp; Delivery Velocity</span>
                     </div>
                     <p className="text-[11px] text-slate-400 mt-1">
-                      Continuous function of live session volume vs 20-day institutional average (RVOL), NSE delivery %, and live rupee turnover (Cr).
+                      Continuous function of live session volume vs 20-day baseline average (RVOL), NSE delivery %, and live rupee turnover (Cr).
                     </p>
                   </div>
                 </div>
@@ -608,7 +608,7 @@ export const ViewerDashboard: React.FC<ViewerDashboardProps> = () => {
                       <span className="font-bold text-slate-200 text-xs">Sovereign Moat &amp; 200-DMA Structural Regime</span>
                     </div>
                     <p className="text-[11px] text-slate-400 mt-1">
-                      Combines industry pricing power / regulatory moat with live 200-DMA trend persistence and institutional delivery support.
+                      Combines industry pricing power / regulatory moat with live 200-DMA trend persistence and cash delivery support.
                     </p>
                   </div>
                 </div>

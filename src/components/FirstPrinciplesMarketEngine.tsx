@@ -1063,7 +1063,7 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
                             causalSummary: {
                               globalOrGeoReason: stock.primaryGlobalDriver,
                               basicsAndPolicyReason: stock.fundamentalTransmissionReason,
-                              emotionsOrFlowReason: 'Institutional accumulation & positive relative strength vs index.',
+                              emotionsOrFlowReason: 'Market accumulation & positive relative strength vs index.',
                               catalystHeadline: stock.matchedNewsHeadline,
                             },
                           })
@@ -1214,7 +1214,7 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
                             causalSummary: {
                               globalOrGeoReason: stock.primaryGlobalDriver,
                               basicsAndPolicyReason: stock.fundamentalTransmissionReason,
-                              emotionsOrFlowReason: 'Institutional distribution & retail dip-buying trap warning.',
+                              emotionsOrFlowReason: 'Market distribution & retail dip-buying trap warning.',
                               catalystHeadline: stock.matchedNewsHeadline,
                             },
                           })
@@ -1574,12 +1574,12 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
             </div>
           </div>
 
-          {/* Section B: Government Policy, RBI & Institutional Flows */}
+          {/* Section B: Government Policy, RBI & Market Flows */}
           <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-5 space-y-4">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 pb-3 border-b border-slate-800">
               <div>
                 <div className="text-xs text-cyan-400 font-medium">
-                  Foundation 2 · Government Policy, RBI & Institutional Flows (Managed by Agent Chanakya)
+                  Foundation 2 · Government Policy, RBI & Market Flows (Managed by Agent Chanakya)
                 </div>
                 <h2 className="text-base font-bold text-white mt-0.5">
                   How Policy, Taxation, RBI Liquidity & FII/DII Flows Are Shifting Indian Sectors
@@ -1813,7 +1813,7 @@ export const FirstPrinciplesMarketEngine: React.FC<FirstPrinciplesMarketEnginePr
                         : 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
                     }`}
                   >
-                    {activeBlueprint.direction === 'RISE' ? 'INSTITUTIONAL LONG / ACCUMULATE' : 'INSTITUTIONAL SHORT / TACTICAL HEDGE'}
+                    {activeBlueprint.direction === 'RISE' ? 'SYSTEM LONG / ACCUMULATE' : 'SYSTEM SHORT / TACTICAL HEDGE'}
                   </span>
                   <span className="text-xs text-cyan-400 font-medium">
                     {activeBlueprint.sector} · Lead Specialist: {activeSetupContext.leadPillar}

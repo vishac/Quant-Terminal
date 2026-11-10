@@ -93,7 +93,7 @@ export const Header: React.FC<HeaderProps> = ({
                 title={`${isSidebarOpen ? 'Hide' : 'Show'} Left Panel (Shortcut: Press 'C')`}
               >
                 <PanelLeft className={`w-3.5 h-3.5 text-cyan-400 transition-transform duration-200 ${isSidebarOpen ? '' : 'rotate-180'}`} />
-                <span className="font-bold text-slate-200 hidden sm:inline">JARVIS</span>
+                <span className="font-bold text-slate-200 hidden sm:inline">TERMINAL</span>
                 <span className="text-slate-600 hidden sm:inline">/</span>
                 <span className="text-cyan-300 font-bold uppercase truncate max-w-[120px] sm:max-w-none">
                   {TAB_LABELS[activeTab] || 'DESK'}
@@ -107,7 +107,7 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 onClick={() => setIsInfoModalOpen(true)}
                 className="p-1.5 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-400 hover:text-cyan-300 border border-slate-800 hover:border-cyan-500/40 transition-colors cursor-pointer"
-                title="Desk Architecture & Regulatory Framework Info"
+                title="Terminal Architecture & Regulatory Framework Info"
               >
                 <Info className="w-3.5 h-3.5 text-cyan-400" />
               </button>
@@ -120,7 +120,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <polygon points="50,28 69,61 31,61" stroke="#00f0ff" strokeWidth="2.5" fill="rgba(0, 240, 255, 0.2)" />
                 <circle cx="50" cy="50" r="7" fill="#00f0ff" />
               </svg>
-              <span className="text-xs font-bold text-cyan-200 uppercase font-sans tracking-wider">JARVIS</span>
+              <span className="text-xs font-bold text-cyan-200 uppercase font-sans tracking-wider">TERMINAL</span>
             </div>
           )}
 
@@ -257,7 +257,7 @@ export const Header: React.FC<HeaderProps> = ({
           <button
             onClick={() => setIsAuthModalOpen(true)}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-cyan-500/30 hover:border-cyan-400 text-xs font-mono transition cursor-pointer shadow-sm active:scale-95"
-            title="Active Quant Floor Seat. Click to switch between 20 trader seats or authenticate"
+            title="Active Trading Floor Seat. Click to switch between 20 trader seats or authenticate"
           >
             <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse shrink-0" />
             <span className="text-[10px] text-cyan-300 font-bold shrink-0">SEAT {String(currentSeat?.seatNumber ?? 1).padStart(2, '0')}:</span>
@@ -290,10 +290,10 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-slate-100 uppercase tracking-wide">
-                    Institutional Desk Architecture & Regulatory Framework
+                    Terminal Architecture &amp; Regulatory Framework
                   </h3>
                   <span className="text-[10px] text-slate-400">
-                    J.A.R.V.I.S. TERMINAL SPECIFICATIONS & CONSTANT METHODOLOGY
+                    PERSONAL TRADING TERMINAL · ARCHITECTURE &amp; METHODOLOGY
                   </span>
                 </div>
               </div>
@@ -312,35 +312,35 @@ export const Header: React.FC<HeaderProps> = ({
                 </span>
                 <p className="text-[11px] text-slate-400">
                   {isUpstoxLive
-                    ? 'Connected to Upstox Analytics API (/market-quote/quotes & /option/chain — no static IP required). Streaming live NSE/BSE ticks and option chains for analytics & autonomous paper trading.'
-                    : 'Currently running on the Yahoo Finance fallback (~15m delayed). Pair your Upstox Analytics Token in Sync Hub -> Broker Gateway to upgrade to real-time NSE/BSE quotes and Option Chains without needing a static IP.'}
+                    ? 'Connected to Upstox Analytics API (/market-quote/quotes & /option/chain — no static IP required). Streaming live NSE & BSE ticks with whole-NSE Chartink scanner (2,000+ equities) auto-failover backup, and authoritative NYMEX WTI (CL=F) × USD/INR parity for MCX Crude Oil.'
+                    : 'Currently running on Yahoo Finance delayed fallback. Automated Chartink scanner discovers live breakout and breakdown candidates across all 2,000+ NSE stocks. Pair an Upstox Analytics Token in Sync Hub -> Broker Gateway to unlock real-time NSE/BSE streaming quotes and Option Chains without needing a static IP.'}
                 </p>
               </div>
 
               <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
                 <span className="text-[11px] font-bold text-emerald-400 block uppercase">
-                  2. 5-Factor Quantitative Stock Scoring Model &amp; ≥88/100 Gate
+                  2. 5-Pillar Stock Scoring Model &amp; ≥88/100 Execution Gate
                 </span>
                 <p className="text-[11px] text-slate-400">
-                  Every asset&apos;s <strong>Conviction Score (0–100)</strong> is the weighted composite of 5 stock-specific quantitative pillars: <strong>O</strong>rder Flow RVOL &amp; Delivery (20%), <strong>M</strong>omentum / CANSLIM RS (25%), Fundamental <strong>Q</strong>ARP ROCE/ROE/Growth (25%), <strong>R</strong>isk-Reward ATR Asymmetry (15%), and <strong>S</strong>overeign Moat (15%). <strong>88/100 is the Execution Qualification Gate</strong>: stocks scoring <strong>&ge;88/100</strong> are marked <em>EXEC QUALIFIED (Tier 1 Alpha)</em>, while <strong>80–87/100</strong> sit on the <em>High Conviction Watchlist</em> awaiting intraday volume/momentum expansion.
+                  Every asset&apos;s <strong>Conviction Score (0–100)</strong> is evaluated across 5 live pillars: <strong>Order Flow &amp; RVOL Turnover</strong> (20%), <strong>Momentum &amp; Relative Strength</strong> (25%), <strong>Fundamental Quality</strong> (25%), <strong>Risk-Reward ATR Geometry</strong> (15%), and <strong>Sovereign Moat</strong> (15%). Cross-sectional percentile ranking eliminates score clustering or ties. <strong>≥88/100</strong> passes the Execution Qualification Gate for autonomous deployment, while <strong>80–87/100</strong> remains on active watchlist. Equities are tiered by official SEBI/AMFI categories (Large Cap: Nifty 100 / ≥₹85K Cr, Mid Cap: Nifty Midcap 150 / ₹28K–₹85K Cr, Small Cap: &lt;₹28K Cr).
                 </p>
               </div>
 
               <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
                 <span className="text-[11px] font-bold text-amber-300 block uppercase">
-                  3. Autonomous 5-Agent Strategy Mandate
+                  3. Autonomous 5-Agent Strategy Mandate &amp; Session Cutoffs
                 </span>
                 <p className="text-[11px] text-slate-400">
-                  Chanakya (Macro), Bhishma (Vega/Iron Condor), Arjuna (Momentum Gamma), Kuber (Cash Delivery), and Vidura (Risk Arb) execute strictly defined-risk positions with zero naked exposures and mathematical asymmetry.
+                  Chanakya (Macro &amp; Policy), Bhishma (Derivatives Spreads), Arjuna (Cash Momentum), Kuber (Commodities &amp; Energy), and Vidura (Risk Arbiter &amp; Red-Team Veto) operate on a sequential Shared-Blackboard Consensus Council. Enforces a <strong>15:15 IST</strong> autonomous entry cutoff, <strong>15:25 IST</strong> manual override cutoff, <strong>15:20 IST</strong> auto square-off for intraday MIS and expiring F&amp;O contracts, and a strict <strong>1R risk cap (≤ ₹400)</strong> with 4-stage Step-Ratchet trailing stops (82% peak profit lock).
                 </p>
               </div>
 
               <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
                 <span className="text-[11px] font-bold text-teal-300 block uppercase">
-                  4. Statutory SEBI Circuit Breakers &amp; Auto-Failover Routing
+                  4. Statutory SEBI Circuit Breakers, 2026 Tax Veto &amp; Cash Preservation
                 </span>
                 <p className="text-[11px] text-slate-400">
-                  Tier-1 (10%), Tier-2 (15%), and Tier-3 (20%) circuit breaker rules trigger automatic portfolio delta neutralization. Primary market &amp; screener feeds route through Upstox Analytics v2 (No Static IP), with Chartink NSE Scanner armed as an automatic failover backup (unused brokers remain hidden on standby).
+                  Strict 1.50% daily drawdown limit (98.50% capital floor). Pre-trade statutory veto computes full round-trip 2026 STT/CTT, exchange turnover, SEBI charges, stamp duty, flat ₹20/order brokerage, and 18% GST, requiring &ge;3.0x friction coverage and &gt;2.00% net profit (&gt;2.50% during macro shock or post-loss recovery). Live 5-stream RSS parser monitors War, US Fed, RBI, Corporate Orders, and Commodities, attaching badges only when verified in live &le;48h filings.
                 </p>
               </div>
             </div>

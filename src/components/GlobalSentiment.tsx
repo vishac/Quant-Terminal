@@ -203,8 +203,8 @@ export const GlobalSentiment: React.FC<GlobalSentimentProps> = ({ livePicks }) =
 
     const summaryMap: Record<FearAndGreedData['rating'], string> = {
       EXTREME_FEAR: 'Aggressive risk aversion and elevated volatility dominate market participants. Panic hedging and put premium expansion are active.',
-      FEAR: 'Defensive market sentiment prevails with cautious institutional participation and selective value rotation.',
-      NEUTRAL: 'Market in balanced equilibrium. Volatility is anchored and advance-decline ratios reflect two-way institutional order flow.',
+      FEAR: 'Defensive market sentiment prevails with cautious market participation and selective value rotation.',
+      NEUTRAL: 'Market in balanced equilibrium. Volatility is anchored and advance-decline ratios reflect two-way order flow.',
       GREED: 'Constructive risk appetite driving steady accumulation. Low India VIX indicates comfortable volatility pricing across domestic desks.',
       EXTREME_GREED: 'Euphoric momentum and low volatility complacency. Call option skew is stretched, signaling potential near-term mean reversion vulnerability.'
     };
@@ -213,7 +213,7 @@ export const GlobalSentiment: React.FC<GlobalSentimentProps> = ({ livePicks }) =
       EXTREME_FEAR: 'Favorable risk-reward for staggered value accumulation in high-moat defense & bluechips. Avoid naked short option exposure.',
       FEAR: 'Focus on defensive index spreads (Bull Put Spreads with strictly defined risk) to harvest elevated option premiums.',
       NEUTRAL: 'Maintain delta-neutral iron condors and range-bound theta harvesting strategies with strict stop-losses.',
-      GREED: 'Ride institutional breakout momentum in top relative-strength equities; enforce trailing stop-losses on long positions.',
+      GREED: 'Ride breakout momentum in top relative-strength equities; enforce trailing stop-losses on long positions.',
       EXTREME_GREED: 'Hedge open portfolio gains with inexpensive OTM protective put wings; tighten bracket stops across intraday MIS desks.'
     };
 
@@ -356,7 +356,7 @@ export const GlobalSentiment: React.FC<GlobalSentimentProps> = ({ livePicks }) =
         <div className="flex-1 text-[11px] text-slate-300 leading-relaxed">
           <strong className="text-amber-300 uppercase font-mono">Model Assumption &amp; Scope Disclosure:</strong>{' '}
           All underlying input quotes (India VIX, NIFTY 50, Bank Nifty, and equities) are authentic exchange market numbers.
-          However, the Fear &amp; Greed Index itself is a <strong>proprietary quantitative model (0–100)</strong>, not an official index published by the NSE.
+          However, the Fear &amp; Greed Index itself is a <strong>proprietary mathematical model (0–100)</strong>, not an official index published by the NSE.
           Advance/Decline breadth is measured across the terminal's <strong>16 core liquid benchmark equities</strong>, not the entire 2,200+ NSE exchange universe.{' '}
           <button
             onClick={() => setActiveAuditModal('MASTER')}
@@ -373,7 +373,7 @@ export const GlobalSentiment: React.FC<GlobalSentimentProps> = ({ livePicks }) =
         <div
           onClick={() => setActiveAuditModal('MASTER')}
           className="lg:col-span-5 p-4 rounded-xl bg-slate-950/70 border border-slate-800 hover:border-cyan-500/40 transition-all cursor-pointer flex flex-col items-center justify-center text-center group relative"
-          title="Click to view complete quantitative model calculation & constituent audit"
+          title="Click to view complete sentiment model calculation & constituent audit"
         >
           <div className="absolute top-3 right-3 text-slate-500 group-hover:text-cyan-400 transition-colors">
             <Info className="w-4 h-4" />
@@ -599,7 +599,7 @@ export const GlobalSentiment: React.FC<GlobalSentimentProps> = ({ livePicks }) =
                 </div>
                 <p className="text-slate-300 text-xs">
                   <strong>NO.</strong> There is no official exchange-published "Fear &amp; Greed Index" on the NSE.
-                  This index is a <strong>quantitative composite proxy model</strong> modeled after the CNN Fear &amp; Greed Index framework and adapted for Indian capital markets.
+                  This index is a <strong>composite proxy model</strong> modeled after the CNN Fear &amp; Greed Index framework and adapted for Indian capital markets.
                 </p>
                 <p className="text-slate-400 text-[11px]">
                   The 0–100 score is computed from a transparent mathematical weighted formula combining the 4 verified live factors below:
@@ -666,7 +666,7 @@ export const GlobalSentiment: React.FC<GlobalSentimentProps> = ({ livePicks }) =
                   </div>
                 </div>
                 <p className="text-[11px] text-amber-300/90 font-mono">
-                  ⚠ Note: This reflects the institutional heavyweights in our tracking universe. It does NOT represent the entire 2,200+ companies on the NSE cash market.
+                  ⚠ Note: This reflects the liquid heavyweights in our tracking universe. It does NOT represent the entire 2,200+ companies on the NSE cash market.
                 </p>
               </div>
             </div>

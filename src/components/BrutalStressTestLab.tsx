@@ -678,7 +678,7 @@ export const BrutalStressTestLab: React.FC<BrutalStressTestLabProps> = ({
                 3-Layer NSE Participant-Wise OI (FII / DII / Pro vs Retail) &amp; Sector Rotation Matrix
               </h2>
               <p className="text-xs text-slate-400">
-                Combines Participant Index Futures LSR + Cash FII/DII Inflow/Outflow + Intraday Volume/Delivery Absorption to pinpoint winning sectors and hard-veto institutional exits.
+                Combines Participant Index Futures LSR + Cash FII/DII Inflow/Outflow + Intraday Volume/Delivery Absorption to pinpoint winning sectors and hard-veto market exits.
               </p>
             </div>
           </div>

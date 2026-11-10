@@ -1,4 +1,4 @@
-# J.A.R.V.I.S. Institutional Quant Terminal — Core Constitution & Directives
+# Personal Trading Terminal — Core Constitution & Directives
 
 ## 0. CONTINUOUS INSTRUCTION SYNCHRONIZATION MANDATE (STANDING HABIT)
 - **Always Keep Instructions Current**: Whenever any feature, architectural change, bug fix, data source update, or workflow adjustment is performed, the engineer **MUST** proactively update `PROJECT_INSTRUCTIONS.md` (both in the workspace root and the artifact directory), `README.md`, and any relevant in-app documentation/info modals in the same work cycle.
@@ -249,10 +249,14 @@ Under no circumstances should dummy, mock, or hardcoded static seed trades be in
 - **Authoritative MCX `CRUDEOILM` NYMEX WTI (`CL=F × INR=X`) Parity Pricing & Legacy `₹8,673` ICE Brent Order Self-Healing (`REV-028` — `09-Nov-2026`)**:
   - Replaced the erroneous `brentPrice * usdinr * 0.98` (`BZ=F` ICE Brent `$93.67` -> `₹8,673/bbl`) and `brentPrice * usdinr * 0.72` formulas across `agentQuantEngine.ts` and `statutoryVetoEngine.ts` with `computeAuthoritativeMcxCrudeParity(quotes)`, which prices MCX `CRUDEOILM` directly from its true exchange underlying: **NYMEX WTI (`CL=F` = `$87.73`) × `USD/INR` (`INR=X` = `₹93.92`) = `₹8,240.00/bbl`** (matching live MCX `₹8,230–₹8,246` and bounded within the session range `₹8,089–₹8,594`).
   - Removed the synthetic `3.5`-pt tick step in `updateOrdersLivePnl()` and added automatic self-healing in `paperTradeService.ts` and `agentQuantEngine.ts` so any existing cached `MCX CRUDEOILM` order with `entryPrice > 8594` (`₹8,673.00`) is automatically repaired to true NYMEX WTI parity (`₹8,240.00`).
+- **Rebrand to Personal Trading Terminal, Header Architecture Modal Update & Terminology Simplification (`REV-029` — `09-Nov-2026`)**:
+  - Rebranded application name to **Personal Trading Terminal** across HTML title, PWA manifest tags, and sidebar brand wordmark (`PERSONAL / TRADING TERMINAL`).
+  - Updated the 4-point Header Architecture and Regulatory modal to showcase all latest capabilities: (1) Upstox Real-Time Analytics v2 streaming quotes + Chartink whole-NSE auto-failover + NYMEX WTI parity for MCX Crude; (2) 5-Pillar Stock Scoring Model & ≥88/100 Execution Gate with official SEBI/AMFI market-cap tiering; (3) Autonomous 5-Agent Strategy Mandate & Session Cutoffs (`15:15 IST` entry, `15:25 IST` override, `15:20 IST` square-off, and strict 1R `≤ ₹400` risk cap with Step-Ratchet trailing stops); and (4) Statutory SEBI Circuit Breakers, 2026 Tax Veto & Cash Preservation with 1.50% daily drawdown limit, round-trip 2026 STT/CTT friction veto, and live 5-stream RSS parser with verified ≤48h filings.
+  - Purged user-facing occurrences of "Jarvis", "Institutional", and "Quant" across all UI cards, headers, tables, and tooltips, adopting clean, minimal labels ("Terminal", "Engine", "Radar", "Stock Dossier", "Strategy").
 
 ### 9.3 Current Progress & Live System Status
 - **Type Safety & Build**: `compile_applet` and `lint_applet` (`tsc --noEmit`) pass with 0 errors across the entire codebase.
-- **Revert & Audit Ledger**: `REV-001` through `REV-028` are logged in both `PROJECT_CHANGELOG_AND_REVERT_LEDGER.md` and `src/data/architectureRevertLedger.ts` (accessible inside the app under `4. Order Book` -> `04. Architecture Revert Ledger`).
+- **Revert & Audit Ledger**: `REV-001` through `REV-029` are logged in both `PROJECT_CHANGELOG_AND_REVERT_LEDGER.md` and `src/data/architectureRevertLedger.ts` (accessible inside the app under `4. Order Book` -> `04. Architecture Revert Ledger`).
 - **10-Point Brutal Stress Audit**: Passing `10 / 10` checks in `2. Stress Lab` (`BrutalStressTestLab.tsx`).
 
 ### 9.4 Immediate Next Steps & Future Roadmap
@@ -263,4 +267,5 @@ Under no circumstances should dummy, mock, or hardcoded static seed trades be in
 - [x] **Quant Dossier (`SPLIT_DOSSIER`) Font & Card Layout Fix (`REV-024`)**: Eliminated vertical card compression and standardized font hierarchy across the 2-column Quant Dossier view.
 - [x] **Dynamic First-Principles & Global Macro Impact Universe (`REV-025` & `REV-026`)**: Replaced the hardcoded 19-symbol restriction and generic 1-line sector templates in `04. First-Principles` and `05. Global Macro Impact` with full Chartink + `quotesCache` discovery, 5-factor PSU bank & sub-sector balance-sheet/treasury/policy causal synthesis, strict ordinal score/ROI separation, and accurate commodity unit formatting.
 - [x] **Full Static Audit Remediation & Authoritative MCX WTI Parity (`REV-027` & `REV-028`)**: Replaced all remaining static regulatory badges, hardcoded 3–5 stock lists, and static macro fallback scores with a Live 5-Stream RSS Parser, `<=48h` verified filing detector, 250+ symbol sector mapper, 100% live tick-driven macro vectors, and exact NYMEX WTI (`CL=F × INR=X`) MCX Crude Oil parity.
+- [x] **Rebrand to Personal Trading Terminal, Header Info Modal & Terminology Cleanup (`REV-029`)**: Rebranded app, updated the 4-point architecture modal, and purged Jarvis, Institutional, and Quant buzzwords.
 - [ ] **Live Upstox WebSocket Stream**: Wire streaming WebSocket feed in `src/services/useMarketWebSocket.ts` for sub-second order book updates.

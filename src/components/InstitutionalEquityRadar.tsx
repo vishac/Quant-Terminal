@@ -324,7 +324,7 @@ export const InstitutionalEquityRadar: React.FC = () => {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `JARVIS_Live_NSE_Breakout_Radar_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `Terminal_Live_NSE_Breakout_Radar_${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
     setToastMessage('Exported live NSE technical breakout dataset with verified prices as CSV.');
@@ -446,7 +446,7 @@ export const InstitutionalEquityRadar: React.FC = () => {
                   }`}
               >
                 <LayoutGrid className="w-3.5 h-3.5" />
-                <span>QUANT DOSSIER (SPLIT)</span>
+                <span>RADAR DOSSIER (SPLIT)</span>
               </button>
             </div>
 
@@ -793,7 +793,7 @@ export const InstitutionalEquityRadar: React.FC = () => {
             <div className="flex items-center gap-2 flex-wrap">
               <TableIcon className="w-4 h-4 text-cyan-400" />
               <span className="font-bold text-slate-200 uppercase tracking-wider">
-                STRATEGY QUANTIFICATION & CONVICTION COMPARATIVE MATRIX ({filteredStocks.length} STOCKS)
+                STRATEGY SCORING &amp; CONVICTION COMPARATIVE MATRIX ({filteredStocks.length} STOCKS)
               </span>
               <span className="px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 font-mono text-[10px] font-bold">
                 EXECUTION GATE: &ge;88/100 ({qualified88Count} QUALIFIED)
@@ -1194,7 +1194,7 @@ export const InstitutionalEquityRadar: React.FC = () => {
                 {/* Big Conviction Score Gauge Pod */}
                 <div className="flex items-center gap-4 p-3.5 rounded-2xl bg-slate-950/90 border border-cyan-500/30 shadow-[0_0_20px_rgba(0,240,255,0.15)]">
                   <div className="text-center">
-                    <div className="text-[10px] text-slate-400 uppercase tracking-widest font-mono">QUANT CONVICTION</div>
+                    <div className="text-[10px] text-slate-400 uppercase tracking-widest font-mono">CONVICTION SCORE</div>
                     <div className="text-2xl sm:text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-emerald-400 font-mono leading-tight">
                       {activeQuant.compositeScore}
                       <span className="text-sm text-slate-400 font-normal"> / 100</span>
@@ -1256,13 +1256,13 @@ export const InstitutionalEquityRadar: React.FC = () => {
                 )}
               </div>
 
-              {/* NEW SECTION 1: QUANTITATIVE 5-STRATEGY FACTOR SCORING BREAKDOWN */}
+              {/* SECTION 1: 5-PILLAR FACTOR SCORING BREAKDOWN */}
               <div className="mt-6 pt-5 border-t border-slate-800/80">
                 <div className="flex items-center justify-between pb-3 text-xs">
                   <div className="flex items-center gap-2">
                     <Scale className="w-4 h-4 text-cyan-400" />
                     <span className="text-slate-200 font-bold uppercase tracking-wider">
-                      QUANTITATIVE MULTI-STRATEGY FACTOR SCORING (WEIGHTED COMPOSITE)
+                      5-PILLAR FACTOR SCORING (WEIGHTED COMPOSITE)
                     </span>
                   </div>
                   <span className="text-[10px] text-emerald-400 font-bold font-mono">
@@ -1329,23 +1329,23 @@ export const InstitutionalEquityRadar: React.FC = () => {
                 </div>
               </div>
 
-              {/* NEW SECTION 2: INSTITUTIONAL CONVICTION RATIONALE & INVESTMENT THESIS */}
+              {/* NEW SECTION 2: STRATEGY CONVICTION RATIONALE & TRADE THESIS */}
               <div className="mt-6 pt-5 border-t border-slate-800/80">
                 <div className="flex items-center justify-between pb-3 text-xs">
                   <div className="flex items-center gap-2">
                     <BookOpen className="w-4 h-4 text-emerald-400" />
                     <span className="text-slate-200 font-bold uppercase tracking-wider">
-                      INSTITUTIONAL CONVICTION RATIONALE & INVESTMENT THESIS
+                      STRATEGY CONVICTION RATIONALE & TRADE THESIS
                     </span>
                   </div>
-                  <span className="text-[10px] text-cyan-400 font-bold">AUDITED INSTITUTIONAL DOSSIER</span>
+                  <span className="text-[10px] text-cyan-400 font-bold">AUDITED STOCK DOSSIER</span>
                 </div>
 
                 {/* Primary Quantitative Driver Callout */}
                 <div className="p-3.5 rounded-xl bg-gradient-to-r from-cyan-950/60 to-emerald-950/40 border border-cyan-500/40 text-xs space-y-1 mb-3">
                   <div className="flex items-center gap-2 text-cyan-300 font-bold text-[11px]">
                     <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-                    <span>PRIMARY QUANTITATIVE ALPHA DRIVER:</span>
+                    <span>PRIMARY ALPHA DRIVER:</span>
                   </div>
                   <p className="text-slate-200 font-sans font-semibold text-xs leading-relaxed">
                     {activeQuant.primaryDriver}
@@ -1355,21 +1355,21 @@ export const InstitutionalEquityRadar: React.FC = () => {
                 {/* Core Quantitative Thesis */}
                 <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-xs space-y-2 mb-3 font-sans">
                   <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-slate-400 font-mono uppercase">CORE INSTITUTIONAL THESIS:</span>
+                    <span className="text-slate-400 font-mono uppercase">CORE STRATEGY THESIS:</span>
                     <span className="text-slate-500 font-mono text-[10px]">Framework: {activeStock.institutionalStrategy.framework}</span>
                   </div>
                   <p className="text-slate-100 text-sm leading-relaxed font-light border-l-2 border-cyan-400 pl-3.5">
                     "{activeStock.institutionalStrategy.thesis}"
                   </p>
                   <p className="text-slate-400 text-xs leading-relaxed pt-1">
-                    <strong className="text-slate-300">Quantitative Rationale:</strong> {activeQuant.coreRationale}
+                    <strong className="text-slate-300">Strategy Rationale:</strong> {activeQuant.coreRationale}
                   </p>
                 </div>
 
                 {/* Audited Quantitative Qualification Checklist */}
                 <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 text-xs space-y-2">
                   <span className="text-[11px] text-slate-400 font-mono uppercase block mb-1">
-                    VERIFIED QUANTITATIVE ENTRY CRITERIA CHECKLIST:
+                    VERIFIED ENTRY CRITERIA CHECKLIST:
                   </span>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2 font-sans">
                     {activeQuant.qualificationChecklist.map((rule, idx) => (
@@ -1390,7 +1390,7 @@ export const InstitutionalEquityRadar: React.FC = () => {
                 <div className="mt-3 p-3.5 rounded-xl bg-amber-950/30 border border-amber-500/30 text-xs space-y-1">
                   <div className="flex items-center gap-2 text-amber-300 font-bold text-[11px]">
                     <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
-                    <span>INSTITUTIONAL INVALIDATION CONDITION (STOP DISCIPLINE):</span>
+                    <span>INVALIDATION CONDITION (STOP DISCIPLINE):</span>
                   </div>
                   <p className="text-amber-200/90 font-sans text-xs leading-relaxed">
                     {activeStock.institutionalStrategy.invalidationCondition}
@@ -1609,7 +1609,7 @@ export const InstitutionalEquityRadar: React.FC = () => {
               </div>
 
               <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 text-xs space-y-1">
-                <span className="text-[10px] text-slate-400 uppercase font-mono block">QUANTITATIVE AUDIT STATEMENT:</span>
+                <span className="text-[10px] text-slate-400 uppercase font-mono block">SYSTEM AUDIT STATEMENT:</span>
                 <p className="text-slate-300 font-sans text-xs leading-relaxed">
                   All price levels, volume numbers, and technical triggers are verified from the live National Stock Exchange of India (NSE) cash market via <strong>{activeGatewayLabel}</strong>.
                 </p>
@@ -1661,14 +1661,14 @@ export const InstitutionalEquityRadar: React.FC = () => {
             <div className="py-4 space-y-5">
               {/* Primary Driver */}
               <div className="p-3.5 rounded-xl bg-cyan-950/40 border border-cyan-500/30 text-xs space-y-1">
-                <span className="text-[10px] text-cyan-300 uppercase tracking-widest font-bold">PRIMARY QUANTITATIVE DRIVER:</span>
+                <span className="text-[10px] text-cyan-300 uppercase tracking-widest font-bold">PRIMARY STRATEGY DRIVER:</span>
                 <p className="text-slate-100 font-sans text-sm font-semibold">{modalQuant.primaryDriver}</p>
               </div>
 
               {/* Core Thesis */}
               <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2 font-sans">
                 <div className="flex items-center justify-between text-xs text-slate-400">
-                  <span className="font-mono uppercase text-[10px]">VERIFIED INSTITUTIONAL THESIS</span>
+                  <span className="font-mono uppercase text-[10px]">VERIFIED STRATEGY THESIS</span>
                   <span className="text-[10px] text-cyan-400 font-mono">{modalStock.institutionalStrategy.framework}</span>
                 </div>
                 <p className="text-slate-200 text-sm leading-relaxed border-l-2 border-cyan-400 pl-3.5">
@@ -1682,7 +1682,7 @@ export const InstitutionalEquityRadar: React.FC = () => {
               {/* 5-Strategy Breakdown */}
               <div className="space-y-2">
                 <span className="text-[11px] text-slate-400 font-mono uppercase block">
-                  QUANTITATIVE FACTOR BREAKDOWN (5 STRATEGIES):
+                  5-PILLAR FACTOR BREAKDOWN (5 STRATEGIES):
                 </span>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 font-sans">
                   {modalQuant.factorBreakdown.map((f) => (
@@ -1852,7 +1852,7 @@ export const InstitutionalEquityRadar: React.FC = () => {
 
             <div className="space-y-3 text-xs text-slate-300 leading-relaxed font-sans">
               <p className="text-slate-400">
-                The Horizon classification separates high-velocity intraday breakouts from steady institutional 200-SMA trend leaders:
+                The Horizon classification separates high-velocity intraday breakouts from steady 200-SMA trend leaders:
               </p>
 
               <div className="p-3 rounded-xl bg-slate-950 border border-cyan-500/30 space-y-1">
@@ -1868,10 +1868,10 @@ export const InstitutionalEquityRadar: React.FC = () => {
               <div className="p-3 rounded-xl bg-slate-950 border border-emerald-500/30 space-y-1">
                 <div className="text-emerald-300 font-bold font-mono">2. LONG-TERM COMPOUNDERS ({longTermCount} Stocks)</div>
                 <p className="text-slate-300 text-[11px]">
-                  <strong>Trigger:</strong> Steady institutional trend above the 200-day SMA with controlled intraday volatility (&lt; +2.15%).
+                  <strong>Trigger:</strong> Steady structural trend above the 200-day SMA with controlled intraday volatility (&lt; +2.15%).
                 </p>
                 <p className="text-slate-400 text-[11px]">
-                  Institutional accumulation leaders compounding above long-term moving averages without erratic intraday whipsaws.
+                  Accumulation leaders compounding above long-term moving averages without erratic intraday whipsaws.
                 </p>
               </div>
             </div>
@@ -1917,7 +1917,7 @@ export const InstitutionalEquityRadar: React.FC = () => {
                 <div className="p-3 rounded-xl bg-slate-950 border border-cyan-500/30 flex justify-between items-center">
                   <div>
                     <span className="text-cyan-300 font-bold">Large Cap (Rank 1–100 · Nifty 100)</span>
-                    <span className="text-slate-400 block text-[11px] font-sans">Market Cap &ge; ₹85,000 Cr · Institutional index heavyweights</span>
+                    <span className="text-slate-400 block text-[11px] font-sans">Market Cap &ge; ₹85,000 Cr · Major index heavyweights</span>
                   </div>
                   <span className="px-2.5 py-1 rounded bg-slate-900 text-cyan-200 border border-cyan-500/30 font-bold">{largeCapCount} stocks</span>
                 </div>
@@ -1925,7 +1925,7 @@ export const InstitutionalEquityRadar: React.FC = () => {
                 <div className="p-3 rounded-xl bg-slate-950 border border-indigo-500/30 flex justify-between items-center">
                   <div>
                     <span className="text-indigo-300 font-bold">Mid Cap (Rank 101–250 · Nifty Midcap 150)</span>
-                    <span className="text-slate-400 block text-[11px] font-sans">Market Cap ₹28,000 Cr – ₹85,000 Cr · Institutional growth leaders</span>
+                    <span className="text-slate-400 block text-[11px] font-sans">Market Cap ₹28,000 Cr – ₹85,000 Cr · High-momentum growth leaders</span>
                   </div>
                   <span className="px-2.5 py-1 rounded bg-slate-900 text-indigo-200 border border-indigo-500/30 font-bold">{midCapCount} stocks</span>
                 </div>

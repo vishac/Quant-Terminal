@@ -80,10 +80,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
             <div className="flex flex-col">
               <span className="text-sm font-bold uppercase tracking-wider text-cyan-200 leading-none font-sans">
-                JARVIS
+                PERSONAL
               </span>
               <span className="text-[10px] uppercase tracking-widest text-cyan-400/80 mt-1">
-                TERMINAL // V8.4
+                TRADING TERMINAL
               </span>
             </div>
           </div>

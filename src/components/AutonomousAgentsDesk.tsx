@@ -1349,10 +1349,10 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({
               </div>
               <div>
                 <h3 className="text-base font-bold text-slate-100 font-display">
-                  Global News, Macro Policy &amp; Institutional Intelligence ({filteredLiveInsights.length})
+                  Global News, Macro Policy &amp; Market Intelligence ({filteredLiveInsights.length})
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Real-time macro catalysts, central bank policy shifts, and institutional flow alerts monitored by the 5 agents.
+                  Real-time macro catalysts, central bank policy shifts, and order flow alerts monitored by the 5 agents.
                 </p>
               </div>
             </div>

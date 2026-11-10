@@ -295,7 +295,7 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
 
       let peSignal: string | undefined;
       if (strike === putSupportStrike) peSignal = `KEY SUPPORT FLOOR (Aggressive Put Writing at ${putSupportStrike})`;
-      if (strike === deepPutSupportStrike) peSignal = `MAJOR INSTITUTIONAL PUT BASE (${deepPutSupportStrike})`;
+      if (strike === deepPutSupportStrike) peSignal = `MAJOR PUT SUPPORT BASE (${deepPutSupportStrike})`;
 
       const straddleLtp = Math.round((ceLtp + peLtp) * 10) / 10;
       const strikePcr = Math.round((peBaseOi / Math.max(1, ceBaseOi)) * 100) / 100;
@@ -795,7 +795,7 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
               }`}
             >
               <Target className="w-3.5 h-3.5" />
-              <span>Derivatives &amp; Quant Bot</span>
+              <span>Derivatives Engine</span>
             </button>
             <button
               onClick={() => setQuantWorkspaceTab('SECTOR_INTELLIGENCE')}
@@ -852,7 +852,7 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-bold uppercase tracking-wide text-cyan-200">
-                          Live Option Chain &amp; Institutional Signals
+                          Live Option Chain &amp; Order Flow Signals
                         </span>
                         <span className="px-1.5 py-0.5 bg-emerald-500/20 rounded text-[9px] text-emerald-300 font-semibold tracking-widest border border-emerald-500/40 flex items-center gap-1">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -923,7 +923,7 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
                       ? 'bg-cyan-500 text-slate-950 shadow-sm'
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
-                  title="Direct 3 Quantitative Position Setups"
+                  title="Direct 3 Position Setups"
                 >
                   <Zap className="w-3.5 h-3.5" />
                   <span>3 Position Setups</span>
@@ -935,7 +935,7 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
                       ? 'bg-cyan-500 text-slate-950 shadow-sm'
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
-                  title="Institutional Long Delivery & Script Decision Dossier (Cash vs F&O)"
+                  title="Delivery & Script Decision Dossier (Cash vs F&O)"
                 >
                   <Building2 className="w-3.5 h-3.5" />
                   <span>Delivery vs F&O</span>
@@ -1232,7 +1232,7 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
                     <div>
                       <div className="flex flex-wrap items-center gap-2 mb-0.5">
                         <span className="text-[10px] text-cyan-300 font-bold uppercase tracking-wider block">
-                          INSTITUTIONAL SIGNAL DETECTED:
+                          ORDER FLOW SIGNAL DETECTED:
                         </span>
                         <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-sky-950 text-sky-400 border border-sky-800 font-bold">
                           AGENT BHISHMA (F&O) + AGENT CHANAKYA (MACRO)
@@ -1532,7 +1532,7 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
                     </div>
                     <span className="text-[10px] text-slate-400 hidden xl:flex items-center gap-1">
                       <Scale className="w-3.5 h-3.5 text-cyan-400" />
-                      <span>INSTITUTIONAL CRITERIA ENGINE</span>
+                      <span>EQUITY CRITERIA ENGINE</span>
                     </span>
                   </div>
                 </div>
@@ -1553,7 +1553,7 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
                         </span>
                       </div>
                       <div className="text-right">
-                        <span className="text-[10px] text-slate-400 block uppercase">INSTITUTIONAL DELIVERY VOL</span>
+                        <span className="text-[10px] text-slate-400 block uppercase">DELIVERY VOLUME</span>
                         <span className="text-sm font-bold text-emerald-400 tabular-nums">68.4% (SURGE 4.2x 20-DMA)</span>
                       </div>
                     </div>
@@ -1614,7 +1614,7 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
                         </span>
                       </div>
                       <div className="text-right">
-                        <span className="text-[10px] text-slate-400 block uppercase">INSTITUTIONAL HOLDING</span>
+                        <span className="text-[10px] text-slate-400 block uppercase">MAJOR HOLDING</span>
                         <span className="text-sm font-bold text-amber-300 tabular-nums">61.4% (FII + DII)</span>
                       </div>
                     </div>
@@ -1631,10 +1631,10 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
 
                       <div className="p-2.5 rounded-lg bg-slate-900/70 border border-slate-800/80">
                         <span className="text-[10px] text-amber-300 font-bold uppercase block mb-1">
-                          2. THE INSTITUTIONAL COVERED CALL PLAYBOOK
+                          2. THE SYSTEMATIC COVERED CALL PLAYBOOK
                         </span>
                         <p className="text-slate-300 text-[10px] leading-relaxed">
-                          Institutions holding 10,000+ delivery shares systematically <strong className="text-cyan-300">sell 1-month OTM Calls (+5% strike)</strong>. This generates 1.2–1.8% monthly cashflow without selling the underlying equity. If the stock rallies beyond the strike, they roll up and out.
+                          Large holders with 10,000+ delivery shares systematically <strong className="text-cyan-300">sell 1-month OTM Calls (+5% strike)</strong>. This generates 1.2–1.8% monthly cashflow without selling the underlying equity. If the stock rallies beyond the strike, they roll up and out.
                         </p>
                       </div>
 
@@ -1649,7 +1649,7 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
 
                       <div className="p-2.5 rounded-lg bg-slate-900/70 border border-slate-800/80">
                         <span className="text-[10px] text-amber-300 font-bold uppercase block mb-1">
-                          4. INSTITUTIONAL ACCUMULATION ZONES
+                          4. SYSTEM ACCUMULATION ZONES
                         </span>
                         <p className="text-slate-300 text-[10px] leading-relaxed">
                           DIIs accumulate heavily at the 50-day EMA (₹3,510–₹3,540 band). Tranches are deployed in 30% increments with strict trailing stop-losses.
@@ -1674,7 +1674,7 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
                         </span>
                       </div>
                       <div className="text-right">
-                        <span className="text-[10px] text-slate-400 block uppercase">INSTITUTIONAL SPONSORSHIP</span>
+                        <span className="text-[10px] text-slate-400 block uppercase">MARKET SPONSORSHIP</span>
                         <span className="text-sm font-bold text-sky-300 tabular-nums">74.2% (PROMOTER + FII/DII)</span>
                       </div>
                     </div>
@@ -1769,7 +1769,7 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
 
                       <div className="p-2.5 rounded-lg bg-slate-900/70 border border-slate-800/80">
                         <span className="text-[10px] text-indigo-300 font-bold uppercase block mb-1">
-                          4. INSTITUTIONAL ACCUMULATION BENCHMARK
+                          4. CORE ACCUMULATION BENCHMARK
                         </span>
                         <p className="text-slate-300 text-[10px] leading-relaxed">
                           Insurance companies (LIC) and pension funds hold TCS for multi-decade compounding. Systematic monthly SIP accumulation in cash avoids all derivative roll spreads.
@@ -1811,7 +1811,7 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
 
                       <div className="p-2.5 rounded-lg bg-slate-900/70 border border-slate-800/80">
                         <span className="text-[10px] text-cyan-300 font-bold uppercase block mb-1">
-                          2. HOW INSTITUTIONS ACTUALLY DELIVER NIFTY
+                          2. HOW ASSET MANAGERS ACTUALLY DELIVER NIFTY
                         </span>
                         <p className="text-slate-300 text-[10px] leading-relaxed">
                           When sovereign wealth funds want long delivery on India, they buy <strong className="text-emerald-400">NIFTY BEES (ETF)</strong> or basket shares. They never buy and hold long-term index options.
@@ -1829,7 +1829,7 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
 
                       <div className="p-2.5 rounded-lg bg-slate-900/70 border border-slate-800/80">
                         <span className="text-[10px] text-cyan-300 font-bold uppercase block mb-1">
-                          4. INSTITUTIONAL BETA HEDGING
+                          4. SYSTEM BETA HEDGING
                         </span>
                         <p className="text-slate-300 text-[10px] leading-relaxed">
                           Institutions hold ₹10,000 Cr in physical equity delivery and buy OTM Nifty Puts solely as catastrophic insurance against geopolitical shocks or election volatility.
@@ -1859,7 +1859,7 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
                           </span>
                         </div>
                         <div className="text-right">
-                          <span className="text-[10px] text-slate-400 block uppercase">INSTITUTIONAL ABSORPTION</span>
+                          <span className="text-[10px] text-slate-400 block uppercase">VOLUME ABSORPTION</span>
                           <span className="text-sm font-bold text-amber-400 tabular-nums">71.8% DEMAT DELIVERY</span>
                         </div>
                       </div>
@@ -1870,7 +1870,7 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
                             1. DELIVERY ABSORPTION &amp; CONSOLIDATION REASON
                           </span>
                           <p className="text-slate-300 text-[10px] leading-relaxed">
-                            UltraTech acquired a controlling ~32.7% promoter stake followed by an open offer. Institutional blocks absorbed millions of shares into Demat accounts. The multi-month thesis is operational turnaround through UltraTech’s lower thermal energy and freight costs.
+                            UltraTech acquired a controlling ~32.7% promoter stake followed by an open offer. Large-block orders absorbed millions of shares into Demat accounts. The multi-month thesis is operational turnaround through UltraTech’s lower thermal energy and freight costs.
                           </p>
                         </div>
 
@@ -2003,7 +2003,7 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
                             1. WHY IT APPEARS UNDER AVOID WHEN CRUDE SURGES
                           </span>
                           <p className="text-slate-300 text-[10px] leading-relaxed">
-                            Crude derivatives (phthalic anhydride, pentaerythritol, TiO2) make up &gt;50% of cost of goods sold. When crude spikes, gross margins contract by 180–300 bps. Quant engines flag it for <strong className="text-rose-400">Short-Term Avoidance</strong> until raw material deflation returns.
+                            Crude derivatives (phthalic anhydride, pentaerythritol, TiO2) make up &gt;50% of cost of goods sold. When crude spikes, gross margins contract by 180–300 bps. Screening engines flag it for <strong className="text-rose-400">Short-Term Avoidance</strong> until raw material deflation returns.
                           </p>
                         </div>
 
@@ -2012,7 +2012,7 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
                             2. LONG-TERM DELIVERY SUSTAINABILITY
                           </span>
                           <p className="text-slate-300 text-[10px] leading-relaxed">
-                            Despite short-term competition from Grasim/Birla Opus, Asian Paints maintains a 50-year dealer lock-in with tinting machines installed across 75,000+ hardware retailers. Institutional cash delivery should be accumulated during panic troughs (P/E &lt; 45x).
+                            Despite short-term competition from Grasim/Birla Opus, Asian Paints maintains a 50-year dealer lock-in with tinting machines installed across 75,000+ hardware retailers. Cash delivery should be accumulated during panic troughs (P/E &lt; 45x).
                           </p>
                         </div>
 
@@ -2027,7 +2027,7 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
 
                         <div className="p-2.5 rounded-lg bg-slate-900/70 border border-slate-800/80">
                           <span className="text-[10px] text-rose-400 font-bold uppercase block mb-1">
-                            4. INSTITUTIONAL ACCUMULATION RULES
+                            4. ACCUMULATION RULES
                           </span>
                           <p className="text-slate-300 text-[10px] leading-relaxed">
                             Mutual funds wait for crude stabilization below $80/bbl before building delivery tranches. Avoid buying on days when crude is up &gt;1.5%.
@@ -2069,7 +2069,7 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
                             1. SOVEREIGN INFRASTRUCTURE &amp; CAPEX PROXY
                           </span>
                           <p className="text-slate-300 text-[10px] leading-relaxed">
-                            UltraTech is the primary domestic proxy for India's ₹11.1 Lakh Cr annual infrastructure budget (highways, dedicated freight corridors, metro networks, and airports). Institutional capital treats it as a permanent compounder.
+                            UltraTech is the primary domestic proxy for India's ₹11.1 Lakh Cr annual infrastructure budget (highways, dedicated freight corridors, metro networks, and airports). Long-term capital treats it as a permanent compounder.
                           </p>
                         </div>
 
@@ -2135,7 +2135,7 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
                             1. DEFENSIVE EARNINGS MOAT
                           </span>
                           <p className="text-slate-300 text-[10px] leading-relaxed">
-                            Prescription-driven chronic therapies (asthma, COPD, cardiology) continue through recessions, trade wars, and global supply shocks. Institutional capital rotates into Cipla whenever macro indices show vulnerability.
+                            Prescription-driven chronic therapies (asthma, COPD, cardiology) continue through recessions, trade wars, and global supply shocks. Market capital rotates into Cipla whenever macro indices show vulnerability.
                           </p>
                         </div>
 
@@ -2159,7 +2159,7 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
 
                         <div className="p-2.5 rounded-lg bg-slate-900/70 border border-slate-800/80">
                           <span className="text-[10px] text-emerald-400 font-bold uppercase block mb-1">
-                            4. INSTITUTIONAL ACCUMULATION
+                            4. SYSTEM ACCUMULATION
                           </span>
                           <p className="text-slate-300 text-[10px] leading-relaxed">
                             FIIs and domestic healthcare funds maintain a core holding &gt;45% in delivery Demat accounts.
@@ -2185,7 +2185,7 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
                           <div className="flex items-center gap-2">
                             <h4 className="text-sm font-bold text-slate-100 uppercase tracking-wide">{name} (NSE: {sym})</h4>
                             <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${chg >= 0 ? 'bg-emerald-950 text-emerald-300 border border-emerald-700' : 'bg-rose-950 text-rose-300 border border-rose-700'}`}>
-                              LIVE INSTITUTIONAL DOSSIER // {chg >= 0 ? 'MOMENTUM ACCUMULATION' : 'PULLBACK WATCH'}
+                              LIVE STOCK DOSSIER // {chg >= 0 ? 'MOMENTUM ACCUMULATION' : 'PULLBACK WATCH'}
                             </span>
                           </div>
                           <span className="text-[10px] text-slate-400">
@@ -2204,7 +2204,7 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
                             1. ORDER FLOW &amp; DELIVERY ABSORPTION
                           </span>
                           <p className="text-slate-300 text-[10px] leading-relaxed">
-                            Live tick stream records an estimated 58.2% delivery ratio. Institutional algorithmic TWAP execution is favored over speculative intraday churn for long compounding.
+                            Live tick stream records an estimated 58.2% delivery ratio. Algorithmic TWAP execution is favored over speculative intraday churn for long compounding.
                           </p>
                         </div>
 
@@ -2213,7 +2213,7 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
                             2. RELATIVE PERFORMANCE VS NIFTY 50
                           </span>
                           <p className="text-slate-300 text-[10px] leading-relaxed">
-                            Relative Alpha vs NIFTY 50 is {chg >= (niftyQuote?.changePct ?? 0) ? '+' : ''}{(chg - (niftyQuote?.changePct ?? 0)).toFixed(2)}%. Stocks with positive relative alpha absorb market pullbacks much faster during institutional liquidity rotations.
+                            Relative Alpha vs NIFTY 50 is {chg >= (niftyQuote?.changePct ?? 0) ? '+' : ''}{(chg - (niftyQuote?.changePct ?? 0)).toFixed(2)}%. Stocks with positive relative alpha absorb market pullbacks much faster during market liquidity rotations.
                           </p>
                         </div>
 
@@ -2239,14 +2239,14 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
                   );
                 })()}
 
-                {/* COMPREHENSIVE INSTITUTIONAL MATRIX TABLE: CASH DELIVERY VS F&O */}
+                {/* COMPREHENSIVE CRITERIA MATRIX TABLE: CASH DELIVERY VS F&O */}
                 <div className="rounded-xl border border-slate-800 bg-[#050914] overflow-hidden">
                   <div className="p-2.5 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between">
                     <span className="text-[10px] text-cyan-300 font-bold uppercase tracking-wider flex items-center gap-1.5">
                       <Scale className="w-3.5 h-3.5" />
-                      INSTITUTIONAL CRITERIA MATRIX: CASH DELIVERY (CNC) VS DERIVATIVES (F&O)
+                      CRITERIA MATRIX: CASH DELIVERY (CNC) VS DERIVATIVES (F&O)
                     </span>
-                    <span className="text-[9px] text-slate-400">SOURCE: FII/DII ALLOCATION FRAMEWORK</span>
+                    <span className="text-[9px] text-slate-400">SOURCE: ALLOCATION FRAMEWORK</span>
                   </div>
 
                   <table className="w-full text-left text-[10px] font-mono">
@@ -2255,7 +2255,7 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
                         <th className="p-2">DIMENSION</th>
                         <th className="p-2 text-emerald-400">CASH DELIVERY (CNC)</th>
                         <th className="p-2 text-cyan-300">F&O DERIVATIVES (OPTIONS/FUT)</th>
-                        <th className="p-2 text-amber-300">HOW INSTITUTIONS DECIDE</th>
+                        <th className="p-2 text-amber-300">SYSTEM SELECTION LOGIC</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/50">
@@ -2489,7 +2489,7 @@ export const QuantTerminal3D: React.FC<QuantTerminal3DProps> = ({ onNavigateToAg
                           setDecisionViewMode('LONG_DELIVERY');
                         }}
                         className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-cyan-300 text-[10px] font-bold uppercase rounded-lg border border-cyan-500/30 transition flex items-center gap-1 cursor-pointer"
-                        title={`Inspect ${alphaTicker} Institutional Delivery Dossier`}
+                        title={`Inspect ${alphaTicker} Delivery Dossier`}
                       >
                         <Building2 className="w-3 h-3" />
                         <span>DELIVERY DOSSIER</span>

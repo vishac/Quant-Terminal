@@ -436,6 +436,21 @@ export const ARCHITECTURE_REVERT_LEDGER: RevertLedgerEntry[] = [
     revertInstruction:
       'Revert src/services/agentQuantEngine.ts, src/services/statutoryVetoEngine.ts, and src/services/paperTradeService.ts to REV-027.',
   },
+  {
+    revertId: 'REV-029',
+    dateIST: '09-Nov-2026',
+    category: 'STRATEGY_VETO_ENGINE',
+    moduleName: 'Rebrand to Personal Trading Terminal, Header Architecture Modal Update, and Terminology Simplification',
+    filePath: 'index.html, src/components/Header.tsx, src/components/Sidebar.tsx, src/components/InstitutionalEquityRadar.tsx, src/components/QuantTerminal3D.tsx, src/components/FirstPrinciplesMarketEngine.tsx, src/components/ViewerDashboard.tsx, src/components/MarketImpactAnalysis.tsx, src/components/GlobalSentiment.tsx, src/components/AutonomousAgentsDesk.tsx, src/components/BrutalStressTestLab.tsx, src/components/SettingsTerminal.tsx',
+    previousStateSummary:
+      'Application was branded as "J.A.R.V.I.S. Institutional Quant Terminal". Header modal contained outdated specifications without Upstox v2, Chartink whole-NSE failover, NYMEX WTI parity, 15:15/15:25 session cutoffs, and 2026 STT/tax veto details. UI labels across Radar, 3D, and First Principles heavily used "Institutional", "Quant", and "Jarvis" jargon.',
+    newStateSummary:
+      'Renamed application to "Personal Trading Terminal" across HTML title, PWA tags, and sidebar brand wordmark. Updated the 4-point Header Architecture modal with all recent features (Upstox Analytics v2 streaming + Chartink whole-NSE failover + NYMEX WTI crude parity, 5-Pillar stock scoring with SEBI/AMFI market-cap tiers, Autonomous 5-Agent mandate with 15:15 entry & 15:20 square-off cutoffs and 1R <= ₹400 risk cap, and Statutory SEBI circuit breakers with 2026 tax veto and 5-stream RSS news). Purged user-facing instances of Jarvis, Institutional, and Quant, replacing them with minimal Terminal, Engine, and Radar labels.',
+    quantValueJustification:
+      'Provides a clean, personal trading terminal identity, accurate and complete technical documentation in the header modal, and removes distracting institutional roleplay jargon.',
+    revertInstruction:
+      'Revert index.html, src/components/Header.tsx, src/components/Sidebar.tsx, and related component files to REV-028.',
+  },
 ];
 
 
