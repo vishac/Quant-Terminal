@@ -735,15 +735,15 @@ export const RiskEngineTerminal: React.FC<RiskEngineTerminalProps> = ({ onOpenCi
 
             <p className="text-xs text-slate-300 leading-relaxed font-sans">
               {killConfirmModal === 'GLOBAL_KILL' 
-                ? 'Engaging the master circuit breaker will immediately purge all working exchange quotes on NSE/BSE, square off open intraday derivative positions, lock portfolio delta, and divert clearing capital into overnight risk-free repo collateral.'
-                : 'Confirming this action will immediately fire high-speed IOC market slice orders to liquidate all open Out-The-Money (OTM) index and equity options contracts across active books.'
+                ? 'Engaging the master circuit breaker will mark open paper positions as squared off and disarm autonomous bots in the paper ledger. Zero live broker orders or hedges are placed.'
+                : 'Confirming this action will immediately mark open paper options positions as squared off in the paper ledger. Zero live broker orders are placed.'
               }
             </p>
 
             <div className="p-3 rounded-xl bg-rose-950/50 border border-rose-500/40 text-xs text-rose-200 font-mono">
               {killConfirmModal === 'GLOBAL_KILL'
-                ? '[CRITICAL SAFEGUARD]: All 5 autonomous quant bots will be set to STANDBY mode.'
-                : '[EXECUTION AUDIT]: Sub-millisecond sweep through NSE co-location optical gateway.'
+                ? '[PAPER SAFEGUARD]: All 5 autonomous bots will be disarmed and set to STANDBY mode. No live broker hedges created.'
+                : '[PAPER AUDIT]: Open options positions marked squared-off in paper ledger.'
               }
             </div>
 

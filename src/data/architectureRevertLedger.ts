@@ -467,6 +467,22 @@ export const ARCHITECTURE_REVERT_LEDGER: RevertLedgerEntry[] = [
     revertInstruction:
       'Revert src/services/scriptLearningEngine.ts, src/services/agentQuantEngine.ts, src/components/InstitutionalEquityRadar.tsx, src/components/FirstPrinciplesMarketEngine.tsx, and src/components/TradeHistory.tsx to REV-029.',
   },
+  {
+    revertId: 'REV-031',
+    dateIST: '10-Nov-2026',
+    category: 'STRATEGY_VETO_ENGINE',
+    moduleName: 'P0 Security Hardening: Token Protection, Firestore Rules Isolation, Route Guarding, and Paper-Only Enforcement',
+    filePath:
+      'server.ts, src/server/auth.ts, firestore.rules, src/context/DeskAuthContext.tsx, src/App.tsx, src/components/OwnerGate.tsx, src/components/BrokerGatewayRouter.tsx, src/components/CircuitBreakerModal.tsx, src/components/RiskEngineTerminal.tsx, tests/security_p0.test.ts',
+    previousStateSummary:
+      'Security audit revealed 5 P0 vulnerabilities: (1) Anyone could obtain the owner token via /api/owner/auto-auth, verify returned token in JSON without rate-limiting, and client persisted raw tokens in localStorage; (2) Firestore rules allowed self-promotion to admin via user documents without per-user data isolation; (3) /api/upstox/order/place forwarded orders without paper-only enforcement; (4) Scheduler trigger, calibrate, broker test-ping, and Upstox proxy routes lacked requireOwner or failed-open with 200 when no token was configured, while /api/upstox/configure accepted arbitrary URLs; (5) Circuit breaker modals displayed simulated exchange packet transmission and live hedge orders.',
+    newStateSummary:
+      'Implemented full P0 security hardening suite: (1) Deleted /api/owner/auto-auth, made /api/owner/verify POST-only with 10/min IP rate limiting without leaking token in JSON, issued 7-day HttpOnly SameSite=Strict session cookie, and removed localStorage token storage across all 8 client components; (2) Hardened firestore.rules so admin role derives strictly from custom claims or verified email (reachvishalc@gmail.com), prevented self-promotion or role mutation, enforced strict user document/order/backtest isolation, and deployed rules to Firebase; (3) Set /api/upstox/order/place to unconditionally return 403 Forbidden; (4) Protected scheduler trigger, calibrate, test-ping, and Upstox routes with requireOwner, returning 503 when no token configured (no fail-open), enforced >=16 chars token minimum, timingSafeEqual SHA-256 digest comparison, TRUST_PROXY=1 IP extraction, and restricted Upstox baseUrl to https://api.upstox.com; (5) Updated circuit breaker modals to explicitly state paper-only ledger square-off with zero live broker hedges created; (6) Added 8 automated regression tests in tests/security_p0.test.ts passing 8/8.',
+    quantValueJustification:
+      'Eliminates unauthorized privilege escalation, token exfiltration, unvalidated broker execution, and credential SSRF while establishing cryptographically sound constant-time verification and zero-leakage session architecture.',
+    revertInstruction:
+      'Revert server.ts, src/server/auth.ts, firestore.rules, src/context/DeskAuthContext.tsx, and related UI components to REV-030.',
+  },
 ];
 
 

@@ -64,10 +64,6 @@ export const MarketImpactAnalysis: React.FC<MarketImpactAnalysisProps> = ({
     setIsLoadingMacro(true);
     try {
       const res = await fetch('/api/macro/intelligence', {
-        headers: {
-          'x-owner-token': localStorage.getItem('jarvis_owner_token') || '',
-          'x-jarvis-owner-token': localStorage.getItem('jarvis_owner_token') || '',
-        },
         credentials: 'include',
       });
       const json = await res.json();

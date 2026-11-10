@@ -81,13 +81,8 @@ export const MacroThreatIntelligenceMatrix: React.FC<MacroThreatIntelligenceMatr
     else setIsLoading(true);
 
     try {
-      let token = '';
-      try { token = localStorage.getItem('jarvis_owner_token') || ''; } catch {}
       const res = await fetch(`/api/macro/intelligence${force ? '?refresh=true' : ''}`, {
-        headers: {
-          'x-owner-token': token,
-          'Authorization': `Bearer ${token}`,
-        },
+        credentials: 'include',
       });
       if (res.status === 401 || res.status === 503) {
         setData({

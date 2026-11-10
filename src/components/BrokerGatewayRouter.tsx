@@ -101,16 +101,12 @@ export const BrokerGatewayRouter: React.FC = () => {
     setUpstoxSuccessMsg(null);
 
     try {
-      let ownerToken = '';
-      try { ownerToken = localStorage.getItem('jarvis_owner_token') || ''; } catch {}
-
       const res = await fetch('/api/upstox/configure', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-owner-token': ownerToken,
-          'Authorization': `Bearer ${ownerToken}`,
         },
+        credentials: 'include',
         body: JSON.stringify({
           accessToken: upstoxTokenInput.trim(),
           apiKey: upstoxApiKeyInput.trim() || undefined,
@@ -145,7 +141,7 @@ export const BrokerGatewayRouter: React.FC = () => {
 
   const handlePingUpstox = async () => {
     try {
-      const res = await fetch('/api/upstox/test-ping', { method: 'POST' });
+      const res = await fetch('/api/upstox/test-ping', { method: 'POST', credentials: 'include' });
       const data = await res.json();
       const now = new Date();
       const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -169,14 +165,9 @@ export const BrokerGatewayRouter: React.FC = () => {
 
   const handleDisconnectUpstox = async () => {
     try {
-      let ownerToken = '';
-      try { ownerToken = localStorage.getItem('jarvis_owner_token') || ''; } catch {}
       await fetch('/api/upstox/disconnect', {
         method: 'POST',
-        headers: {
-          'x-owner-token': ownerToken,
-          'Authorization': `Bearer ${ownerToken}`,
-        }
+        credentials: 'include',
       });
       setUpstoxSuccessMsg('Upstox session disconnected.');
       setRouterToast('[UPSTOX]: Session disconnected.');
@@ -188,7 +179,9 @@ export const BrokerGatewayRouter: React.FC = () => {
     setIsLoadingQuotes(true);
     setUpstoxError(null);
     try {
-      const res = await fetch('/api/upstox/market-quote?instrument_key=NSE_INDEX|Nifty 50,NSE_INDEX|Nifty Bank,BSE_INDEX|SENSEX,NSE_INDEX|India VIX');
+      const res = await fetch('/api/upstox/market-quote?instrument_key=NSE_INDEX|Nifty 50,NSE_INDEX|Nifty Bank,BSE_INDEX|SENSEX,NSE_INDEX|India VIX', {
+        credentials: 'include',
+      });
       const data = await res.json();
       if (res.ok && data.success) {
         setUpstoxQuotesData(data.data);
@@ -206,7 +199,9 @@ export const BrokerGatewayRouter: React.FC = () => {
     setIsLoadingOptionChain(true);
     setUpstoxError(null);
     try {
-      const res = await fetch('/api/upstox/option-chain?instrument_key=NSE_INDEX|Nifty 50');
+      const res = await fetch('/api/upstox/option-chain?instrument_key=NSE_INDEX|Nifty 50', {
+        credentials: 'include',
+      });
       const data = await res.json();
       if (res.ok && data.success) {
         setUpstoxOptionChainData(data);

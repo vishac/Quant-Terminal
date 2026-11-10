@@ -79,56 +79,18 @@ function AppInner() {
   const [gateOpen, setGateOpen] = useState<boolean>(false);
 
   /**
-   * Seamless owner verification:
-   * 1. Check if existing session cookie is already valid.
-   * 2. If not, try stored token from localStorage.
-   * 3. If server has OWNER_ACCESS_TOKEN configured in secrets, auto-auth seamlessly.
-   * 4. Only open OwnerGate if none of the above are valid.
+   * Owner verification:
+   * 1. Check if existing session cookie is already valid via /api/owner/status.
+   * 2. If server has no OWNER_ACCESS_TOKEN configured, allow access.
+   * 3. If cookie is not authorized, prompt owner to log in via OwnerGate modal.
+   * The client never stores the raw token in localStorage and auto-auth is disabled.
    */
   const ensureOwnerAccess = async (): Promise<boolean> => {
-    // 1. Check if session cookie is already valid
     try {
       const res = await fetch('/api/owner/status', { credentials: 'include' });
       const data = await res.json();
       if (!data.configured) return true; // No token configured on server
       if (data.authorized) return true;  // Cookie already authorized
-    } catch {}
-
-    // 2. Try with stored token from localStorage if available
-    let storedToken = '';
-    try { storedToken = localStorage.getItem('jarvis_owner_token') || ''; } catch {}
-    if (storedToken) {
-      try {
-        const verifyRes = await fetch('/api/owner/verify', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-owner-token': storedToken,
-            'Authorization': `Bearer ${storedToken}`,
-          },
-          body: JSON.stringify({ token: storedToken }),
-          credentials: 'include',
-        });
-        const vData = await verifyRes.json();
-        if (verifyRes.ok && vData?.authorized) {
-          return true;
-        }
-      } catch {}
-    }
-
-    // 3. Auto-authenticate from configured server secrets (owner workspace)
-    try {
-      const autoRes = await fetch('/api/owner/auto-auth', {
-        method: 'POST',
-        credentials: 'include',
-      });
-      const autoData = await autoRes.json();
-      if (autoRes.ok && autoData?.authorized) {
-        if (autoData.token) {
-          try { localStorage.setItem('jarvis_owner_token', autoData.token); } catch {}
-        }
-        return true;
-      }
     } catch {}
 
     return false;
@@ -146,19 +108,23 @@ function AppInner() {
     try { localStorage.setItem('jarvis_user_role', role); } catch { /* ignore */ }
   };
 
-  const handleGateSuccess = (token: string) => {
+  const handleGateSuccess = () => {
     try {
-      localStorage.setItem('jarvis_owner_token', token);
       localStorage.setItem('jarvis_user_role', 'admin');
     } catch { /* ignore */ }
     setUserRoleState('admin');
     setGateOpen(false);
   };
 
-  // Background auto-handshake on mount so owner is permanently authenticated
+  // Background verification on mount to check if owner session cookie is already active
   useEffect(() => {
     if (userRole === 'admin') {
-      ensureOwnerAccess().catch(() => {});
+      ensureOwnerAccess().then((hasAccess) => {
+        if (!hasAccess) {
+          setUserRoleState('viewer');
+          try { localStorage.setItem('jarvis_user_role', 'viewer'); } catch {}
+        }
+      }).catch(() => {});
     }
   }, []);
 
@@ -243,10 +209,10 @@ function AppInner() {
         ...o,
         status: 'SQUARED_OFF' as const,
         exitPrice: exitP,
-        exitReason: `Emergency Circuit Breaker [${tier.toUpperCase()}] · Portfolio Delta Neutralized`,
+        exitReason: `Emergency Circuit Breaker [${tier.toUpperCase()}] · Portfolio Delta Neutralized (Paper Ledger)`,
         orderDate: o.orderDate || orderDate,
         orderTime,
-        timestamp: `${o.orderDate || orderDate} ${orderTime} (Circuit Breaker)`,
+        timestamp: `${o.orderDate || orderDate} ${orderTime} (Circuit Breaker - Paper)`,
       };
     });
 
@@ -254,7 +220,7 @@ function AppInner() {
     window.dispatchEvent(new CustomEvent('jarvis:circuit-breaker', { detail: { tier, timestamp: Date.now() } }));
     try { localStorage.setItem('jarvis_bots_armed_state', 'false'); } catch { /* ignore */ }
     setSystemAlertMessage(
-      `Statutory Circuit Breaker Routine [${tier.toUpperCase()}] executed: Squared off ${squaredCount} open position(s) and disarmed autonomous bots across NSE/BSE/MCX.`,
+      `Statutory Circuit Breaker Routine [${tier.toUpperCase()}] executed (Paper Ledger): Squared off ${squaredCount} paper position(s) and disarmed bots. Zero live broker hedges created.`,
     );
     setTimeout(() => setSystemAlertMessage(null), 6000);
   };

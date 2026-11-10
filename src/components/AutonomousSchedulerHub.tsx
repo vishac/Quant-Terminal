@@ -173,17 +173,12 @@ export const AutonomousSchedulerHub: React.FC<AutonomousSchedulerHubProps> = ({
     setTriggeringRoutine(routine);
     setNoticeMessage(null);
     try {
-      let ownerToken = '';
-      try {
-        ownerToken = localStorage.getItem('jarvis_owner_token') || '';
-      } catch { /* ignore */ }
-
       const res = await fetch('/api/scheduler/trigger-cycle', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(ownerToken ? { 'x-owner-token': ownerToken, Authorization: `Bearer ${ownerToken}` } : {}),
         },
+        credentials: 'include',
         body: JSON.stringify({ routine }),
       });
       const data = await res.json();

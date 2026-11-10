@@ -386,7 +386,9 @@ export const DeskAuthProvider: React.FC<{ children: ReactNode }> = ({ children }
     if (res.user) {
       const targetSeat = seats.find((s) => s.seatNumber === seatNumber);
       if (targetSeat) {
-        const updatedSeat: DeskTraderSeat = { ...targetSeat, id: res.user.uid, name: displayName, email };
+        // Enforce non-privileged role for self sign-up; admins grant elevated roles via updateSeatRole
+        const initialRole: UserDeskRole = 'quant_trader';
+        const updatedSeat: DeskTraderSeat = { ...targetSeat, id: res.user.uid, name: displayName, email, role: initialRole };
         setSeats((prev) => prev.map((s) => (s.seatNumber === seatNumber ? updatedSeat : s)));
         try {
           await setDoc(doc(db, 'users', res.user.uid), {
@@ -394,7 +396,7 @@ export const DeskAuthProvider: React.FC<{ children: ReactNode }> = ({ children }
             displayName,
             email,
             seatNumber,
-            role: targetSeat.role,
+            role: initialRole,
             desk: targetSeat.desk,
             status: 'active',
             allocatedCapitalInr: targetSeat.allocatedCapitalINR,

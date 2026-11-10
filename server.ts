@@ -15,7 +15,7 @@ import {
 } from './src/server/riskEngine.ts';
 import { runBacktest, AVAILABLE_STRATEGIES } from './src/server/backtester.ts';
 import {
-  requireOwner, rateLimit, extractToken, verifyOwnerToken, getConfiguredOwnerTokens,
+  requireOwner, rateLimit, verifyRateLimit, extractToken, verifyOwnerToken, getConfiguredOwnerTokens,
 } from './src/server/auth.ts';
 import {
   quotesCache, syncMarketQuotes, fetchDelayedYahooQuote,
@@ -72,8 +72,10 @@ if (geminiApiKey && geminiApiKey.trim().length > 10) {
 /**
  * Validates the submitted owner token and — on success — issues an HttpOnly
  * session cookie so that the raw token never travels in JS-readable storage.
+ * Restricted to POST-only, rate-limited to 10 attempts per minute, and does NOT
+ * leak the token in the JSON response.
  */
-app.all('/api/owner/verify', (req, res) => {
+app.post('/api/owner/verify', verifyRateLimit, (req, res) => {
   const configured = getConfiguredOwnerTokens();
   if (configured.length === 0) {
     return res.status(503).json({
@@ -86,46 +88,20 @@ app.all('/api/owner/verify', (req, res) => {
     return res.status(401).json({ success: false, authorized: false, error: 'Invalid owner token.' });
   }
 
-  // Issue a 365-day persistent HttpOnly cookie with SameSite=None and Secure=true
-  // for reliable persistence inside AI Studio iframes and across daily browser sessions.
+  // Issue a 7-day HttpOnly cookie with SameSite=Strict, Secure only in production
   res.cookie('jarvis_session', token, {
     httpOnly: true,
-    sameSite: 'none',
-    secure: true,
-    maxAge: 365 * 24 * 60 * 60 * 1000, // 365-day persistent session
+    sameSite: 'strict',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   });
-  return res.json({ success: true, authorized: true, token });
-});
-
-/**
- * Auto-auth endpoint for the application owner:
- * Since OWNER_ACCESS_TOKEN is already configured in the server's environment secrets,
- * this endpoint issues the persistent 365-day session cookie directly to the owner's browser
- * so they are never interrupted with a daily login prompt.
- */
-app.post('/api/owner/auto-auth', (_req, res) => {
-  const configured = getConfiguredOwnerTokens();
-  if (configured.length === 0) {
-    return res.status(503).json({
-      success: false,
-      authorized: false,
-      error: 'OWNER_ACCESS_TOKEN is not configured on the server.',
-    });
-  }
-  const primaryToken = configured[0];
-  res.cookie('jarvis_session', primaryToken, {
-    httpOnly: true,
-    sameSite: 'none',
-    secure: true,
-    maxAge: 365 * 24 * 60 * 60 * 1000, // 365-day persistent session
-  });
-  return res.json({ success: true, authorized: true, token: primaryToken });
+  return res.json({ success: true, authorized: true });
 });
 
 app.post('/api/owner/logout', (_req, res) => {
   res.clearCookie('jarvis_session', {
-    sameSite: 'none',
-    secure: true,
+    sameSite: 'strict',
+    secure: process.env.NODE_ENV === 'production',
   });
   res.json({ success: true });
 });
@@ -372,6 +348,17 @@ app.post('/api/upstox/configure', rateLimit, requireOwner, async (req, res) => {
     return res.status(400).json({ success: false, error: 'Valid Upstox Analytics Token is required.' });
   }
 
+  if (baseUrl) {
+    try {
+      const parsed = new URL(baseUrl);
+      if (parsed.protocol !== 'https:' || parsed.hostname !== 'api.upstox.com') {
+        return res.status(400).json({ success: false, error: 'Invalid baseUrl: only https://api.upstox.com is permitted.' });
+      }
+    } catch {
+      return res.status(400).json({ success: false, error: 'Invalid baseUrl: only https://api.upstox.com is permitted.' });
+    }
+  }
+
   const cleanToken = accessToken.trim().replace(/^Bearer\s+/i, '');
   const cleanBaseUrl = (baseUrl && typeof baseUrl === 'string' ? baseUrl.trim() : 'https://api.upstox.com/v2');
 
@@ -399,7 +386,7 @@ app.post('/api/upstox/configure', rateLimit, requireOwner, async (req, res) => {
   }
 });
 
-app.post('/api/upstox/test-ping', async (_req, res) => {
+app.post('/api/upstox/test-ping', rateLimit, requireOwner, async (_req, res) => {
   const result = await testUpstoxConnection();
   res.json({
     success: result.success,
@@ -411,7 +398,7 @@ app.post('/api/upstox/test-ping', async (_req, res) => {
   });
 });
 
-app.get('/api/upstox/market-quote', async (req, res) => {
+app.get('/api/upstox/market-quote', requireOwner, async (req, res) => {
   const token = upstoxConfig.accessToken || process.env.UPSTOX_ACCESS_TOKEN;
   if (!token) {
     return res.status(400).json({
@@ -439,7 +426,7 @@ app.get('/api/upstox/market-quote', async (req, res) => {
   }
 });
 
-app.get('/api/upstox/option-chain', async (req, res) => {
+app.get('/api/upstox/option-chain', requireOwner, async (req, res) => {
   const token = upstoxConfig.accessToken || process.env.UPSTOX_ACCESS_TOKEN;
   const instrumentKey = String(req.query.instrument_key || 'NSE_INDEX|Nifty 50');
   const expiryDate = req.query.expiry_date ? String(req.query.expiry_date) : undefined;
@@ -474,7 +461,7 @@ app.get('/api/upstox/option-chain', async (req, res) => {
   }
 });
 
-app.get('/api/upstox/historical-candles', async (req, res) => {
+app.get('/api/upstox/historical-candles', requireOwner, async (req, res) => {
   const token = upstoxConfig.accessToken || process.env.UPSTOX_ACCESS_TOKEN;
   const instrumentKey = String(req.query.instrument_key || 'NSE_INDEX|Nifty 50');
   const interval = String(req.query.interval || 'day');
@@ -530,38 +517,11 @@ app.get('/api/upstox/historical-candles', async (req, res) => {
   res.status(404).json({ success: false, error: 'Historical candles not available' });
 });
 
-app.post('/api/upstox/order/place', rateLimit, requireOwner, async (req, res) => {
-  const token = upstoxConfig.accessToken || process.env.UPSTOX_ACCESS_TOKEN;
-  if (!token) {
-    return res.status(400).json({ success: false, error: 'Upstox live order routing requires an active access token.' });
-  }
-
-  const riskState = getRiskState();
-  if (riskState.killSwitchActive) {
-    return res.status(403).json({ success: false, error: `Order blocked by kill switch: ${riskState.killSwitchReason}` });
-  }
-
-  try {
-    const url = `${upstoxConfig.baseUrl}/order/place`;
-    const upstream = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(req.body || {}),
-    });
-
-    const json = await upstream.json();
-    if (upstream.ok && json.status === 'success') {
-      return res.json({ success: true, ...json.data });
-    } else {
-      return res.status(upstream.status).json({ success: false, error: json.errors?.[0]?.message || 'Upstox rejected order' });
-    }
-  } catch (err: any) {
-    return res.status(500).json({ success: false, error: err.message });
-  }
+app.post('/api/upstox/order/place', (_req, res) => {
+  return res.status(403).json({
+    success: false,
+    error: 'Live broker execution is disabled. The terminal is paper-only.',
+  });
 });
 
 app.post('/api/upstox/disconnect', requireOwner, (_req, res) => {
@@ -572,7 +532,7 @@ app.post('/api/upstox/disconnect', requireOwner, (_req, res) => {
   res.json({ success: true, message: 'Upstox Analytics session safely disconnected.' });
 });
 
-app.post('/api/broker/test-ping', async (req, res) => {
+app.post('/api/broker/test-ping', rateLimit, requireOwner, async (req, res) => {
   const { brokerId } = req.body || {};
   if (brokerId === 'UPSTOX' || !brokerId) {
     const testResult = await testUpstoxConnection();
@@ -855,7 +815,19 @@ app.get('/api/market/first-principles', rateLimit, async (req, res) => {
   }
 });
 
-app.post('/api/market/self-learn/calibrate', rateLimit, async (_req, res) => {
+app.post('/api/calibrate', rateLimit, requireOwner, async (_req, res) => {
+  try {
+    const selfLearning = await calibrateSelfLearningAgents(true);
+    return res.json({ success: true, selfLearning });
+  } catch (err: any) {
+    return res.status(500).json({
+      success: false,
+      error: String(err?.message || 'Failed to calibrate self-learning agents.'),
+    });
+  }
+});
+
+app.post('/api/market/self-learn/calibrate', rateLimit, requireOwner, async (_req, res) => {
   try {
     const selfLearning = await calibrateSelfLearningAgents(true);
     return res.json({ success: true, selfLearning });
@@ -1023,14 +995,7 @@ app.get('/api/scheduler/trades', (req, res) => {
   res.json({ success: true, trades: LedgerDatabase.getPaperTrades(limit, status) });
 });
 
-app.post('/api/scheduler/trigger-cycle', rateLimit, async (req, res) => {
-  const configured = getConfiguredOwnerTokens();
-  if (configured.length > 0) {
-    const token = extractToken(req);
-    if (!token || !verifyOwnerToken(token)) {
-      return res.status(401).json({ success: false, error: 'Unauthorized: Valid owner token required.' });
-    }
-  }
+app.post('/api/scheduler/trigger-cycle', rateLimit, requireOwner, async (req, res) => {
   const { routine } = req.body || {};
   try {
     if (routine === 'PRE_MARKET') {

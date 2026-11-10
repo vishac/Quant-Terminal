@@ -25,13 +25,13 @@ export const CircuitBreakerModal: React.FC<CircuitBreakerModalProps> = ({
       setIsExecuting(false);
       setHasExecuted(true);
       if (selectedTier === 'tier1_soft_alert') {
-        setExecutionReport('Tier 1 Soft Alert deployed. Cash equity buying suspended; existing orders shifted to passive limit matching.');
+        setExecutionReport('Tier 1 Soft Alert deployed (Paper Ledger): Open positions marked squared-off in paper ledger. Autonomous bots disarmed. Zero live broker hedges created.');
       } else if (selectedTier === 'tier2_delta_neutral') {
-        setExecutionReport('Tier 2 Delta-Neutralization executed. Routed short NIFTY & BANKNIFTY futures with long OTM put wings in 0.38ms. Net portfolio delta neutralized to 0.00.');
+        setExecutionReport('Tier 2 Paper Neutralization: Open positions marked squared-off in paper ledger. Autonomous bots disarmed. Zero live broker hedges created.');
       } else if (selectedTier === 'tier3_vol_collar') {
-        setExecutionReport('Tier 3 Synthetic Volatility Collar locked. 200x NIFTY 25500 Put spreads filled. All cash intraday MIS positions auto-squared off.');
+        setExecutionReport('Tier 3 Paper Volatility Collar: Open MIS positions marked squared-off in paper ledger. Autonomous bots disarmed. Zero live broker hedges created.');
       } else {
-        setExecutionReport('Tier 4 HARD NSE CIRCUIT FREEZE ENGAGED. All active open orders cancelled across NSE, BSE, and MCX. Margin collateral locked in overnight clearing repo.');
+        setExecutionReport('Tier 4 Hard Circuit Freeze (Paper Ledger): All active paper positions marked squared-off. Autonomous bots disarmed. Zero live broker orders created.');
       }
       onExecuteBreaker(selectedTier);
     }, 850);
@@ -59,10 +59,10 @@ export const CircuitBreakerModal: React.FC<CircuitBreakerModalProps> = ({
           </div>
           <div>
             <h3 className="text-base font-bold text-rose-200 font-display">
-              NSE / BSE / MCX EMERGENCY CIRCUIT BREAKER
+              EMERGENCY CIRCUIT BREAKER (PAPER LEDGER)
             </h3>
             <p className="text-xs text-slate-400">
-              SEBI Statutory Risk Invariant Protocol · Sub-millisecond Execution
+              Statutory Risk Protocol · Paper Position Square-Off & Bot Disarm
             </p>
           </div>
         </div>
@@ -72,7 +72,7 @@ export const CircuitBreakerModal: React.FC<CircuitBreakerModalProps> = ({
             <div className="p-3.5 rounded-xl bg-rose-950/30 border border-rose-500/30 text-xs text-rose-200 flex items-start gap-2.5">
               <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
               <p className="leading-relaxed">
-                Confirming execution will immediately transmit automated hedging packets to NSE & MCX exchange co-location gateways, bringing net portfolio risk to zero.
+                Confirming execution will mark all open positions as squared-off in the paper ledger and disarm all autonomous bots. This terminal operates strictly in paper-only mode; zero live broker hedges or orders are placed.
               </p>
             </div>
 
@@ -83,25 +83,25 @@ export const CircuitBreakerModal: React.FC<CircuitBreakerModalProps> = ({
                   {
                     id: 'tier1_soft_alert',
                     label: 'Tier 1 · Passive Execution Freeze (-1.5% NIFTY)',
-                    desc: 'Cancels aggressive orders; restricts cash buying to high-conviction VWAP reclaims.',
+                    desc: 'Paper Ledger: Cancels simulated pending entries; marks open risk positions as squared-off.',
                     color: 'text-sky-300'
                   },
                   {
                     id: 'tier2_delta_neutral',
-                    label: 'Tier 2 · Automated Delta Neutralization (-3.0% NIFTY)',
-                    desc: 'Shorts NIFTY futures & buys OTM put wings to bring net delta to 0 within 0.4ms.',
+                    label: 'Tier 2 · Paper Delta Neutralization (-3.0% NIFTY)',
+                    desc: 'Paper Ledger: Marks derivative positions squared-off to neutralize simulated delta; disarms bots.',
                     color: 'text-amber-300'
                   },
                   {
                     id: 'tier3_vol_collar',
-                    label: 'Tier 3 · Volatility Collar & MIS Square-Off (-5.0% NIFTY)',
-                    desc: 'Deploys protective put collars across all index books; auto-squares off all intraday cash.',
+                    label: 'Tier 3 · Paper Volatility Collar & Square-Off (-5.0% NIFTY)',
+                    desc: 'Paper Ledger: Auto-squares off intraday MIS positions in ledger; halts autonomous triggers.',
                     color: 'text-orange-300'
                   },
                   {
                     id: 'tier4_hard_kill',
                     label: 'Tier 4 · Total Statutory Circuit Freeze (-10.0% NSE Limit)',
-                    desc: 'Cancels all pending orders across NSE/BSE/MCX; locks collateral in G-Sec clearing repo.',
+                    desc: 'Paper Ledger: Cancels all pending paper orders; disarms bots and locks trading until next session.',
                     color: 'text-rose-400'
                   },
                 ].map((tier) => {
@@ -140,12 +140,12 @@ export const CircuitBreakerModal: React.FC<CircuitBreakerModalProps> = ({
                 {isExecuting ? (
                   <>
                     <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Transmitting Exchange Packets...</span>
+                    <span>Squaring Ledger & Disarming Bots...</span>
                   </>
                 ) : (
                   <>
                     <Lock className="w-4 h-4" />
-                    <span>Confirm & Transmit Orders</span>
+                    <span>Confirm Paper Square-Off & Disarm</span>
                   </>
                 )}
               </button>
@@ -156,7 +156,7 @@ export const CircuitBreakerModal: React.FC<CircuitBreakerModalProps> = ({
             <div className="p-4 rounded-xl bg-emerald-950/40 border border-emerald-500/40 text-emerald-200 flex flex-col gap-2">
               <div className="flex items-center gap-2 text-sm font-bold text-emerald-300">
                 <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                <span>STATUTORY CIRCUIT ROUTINES EXECUTED</span>
+                <span>STATUTORY CIRCUIT ROUTINES EXECUTED (PAPER ONLY)</span>
               </div>
               <p className="text-xs text-slate-300 font-mono leading-relaxed">
                 {executionReport}

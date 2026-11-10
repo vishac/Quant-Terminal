@@ -105,19 +105,12 @@ interface BacktestResultData {
   disclaimer: string;
 }
 
-const token = () => { 
-  try { return localStorage.getItem('jarvis_owner_token') || ''; } 
-  catch { return ''; } 
-};
-
 const api = (path: string, opts: RequestInit = {}) => {
-  const t = token();
   return fetch(path, {
     ...opts,
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...(t ? { 'x-owner-token': t, 'Authorization': `Bearer ${t}` } : {}),
       ...(opts.headers || {}),
     },
   });

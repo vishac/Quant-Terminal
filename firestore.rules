@@ -11,22 +11,18 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    function getUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-    }
-
+    // Admin privileges derive strictly from verified custom claims or verified owner email.
+    // Untrusted document fields (e.g. users/{uid}.role) are NEVER used for privilege evaluation.
     function isAdmin() {
       return isSignedIn() && (
-        getUserData().role == 'admin' ||
         (request.auth.token != null && request.auth.token.role == 'admin') ||
-        request.auth.token.email == 'reachvishalc@gmail.com'
+        (request.auth.token.email == 'reachvishalc@gmail.com' && request.auth.token.email_verified == true)
       );
     }
 
     function isRiskOfficer() {
       return isSignedIn() && (
         isAdmin() ||
-        getUserData().role == 'risk_officer' ||
         (request.auth.token != null && request.auth.token.role == 'risk_officer')
       );
     }
@@ -36,10 +32,18 @@ service cloud.firestore {
     }
 
     // Collection: /users/{userId}
+    // Users can only read their own record (or admin can read all).
+    // Users cannot promote themselves or mutate their assigned role.
     match /users/{userId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && (isOwner(userId) || isAdmin());
-      allow update: if isSignedIn() && (isOwner(userId) || isAdmin());
+      allow read: if isSignedIn() && (isOwner(userId) || isAdmin());
+      allow create: if isSignedIn() && (
+        (isOwner(userId) && (!('role' in request.resource.data) || request.resource.data.role in ['quant_trader', 'analyst'])) ||
+        isAdmin()
+      );
+      allow update: if isSignedIn() && (
+        (isOwner(userId) && (!('role' in request.resource.data) || request.resource.data.role == resource.data.role)) ||
+        isAdmin()
+      );
       allow delete: if isAdmin();
     }
 
@@ -52,8 +56,9 @@ service cloud.firestore {
     }
 
     // Collection: /orders/{orderId}
+    // Users can only read their own orders; admin can inspect all.
     match /orders/{orderId} {
-      allow read: if isSignedIn();
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow update: if isRiskOfficer();
       allow delete: if isAdmin();
@@ -66,8 +71,9 @@ service cloud.firestore {
     }
 
     // Collection: /backtests/{backtestId}
+    // Users can only read their own backtest records; admin can read all.
     match /backtests/{backtestId} {
-      allow read: if isSignedIn();
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
     }

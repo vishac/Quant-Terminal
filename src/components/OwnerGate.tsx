@@ -4,12 +4,12 @@ import { Lock, ShieldCheck, X, Loader2, Eye, EyeOff } from 'lucide-react';
 interface OwnerGateProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: (token: string) => void;
+  onSuccess: (token?: string) => void;
 }
 
-// Phase-1 single-operator access gate. Verifies the owner token against the
-// backend (/api/owner/verify) before unlocking Owner/Admin operations. The token
-// is also attached to the AI endpoints so outsiders cannot run up the Gemini bill.
+// Single-operator access gate. Verifies the owner token against the
+// backend (/api/owner/verify), which issues a 7-day HttpOnly session cookie.
+// The raw token is never persisted in client localStorage.
 export const OwnerGate: React.FC<OwnerGateProps> = ({ isOpen, onClose, onSuccess }) => {
   const [token, setToken] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -41,14 +41,14 @@ export const OwnerGate: React.FC<OwnerGateProps> = ({ isOpen, onClose, onSuccess
           'Authorization': `Bearer ${t}`,
         },
         body: JSON.stringify({ token: t }),
+        credentials: 'include',
       });
       const data = await res.json().catch(() => null);
       if (res.ok && data?.authorized) {
-        try {
-          localStorage.setItem('jarvis_owner_token', t);
-        } catch { /* ignore */ }
         onSuccess(t);
         setToken('');
+      } else if (res.status === 429) {
+        setError(data?.error || 'Rate limit exceeded: 10 attempts allowed per minute. Please wait.');
       } else if (res.status === 503) {
         setError('Server has no OWNER_ACCESS_TOKEN configured in environment secrets.');
       } else {
@@ -123,8 +123,8 @@ export const OwnerGate: React.FC<OwnerGateProps> = ({ isOpen, onClose, onSuccess
         </button>
 
         <p className="text-[10px] text-slate-500 leading-relaxed">
-          Phase-1 single-operator gate. The token is validated server-side and kept only in this browser.
-          Order execution remains disabled until a broker is connected (Phase 2+).
+          The token is validated server-side and an HttpOnly session cookie is issued.
+          Order execution remains paper-only.
         </p>
       </div>
     </div>
