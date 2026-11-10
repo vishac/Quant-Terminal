@@ -3,7 +3,6 @@ import {
   InstitutionalStockPick,
   StrategyQuantification,
   QUANTITATIVE_STRATEGY_FRAMEWORK_WEIGHTS,
-  getStockTargetProbabilities,
 } from '../data/institutionalEquityData';
 import { useLiveMarketData } from '../services/liveMarketService';
 import { getStoredPaperTrades, persistPaperTrades } from '../services/paperTradeService';
@@ -328,8 +327,6 @@ export const InstitutionalEquityRadar: React.FC = () => {
   const modalStock = modalStockId ? currentUniverse.find(s => s.id === modalStockId) : null;
   const activeQuant = getSafeQuant(activeStock);
   const modalQuant = getSafeQuant(modalStock);
-  const activeProbs = getStockTargetProbabilities(activeStock);
-  const modalProbs = getStockTargetProbabilities(modalStock);
 
   // Live real market quote for active stock (guaranteed fallback to authentic screener tick)
   const activeLtp = quotes[activeStock?.symbol]?.price ?? activeStock?.ltp ?? null;
@@ -348,15 +345,14 @@ export const InstitutionalEquityRadar: React.FC = () => {
     : null;
 
   const handleExportCSV = () => {
-    const headers = 'Ticker,Name,Market Cap Tier,Horizon,Conviction Score,Conviction Tier,Strategy Model,Live LTP (INR),Day Change Pct,Session Volume,Entry Min,Entry Max,Hard Stop Loss,Target 1,T1 Hit Prob Pct,Target 2,T2 Hit Prob Pct,Target 3,T3 Hit Prob Pct,Risk Reward,Exchange,Source API,Scan Timestamp\n';
+    const headers = 'Ticker,Name,Market Cap Tier,Horizon,Conviction Score,Conviction Tier,Strategy Model,Live LTP (INR),Day Change Pct,Session Volume,Entry Min,Entry Max,Hard Stop Loss,Target 1,Target 2,Target 3,Risk Reward,Exchange,Source API,Scan Timestamp\n';
     const rows = currentUniverse.map(s => {
       const q = getSafeQuant(s);
-      const probs = getStockTargetProbabilities(s);
       const ltpVal = quotes[s.symbol]?.price ?? s.ltp ?? 0;
       const chgVal = quotes[s.symbol]?.changePct ?? s.changePct ?? 0;
       const volVal = quotes[s.symbol]?.volume ?? s.volume ?? 0;
       const srcEndpoint = s.sourceEvidence?.apiEndpoint || (screenerSource === 'UPSTOX_PRIMARY_LIVE' ? 'https://api.upstox.com/v2/market-quote/quotes' : 'https://chartink.com/screener/process');
-      return `"${s.ticker}","${s.name}","${s.capCategory}","${s.horizon}",${q.compositeScore},"${q.tierLabel}","${s.institutionalStrategy.modelName}",${ltpVal},"${chgVal}%",${volVal},${s.tacticalLevels.entryMin},${s.tacticalLevels.entryMax},${s.tacticalLevels.stopLoss},${s.tacticalLevels.target1.price},"${probs.t1ProbabilityPct}%",${s.tacticalLevels.target2.price},"${probs.t2ProbabilityPct}%",${s.tacticalLevels.target3.price},"${probs.t3ProbabilityPct}%","${s.tacticalLevels.riskRewardRatio}","NSE","${srcEndpoint}","${s.sourceEvidence?.tickTimestamp || lastRefreshedAt}"`;
+      return `"${s.ticker}","${s.name}","${s.capCategory}","${s.horizon}",${q.compositeScore},"${q.tierLabel}","${s.institutionalStrategy.modelName}",${ltpVal},"${chgVal}%",${volVal},${s.tacticalLevels.entryMin},${s.tacticalLevels.entryMax},${s.tacticalLevels.stopLoss},${s.tacticalLevels.target1.price},${s.tacticalLevels.target2.price},${s.tacticalLevels.target3.price},"${s.tacticalLevels.riskRewardRatio}","NSE","${srcEndpoint}","${s.sourceEvidence?.tickTimestamp || lastRefreshedAt}"`;
     }).join('\n');
 
     const blob = new Blob([headers + rows], { type: 'text/csv' });
@@ -892,12 +888,7 @@ export const InstitutionalEquityRadar: React.FC = () => {
                   </th>
                   <th className="py-3.5 px-3 font-bold text-center">Entry Zone</th>
                   <th className="py-3.5 px-3 font-bold text-center">Hard SL</th>
-                  <th className="py-3.5 px-3 font-bold text-right">
-                    <div className="inline-flex flex-col items-end">
-                      <span>Targets (T1 / T2)</span>
-                      <span className="text-[9px] text-emerald-400/90 normal-case font-mono">Price · Upside · Hit Prob %</span>
-                    </div>
-                  </th>
+                  <th className="py-3.5 px-3 font-bold text-right">Targets (T1 / T2)</th>
                   <th className="py-3.5 px-3 font-bold text-center">R:R</th>
                   <th className="py-3.5 px-4 font-bold">Conviction Rationale & Core Driver</th>
                   <th className="py-3.5 px-3 font-bold text-center">Action</th>
@@ -1076,35 +1067,15 @@ export const InstitutionalEquityRadar: React.FC = () => {
                         <span className="text-[9px] text-rose-400/90">{stock.tacticalLevels.riskPct}% risk</span>
                       </td>
 
-                      {/* Targets & Achievement Probabilities */}
-                      {(() => {
-                        const rowProbs = getStockTargetProbabilities(stock);
-                        return (
-                          <td
-                            className="py-3.5 px-3 text-right font-mono text-[11px]"
-                            title={`${rowProbs.modelSummary} · T1 EV: ${rowProbs.t1ExpectedValuePct >= 0 ? '+' : ''}${rowProbs.t1ExpectedValuePct}% | T2 EV: ${rowProbs.t2ExpectedValuePct >= 0 ? '+' : ''}${rowProbs.t2ExpectedValuePct}%`}
-                          >
-                            <div className="flex flex-col items-end gap-1">
-                              <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                                <span className="text-emerald-300 font-bold">
-                                  T1: ₹{stock.tacticalLevels.target1.price} (+{stock.tacticalLevels.target1.upsidePct}%)
-                                </span>
-                                <span className="px-1.5 py-0.5 rounded bg-emerald-950/90 border border-emerald-500/40 text-emerald-300 text-[9px] font-bold">
-                                  {rowProbs.t1ProbabilityPct}% Prob
-                                </span>
-                              </div>
-                              <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                                <span className="text-cyan-300 text-[10px]">
-                                  T2: ₹{stock.tacticalLevels.target2.price} (+{stock.tacticalLevels.target2.upsidePct}%)
-                                </span>
-                                <span className="px-1.5 py-0.5 rounded bg-cyan-950/90 border border-cyan-500/40 text-cyan-300 text-[9px] font-bold">
-                                  {rowProbs.t2ProbabilityPct}% Prob
-                                </span>
-                              </div>
-                            </div>
-                          </td>
-                        );
-                      })()}
+                      {/* Targets */}
+                      <td className="py-3.5 px-3 text-right font-mono text-[11px]">
+                        <div className="text-emerald-300 font-bold">
+                          T1: ₹{stock.tacticalLevels.target1.price} (+{stock.tacticalLevels.target1.upsidePct}%)
+                        </div>
+                        <div className="text-cyan-300 text-[10px]">
+                          T2: ₹{stock.tacticalLevels.target2.price} (+{stock.tacticalLevels.target2.upsidePct}%)
+                        </div>
+                      </td>
 
                       {/* R:R */}
                       <td className="py-3.5 px-3 text-center font-mono text-[11px]">
@@ -1280,13 +1251,8 @@ export const InstitutionalEquityRadar: React.FC = () => {
                           </div>
                         )}
                       </div>
-                      <div className="flex items-center gap-1.5 font-mono text-xs">
-                        <span className="text-emerald-400 font-bold">
-                          T1: +{stock.tacticalLevels.target1.upsidePct}%
-                        </span>
-                        <span className="px-1.5 py-0.5 rounded bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-[10px] font-bold">
-                          {getStockTargetProbabilities(stock).t1ProbabilityPct}% Prob
-                        </span>
+                      <div className="text-emerald-400 font-bold font-mono text-xs">
+                        T1: +{stock.tacticalLevels.target1.upsidePct}%
                       </div>
                     </div>
 
@@ -1598,95 +1564,49 @@ export const InstitutionalEquityRadar: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Multi-Tier Profit Targets: Target 1, Target 2, Target 3 with First-Passage Hit Probabilities */}
+                {/* Multi-Tier Profit Targets: Target 1, Target 2, Target 3 */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
                   {/* Target 1 */}
-                  <div className="p-3.5 rounded-xl bg-slate-950 border border-emerald-500/30 space-y-1.5">
+                  <div className="p-3.5 rounded-xl bg-slate-950 border border-emerald-500/30 space-y-1">
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-slate-400 uppercase text-[10px]">TARGET 1 (SWING CONSERVATIVE)</span>
                       <span className="text-emerald-400 font-bold">+{activeStock?.tacticalLevels?.target1?.upsidePct ?? 0}%</span>
                     </div>
-                    <div className="flex items-baseline justify-between gap-2">
-                      <div className="text-xl text-emerald-300 font-bold">
-                        {activeStock?.tacticalLevels?.target1?.price != null ? `₹${activeStock.tacticalLevels.target1.price.toLocaleString('en-IN')}` : '—'}
-                      </div>
-                      <span className="px-2 py-0.5 rounded-md bg-emerald-950/90 border border-emerald-500/50 text-emerald-300 text-xs font-bold">
-                        Hit Prob: {activeProbs.t1ProbabilityPct}%
-                      </span>
+                    <div className="text-xl text-emerald-300 font-bold">
+                      {activeStock?.tacticalLevels?.target1?.price != null ? `₹${activeStock.tacticalLevels.target1.price.toLocaleString('en-IN')}` : '—'}
                     </div>
-                    <div className="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-emerald-400 rounded-full"
-                        style={{ width: `${Math.min(100, activeProbs.t1ProbabilityPct)}%` }}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono pt-0.5">
-                      <span>1st Barrier Passage</span>
-                      <span className="text-emerald-300 font-bold">
-                        EV: {activeProbs.t1ExpectedValuePct >= 0 ? '+' : ''}{activeProbs.t1ExpectedValuePct}%
-                      </span>
-                    </div>
+                    <span className="text-[10px] text-slate-400 block leading-tight font-sans">
+                      {activeStock?.tacticalLevels?.target1?.label ?? ''}
+                    </span>
                   </div>
 
                   {/* Target 2 */}
-                  <div className="p-3.5 rounded-xl bg-slate-950 border border-cyan-500/30 space-y-1.5">
+                  <div className="p-3.5 rounded-xl bg-slate-950 border border-cyan-500/30 space-y-1">
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-slate-400 uppercase text-[10px]">TARGET 2 (BASE EXTENSION)</span>
                       <span className="text-cyan-300 font-bold">+{activeStock?.tacticalLevels?.target2?.upsidePct ?? 0}%</span>
                     </div>
-                    <div className="flex items-baseline justify-between gap-2">
-                      <div className="text-xl text-cyan-200 font-bold">
-                        {activeStock?.tacticalLevels?.target2?.price != null ? `₹${activeStock.tacticalLevels.target2.price.toLocaleString('en-IN')}` : '—'}
-                      </div>
-                      <span className="px-2 py-0.5 rounded-md bg-cyan-950/90 border border-cyan-500/50 text-cyan-300 text-xs font-bold">
-                        Hit Prob: {activeProbs.t2ProbabilityPct}%
-                      </span>
+                    <div className="text-xl text-cyan-200 font-bold">
+                      {activeStock?.tacticalLevels?.target2?.price != null ? `₹${activeStock.tacticalLevels.target2.price.toLocaleString('en-IN')}` : '—'}
                     </div>
-                    <div className="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-cyan-400 rounded-full"
-                        style={{ width: `${Math.min(100, activeProbs.t2ProbabilityPct)}%` }}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono pt-0.5">
-                      <span>Markov P(T2 | T1) Trail</span>
-                      <span className="text-cyan-300 font-bold">
-                        EV: {activeProbs.t2ExpectedValuePct >= 0 ? '+' : ''}{activeProbs.t2ExpectedValuePct}%
-                      </span>
-                    </div>
+                    <span className="text-[10px] text-slate-400 block leading-tight font-sans">
+                      {activeStock?.tacticalLevels?.target2?.label ?? ''}
+                    </span>
                   </div>
 
                   {/* Target 3 */}
-                  <div className="p-3.5 rounded-xl bg-slate-950 border border-amber-500/30 space-y-1.5">
+                  <div className="p-3.5 rounded-xl bg-slate-950 border border-amber-500/30 space-y-1">
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-slate-400 uppercase text-[10px]">TARGET 3 (BLUE-SKY COMPOUNDER)</span>
                       <span className="text-amber-300 font-bold">+{activeStock?.tacticalLevels?.target3?.upsidePct ?? 0}%</span>
                     </div>
-                    <div className="flex items-baseline justify-between gap-2">
-                      <div className="text-xl text-amber-200 font-bold">
-                        {activeStock?.tacticalLevels?.target3?.price != null ? `₹${activeStock.tacticalLevels.target3.price.toLocaleString('en-IN')}` : '—'}
-                      </div>
-                      <span className="px-2 py-0.5 rounded-md bg-amber-950/90 border border-amber-500/50 text-amber-300 text-xs font-bold">
-                        Hit Prob: {activeProbs.t3ProbabilityPct}%
-                      </span>
+                    <div className="text-xl text-amber-200 font-bold">
+                      {activeStock?.tacticalLevels?.target3?.price != null ? `₹${activeStock.tacticalLevels.target3.price.toLocaleString('en-IN')}` : '—'}
                     </div>
-                    <div className="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-amber-400 rounded-full"
-                        style={{ width: `${Math.min(100, activeProbs.t3ProbabilityPct)}%` }}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono pt-0.5">
-                      <span>Markov P(T3 | T2) Trail</span>
-                      <span className="text-amber-300 font-bold">
-                        EV: {activeProbs.t3ExpectedValuePct >= 0 ? '+' : ''}{activeProbs.t3ExpectedValuePct}%
-                      </span>
-                    </div>
+                    <span className="text-[10px] text-slate-400 block leading-tight font-sans">
+                      {activeStock.tacticalLevels.target3.label}
+                    </span>
                   </div>
-                </div>
-                <div className="text-[10px] text-slate-400 font-mono flex flex-wrap items-center justify-between gap-2 px-1">
-                  <span>{activeProbs.modelSummary}</span>
-                  <span className="text-emerald-400">Monotonic Barrier Guarantee: P(T1) &gt; P(T2) &gt; P(T3)</span>
                 </div>
               </div>
             </div>
@@ -1910,11 +1830,11 @@ export const InstitutionalEquityRadar: React.FC = () => {
                   <span className="text-rose-400 font-bold">₹{modalStock.tacticalLevels.stopLoss} ({modalStock.tacticalLevels.riskPct}%)</span>
                 </div>
                 <div className="p-2.5 rounded-xl bg-slate-950 border border-emerald-500/30 text-center">
-                  <span className="text-[9px] text-slate-400 block">TARGET 1 ({modalProbs.t1ProbabilityPct}% PROB)</span>
+                  <span className="text-[9px] text-slate-400 block">TARGET 1</span>
                   <span className="text-emerald-300 font-bold">{modalStock?.tacticalLevels?.target1?.price != null ? `₹${modalStock.tacticalLevels.target1.price} (+${modalStock.tacticalLevels.target1.upsidePct}%)` : '—'}</span>
                 </div>
                 <div className="p-2.5 rounded-xl bg-slate-950 border border-cyan-500/30 text-center">
-                  <span className="text-[9px] text-slate-400 block">TARGET 2 ({modalProbs.t2ProbabilityPct}% PROB)</span>
+                  <span className="text-[9px] text-slate-400 block">TARGET 2</span>
                   <span className="text-cyan-300 font-bold">{modalStock?.tacticalLevels?.target2?.price != null ? `₹${modalStock.tacticalLevels.target2.price} (+${modalStock.tacticalLevels.target2.upsidePct}%)` : '—'}</span>
                 </div>
               </div>

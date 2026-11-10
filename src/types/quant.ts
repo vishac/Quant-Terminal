@@ -129,13 +129,17 @@ export interface AgentStrategyHealingReport {
       entryFilter: string;
       maxRiskPerTradeINR: number;
     };
+    /**
+     * Measured backtest comparison of original vs proposed parameters.
+     * null = NO backtest was run. Never fill this with literals: only a real run over real candles may set it.
+     */
     backtestImprovement: {
       originalWinRatePct: number;
       optimizedWinRatePct: number;
       drawdownReductionPct: number;
       sharpeRatio: number;
       sampleBarsCount: number;
-    };
+    } | null;
   };
   recalibratedRules: string[];
   status: 'PENDING_REVIEW' | 'APPLIED';

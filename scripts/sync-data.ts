@@ -1,5 +1,5 @@
 /**
- * scripts/sync-data.ts — Automated Historical Candle, Live Quote & Walk-Forward Validation CLI
+ * scripts/sync-data.ts — Automated Historical Candle, Live Quote & In-Sample Backtest CLI
  *
  * Usage:
  *   npm run data:sync
@@ -11,7 +11,9 @@
  *   3. Runs the remediated backtester (next-bar open + slippage, gap-through-stop fills at open,
  *      monotonic high-water-mark trailing stops, full cash-delivery statutory costs, and closed-only stats)
  *      across the core NSE universe.
- *   4. Writes the validated out-of-sample walk-forward summary to `.data/latest_walkforward_sync.json`.
+ *   4. Writes an IN-SAMPLE backtest summary to `.data/latest_backtest_sync.json`. Each row is ONE fixed-parameter run
+ *      over the whole sample: there is no train/test split, no parameter selection and no benchmark, so it is
+ *      NOT walk-forward and NOT out-of-sample evidence. Use qt-core's walk-forward for that.
  */
 
 import fs from 'fs';
@@ -86,13 +88,15 @@ async function runAutomatedDataAndWalkForwardSync() {
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
   }
-  const outPath = path.join(dataDir, 'latest_walkforward_sync.json');
+  const outPath = path.join(dataDir, 'latest_backtest_sync.json');
   fs.writeFileSync(
     outPath,
     JSON.stringify(
       {
         syncedAtISO: new Date().toISOString(),
         feedMode: upstoxToken ? 'UPSTOX_PRIMARY' : 'YAHOO_HISTORICAL_CANDLES',
+        evidenceClass: 'IN_SAMPLE_SINGLE_RUN', // not walk-forward, not out-of-sample
+        benchmarkIncluded: false,
         methodology: {
           entryFill: 'Next-Bar Open + 5 bps slippage',
           stopFill: 'Intraday Low check with Gap-Through-Stop fill at Open',
@@ -110,7 +114,7 @@ async function runAutomatedDataAndWalkForwardSync() {
   );
 
   console.log('--------------------------------------------------------------------------------');
-  console.log(`Saved validated walk-forward telemetry (${resultsSummary.length} runs) to ${outPath}`);
+  console.log(`Saved IN-SAMPLE backtest summary (not walk-forward) (${resultsSummary.length} runs) to ${outPath}`);
 }
 
 runAutomatedDataAndWalkForwardSync().catch((err) => {

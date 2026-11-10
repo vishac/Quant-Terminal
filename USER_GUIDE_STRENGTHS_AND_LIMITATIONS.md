@@ -58,7 +58,7 @@
 1. **Market Data Feed Hierarchy (Upstox Primary When Paired vs. Yahoo Finance Fallback When Unpaired)**:
    - **When `UPSTOX_ACCESS_TOKEN` is paired** (via `.env` or Control Tower -> Broker Gateway), the server streams live NSE/BSE market quotes (`UPSTOX_ANALYTICS_REALTIME`).
    - **When `UPSTOX_ACCESS_TOKEN` is unpaired**, the server automatically falls back to delayed, unofficial Yahoo Finance daily/intraday candles (`YAHOO_DELAYED_UNOFFICIAL`, `~1.5s–3.0s` poll latency and exchange delay).
-   - **Local Automated CLI Sync (`npm run data:sync`)**: Runs `scripts/sync-data.ts` using native Node.js `fetch` to pull historical daily candles, execute out-of-sample backtests across the core NSE universe, and write validated metrics to `.data/latest_walkforward_sync.json`.
+   - **Local Automated CLI Sync (`npm run data:sync`)**: Runs `scripts/sync-data.ts` using native Node.js `fetch` to pull historical daily candles, run in-sample backtests across the core NSE universe (one fixed-parameter run each, no train/test split, no benchmark), and write the summary to `.data/latest_backtest_sync.json`. These are not validated or out-of-sample results.
 2. **Intraday Drawdown Cap (`<= 1.50%`) vs. Overnight Gap Risk**:
    - The `<= 1.50%` daily drawdown cap is an **intraday circuit-breaker and per-trade stop-sizing rule** enforced during active exchange hours.
    - **Overnight Gap Disclosure**: Cash equities and futures held overnight can gap past an intraday stop-loss at the `09:15 IST` market open during sovereign or earnings shocks (which `backtester.ts` explicitly models via **gap-through-stop fills at the Open**). Only defined-risk long option (`PE` / `CE`) setups have mathematically capped overnight loss equal to the option premium paid.

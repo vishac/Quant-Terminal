@@ -1,0 +1,290 @@
+From 8aaa1d07be7f6c1199651ef2867cf680fc5dc045 Mon Sep 17 00:00:00 2001
+From: "P1 patch (for review)" <p1-patch@local>
+Date: Tue, 10 Nov 2026 18:20:42 +0530
+Subject: [PATCH 1/3] fix(integrity): remove invented backtest numbers and the
+ conviction-based quarantine auto-lift
+
+- healing reports: the 5 hardcoded backtestImprovement literals (win rate 46.2->62.4, Sharpe 1.88, ...) are now null; the UI shows 'not measured' and a TEMPLATE banner; re-arm text no longer claims rules were applied
+- quarantine: conviction >= 88 or a +1.25% day can no longer lift a quarantine or override a macro hard veto; release = human action or a 5-day cool-down (QUARANTINE_COOLDOWN_MS) at session rollover; macro-veto quarantines still clear daily
+- agentQuantEngine: removed the same >=88 bypass from the gainer/decliner filters
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01AkU18WCTdxQ1WTLjLDbEwp
+---
+ ...rd_sync.json => latest_backtest_sync.json} |  0
+ src/components/AutonomousAgentsDesk.tsx       | 17 ++++---
+ src/services/agentQuantEngine.ts              | 28 ++++++------
+ src/services/scriptLearningEngine.ts          | 44 ++++++++++++-------
+ src/types/quant.ts                            |  6 ++-
+ 5 files changed, 58 insertions(+), 37 deletions(-)
+ rename .data/{latest_walkforward_sync.json => latest_backtest_sync.json} (100%)
+
+diff --git a/.data/latest_walkforward_sync.json b/.data/latest_backtest_sync.json
+similarity index 100%
+rename from .data/latest_walkforward_sync.json
+rename to .data/latest_backtest_sync.json
+diff --git a/src/components/AutonomousAgentsDesk.tsx b/src/components/AutonomousAgentsDesk.tsx
+index 03fd205..303bcb3 100644
+--- a/src/components/AutonomousAgentsDesk.tsx
++++ b/src/components/AutonomousAgentsDesk.tsx
+@@ -424,7 +424,7 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({
+     // Re-arm agent
+     setAgentStatusOverrides(prev => ({ ...prev, [report.agentId]: 'ACTIVE_HEDGING' }));
+     setActiveHealingModalReport(null);
+-    setSyncToastMessage(`✨ Strategy Recalibrated: ${report.agentName} applied backtest-optimized rules and is re-armed!`);
++    setSyncToastMessage(`${report.agentName} re-armed by you. No parameters were changed and no backtest was run.`);
+     setTimeout(() => setSyncToastMessage(null), 5000);
+   };
+ 
+@@ -1998,7 +1998,7 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({
+                     ? 'bg-emerald-950/80 border-emerald-500/60 text-emerald-300'
+                     : 'bg-amber-950/80 border-amber-500/60 text-amber-300 animate-pulse'
+                 }`}>
+-                  {activeHealingModalReport.status === 'APPLIED' ? 'RULES APPLIED & ACTIVE' : 'PENDING RE-ARM'}
++                  {activeHealingModalReport.status === 'APPLIED' ? 'RE-ARMED (NO RULES CHANGED)' : 'PENDING RE-ARM'}
+                 </span>
+                 <button
+                   onClick={() => setActiveHealingModalReport(null)}
+@@ -2009,6 +2009,13 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({
+               </div>
+             </div>
+ 
++            {/* Honesty banner: these reports are templates, not analysis of this specific loss */}
++            <div className="p-3 rounded-xl bg-amber-950/40 border border-amber-500/50 text-[11px] text-amber-200">
++              <span className="font-bold">TEMPLATE REPORT, NOT A MEASURED ANALYSIS.</span>{' '}
++              The cause, headlines and proposed parameters below are canned text for this agent type; only the loss amount and a few quote values are live.
++              No backtest was run on the proposed parameters, and clicking the button below changes no trading rules.
++            </div>
++
+             {/* Breach Alert Callout */}
+             <div className="p-3.5 rounded-xl bg-rose-950/40 border border-rose-500/50 flex items-start gap-3 text-xs">
+               <ShieldAlert className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+@@ -2092,7 +2099,7 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({
+                     </div>
+                     <div className="flex justify-between">
+                       <span className="text-slate-500">Win Rate:</span>
+-                      <span className="text-rose-300">{activeHealingModalReport.backtestDiagnostic.backtestImprovement.originalWinRatePct}%</span>
++                      <span className="text-rose-300">{activeHealingModalReport.backtestDiagnostic.backtestImprovement ? `${activeHealingModalReport.backtestDiagnostic.backtestImprovement.originalWinRatePct}%` : 'not measured'}</span>
+                     </div>
+                     <div className="pt-1 text-[10px] text-slate-400">
+                       Filter: {activeHealingModalReport.backtestDiagnostic.originalParameters.entryFilter}
+@@ -2105,7 +2112,7 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({
+                   <div className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider pb-1 border-b border-slate-800 flex items-center justify-between">
+                     <span>Recalibrated Leak-Proof Rules</span>
+                     <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/40">
+-                      +{activeHealingModalReport.backtestDiagnostic.backtestImprovement.drawdownReductionPct}% DD Shield
++                      {activeHealingModalReport.backtestDiagnostic.backtestImprovement ? `+${activeHealingModalReport.backtestDiagnostic.backtestImprovement.drawdownReductionPct}% DD Shield` : 'NOT BACKTESTED'}
+                     </span>
+                   </div>
+                   <div className="space-y-1.5 text-[11px]">
+@@ -2123,7 +2130,7 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({
+                     </div>
+                     <div className="flex justify-between">
+                       <span className="text-slate-500">Optimized Win Rate:</span>
+-                      <span className="text-emerald-400 font-bold">{activeHealingModalReport.backtestDiagnostic.backtestImprovement.optimizedWinRatePct}%</span>
++                      <span className="text-emerald-400 font-bold">{activeHealingModalReport.backtestDiagnostic.backtestImprovement ? `${activeHealingModalReport.backtestDiagnostic.backtestImprovement.optimizedWinRatePct}%` : 'not measured'}</span>
+                     </div>
+                     <div className="pt-1 text-[10px] text-cyan-300">
+                       Filter: {activeHealingModalReport.backtestDiagnostic.optimizedParameters.entryFilter}
+diff --git a/src/services/agentQuantEngine.ts b/src/services/agentQuantEngine.ts
+index 86893bb..ee455b0 100644
+--- a/src/services/agentQuantEngine.ts
++++ b/src/services/agentQuantEngine.ts
+@@ -371,11 +371,11 @@ export function deriveLiveAutonomousAgents(
+     .filter((item) => {
+       const clean = item.rec.symbol;
+       const hasOpenLoss = openLosingSymbols.has(clean);
+-      const isAutoLiftedOrHighConviction =
+-        Boolean((item.rec.convictionScore && item.rec.convictionScore >= 88) || item.rec.isQuarantineAutoLifted);
++      // Only an elapsed cool-down (isQuarantineAutoLifted) overrides a quarantine; conviction >= 88 does not.
++      const isCooldownReleased = Boolean(item.rec.isQuarantineAutoLifted);
+       const isQuarantined =
+         hasOpenLoss ||
+-        (!isAutoLiftedOrHighConviction && (item.rec.isQuarantined || Boolean(learnedMemory[clean]?.quarantined)));
++        (!isCooldownReleased && (item.rec.isQuarantined || Boolean(learnedMemory[clean]?.quarantined)));
+       return item.rec.changePct > 0 && !isQuarantined;
+     })
+     .sort((a, b) => b.rec.learnedScore - a.rec.learnedScore || b.rec.changePct - a.rec.changePct);
+@@ -384,11 +384,11 @@ export function deriveLiveAutonomousAgents(
+     .filter((item) => {
+       const clean = item.rec.symbol;
+       const hasOpenLoss = openLosingSymbols.has(clean);
+-      const isAutoLiftedOrHighConviction =
+-        Boolean((item.rec.convictionScore && item.rec.convictionScore >= 88) || item.rec.isQuarantineAutoLifted);
++      // Only an elapsed cool-down (isQuarantineAutoLifted) overrides a quarantine; conviction >= 88 does not.
++      const isCooldownReleased = Boolean(item.rec.isQuarantineAutoLifted);
+       const isQuarantined =
+         hasOpenLoss ||
+-        (!isAutoLiftedOrHighConviction && (item.rec.isQuarantined || Boolean(learnedMemory[clean]?.quarantined)));
++        (!isCooldownReleased && (item.rec.isQuarantined || Boolean(learnedMemory[clean]?.quarantined)));
+       // Only include stocks that are genuinely declining OR quarantined with negative/flat performance; never short positive high-conviction leaders!
+       return item.rec.changePct < 0 || (isQuarantined && item.rec.changePct <= 0.1);
+     })
+@@ -1781,9 +1781,9 @@ export function autoSquareOffBreachedAgentOrders(
+ }
+ 
+ /**
+- * Automated Strategy Self-Healing & Diagnostic Post-Mortem Generator:
+- * Triggered when an agent hits the ₹2,000 daily or ₹5,000 weekly drawdown limit.
+- * Integrates backtesting validation, live news, and sentiment analysis to repair rules.
++ * Post-mortem TEMPLATE generator, triggered when an agent hits the ₹2,000 daily or ₹5,000 weekly drawdown limit.
++ * Only the loss amount and a few quote values are live. The cause, headlines and proposed parameters are canned
++ * text per agent, and NO backtest is run (backtestImprovement is null). Do not describe it as analysis.
+  */
+ export function generateStrategyHealingReport(
+   agentId: string,
+@@ -1817,7 +1817,7 @@ export function generateStrategyHealingReport(
+         testedSymbol: 'INFY',
+         originalParameters: { stopLossPct: 1.4, takeProfitPct: 3.2, entryFilter: 'Standard Trend Breakout', maxRiskPerTradeINR: 1400 },
+         optimizedParameters: { stopLossPct: 0.9, takeProfitPct: 2.7, entryFilter: 'NASDAQ Correlation Regime Gate + USD/INR Floor (≥ ₹84.50)', maxRiskPerTradeINR: 800 },
+-        backtestImprovement: { originalWinRatePct: 46.2, optimizedWinRatePct: 62.4, drawdownReductionPct: 38.5, sharpeRatio: 1.88, sampleBarsCount: 252 }
++        backtestImprovement: null
+       },
+       recalibratedRules: [
+         'RULE 1 (Pre-Trade Sizing Ceiling): Single trade loss strictly capped at ≤ ₹800 (0.8% of capital)',
+@@ -1846,7 +1846,7 @@ export function generateStrategyHealingReport(
+         testedSymbol: 'NIFTY_OPTIONS',
+         originalParameters: { stopLossPct: 2.0, takeProfitPct: 1.5, entryFilter: 'ATM Credit Spread (100-pt width)', maxRiskPerTradeINR: 2200 },
+         optimizedParameters: { stopLossPct: 1.1, takeProfitPct: 1.8, entryFilter: 'OTM Delta-Neutral Wing Spread (50-pt width, Delta ≤ 0.18)', maxRiskPerTradeINR: 780 },
+-        backtestImprovement: { originalWinRatePct: 52.0, optimizedWinRatePct: 71.2, drawdownReductionPct: 44.0, sharpeRatio: 2.21, sampleBarsCount: 250 }
++        backtestImprovement: null
+       },
+       recalibratedRules: [
+         'RULE 1 (Defined Risk Ceiling): Spread mathematical max loss strictly limited to ≤ ₹780 per trade',
+@@ -1875,7 +1875,7 @@ export function generateStrategyHealingReport(
+         testedSymbol: 'TCS',
+         originalParameters: { stopLossPct: 1.3, takeProfitPct: 2.8, entryFilter: '20-Day Donchian Breakout', maxRiskPerTradeINR: 1300 },
+         optimizedParameters: { stopLossPct: 0.85, takeProfitPct: 2.4, entryFilter: 'Donchian Breakout + VWAP Consecutive Bar Holding + Vol Ratio > 1.8x', maxRiskPerTradeINR: 780 },
+-        backtestImprovement: { originalWinRatePct: 48.5, optimizedWinRatePct: 65.6, drawdownReductionPct: 41.2, sharpeRatio: 2.04, sampleBarsCount: 252 }
++        backtestImprovement: null
+       },
+       recalibratedRules: [
+         'RULE 1 (Pre-Trade Sizing): Order quantity strictly derived via floor(780 / |entry - stop|)',
+@@ -1904,7 +1904,7 @@ export function generateStrategyHealingReport(
+         testedSymbol: 'ASIANPAINT',
+         originalParameters: { stopLossPct: 1.5, takeProfitPct: 3.0, entryFilter: 'RSI Swing Value Accumulation', maxRiskPerTradeINR: 1500 },
+         optimizedParameters: { stopLossPct: 0.95, takeProfitPct: 2.8, entryFilter: 'Crude Inverse Ratio Beta Filter (Crude Chg < +0.8%)', maxRiskPerTradeINR: 760 },
+-        backtestImprovement: { originalWinRatePct: 50.0, optimizedWinRatePct: 67.2, drawdownReductionPct: 37.0, sharpeRatio: 1.96, sampleBarsCount: 252 }
++        backtestImprovement: null
+       },
+       recalibratedRules: [
+         'RULE 1 (Instant Crude Inverse Hedge): Immediately short / exit paint and aviation equities whenever Brent jumps > 1.0%',
+@@ -1933,7 +1933,7 @@ export function generateStrategyHealingReport(
+       testedSymbol: 'PORTFOLIO_BASKET',
+       originalParameters: { stopLossPct: 1.2, takeProfitPct: 2.4, entryFilter: 'Defensive Regime Filter (50-SMA)', maxRiskPerTradeINR: 1200 },
+       optimizedParameters: { stopLossPct: 0.8, takeProfitPct: 2.2, entryFilter: 'Cluster Correlation Cap ≤ 0.35 + Dynamic VIX Sizing', maxRiskPerTradeINR: 750 },
+-      backtestImprovement: { originalWinRatePct: 53.5, optimizedWinRatePct: 71.4, drawdownReductionPct: 46.0, sharpeRatio: 2.30, sampleBarsCount: 252 }
++      backtestImprovement: null
+     },
+     recalibratedRules: [
+       'RULE 1 (Pre-Trade Sizing Ceiling): No position may risk > ₹750 under any circumstances',
+diff --git a/src/services/scriptLearningEngine.ts b/src/services/scriptLearningEngine.ts
+index 4a38822..628813e 100644
+--- a/src/services/scriptLearningEngine.ts
++++ b/src/services/scriptLearningEngine.ts
+@@ -171,6 +171,14 @@ export function getTodayISTDateString(): string {
+   }
+ }
+ 
++/**
++ * A quarantined script is released only by (1) an explicit human release or (2) this fixed cool-down,
++ * applied at the next IST session rollover. A conviction score or one strong day must NEVER lift it:
++ * those signals are unvalidated, and a stock that just failed often bounces before failing again.
++ * 5 days is a conservative default, not a tuned value. Set it to 24h to restore the old one-session reset.
++ */
++export const QUARANTINE_COOLDOWN_MS = 5 * 24 * 60 * 60 * 1000;
++
+ export function loadPersistedScriptMemory(): Record<string, PersistedScriptMemory> {
+   try {
+     const todayIST = getTodayISTDateString();
+@@ -191,14 +199,23 @@ export function loadPersistedScriptMemory(): Record<string, PersistedScriptMemor
+       let resetOccurred = false;
+       for (const key of Object.keys(parsed)) {
+         if (parsed[key]) {
++          // Session counters reset daily, but a quarantine survives until its cool-down has fully elapsed.
++          // Only loss-driven quarantines are held; a transient macro veto / static lock still clears at rollover.
++          const reasonText = String(parsed[key].quarantineReason ?? '');
++          const isTransientReason = reasonText.startsWith('11-Vector Macro') || reasonText.startsWith('Static Fallback');
++          const stillCoolingDown =
++            !isTransientReason &&
++            Boolean(parsed[key].quarantined) &&
++            typeof parsed[key].quarantinedAtMs === 'number' &&
++            Date.now() - (parsed[key].quarantinedAtMs as number) < QUARANTINE_COOLDOWN_MS;
+           parsed[key] = {
+             ...parsed[key],
+             losses: 0,
+             realizedPnlINR: 0,
+-            quarantined: false,
+-            quarantineReason: null,
+-            quarantinedAtMs: null,
+-            lastPhase: 'FLAT_OBSERVING',
++            quarantined: stillCoolingDown,
++            quarantineReason: stillCoolingDown ? parsed[key].quarantineReason : null,
++            quarantinedAtMs: stillCoolingDown ? parsed[key].quarantinedAtMs : null,
++            lastPhase: stillCoolingDown ? 'DISCARDED_LOSER' : 'FLAT_OBSERVING',
+           };
+           resetOccurred = true;
+         }
+@@ -490,11 +507,8 @@ export function evaluateAdaptiveScriptLearningMatrix(
+     const hasRealizedLoss = sessionRealizedPnlINR < -35 || totalLosses > totalWins;
+     const isPersistedQuarantine = Boolean(mem?.quarantined);
+ 
+-    // Auto-lift quarantine whenever conviction reaches >=88 (Execution Gate) or strong relative alpha breakout,
+-    // provided there is no active open loss eroding capital right now.
+-    const strongBreakoutRecovery =
+-      (isExecutionGateQualified || (changePct >= 1.25 && relAlpha >= 0.8 && intradayRangePct >= 60)) &&
+-      !hasOpenLoss;
++    // There is NO automatic lift from conviction score or day-move. Release = human action or the
++    // QUARANTINE_COOLDOWN_MS expiry applied at session rollover (see loadPersistedScriptMemory).
+ 
+     let isQuarantined = false;
+     let quarantineReason: string | null = null;
+@@ -503,18 +517,14 @@ export function evaluateAdaptiveScriptLearningMatrix(
+     if (hasOpenLoss) {
+       isQuarantined = true;
+       quarantineReason = `Active Open Loss (₹${sessionOpenPnlINR.toFixed(2)}) — Thesis failed; flagged for immediate discard & capital protection`;
+-    } else if (strongBreakoutRecovery && (isPersistedQuarantine || hasRealizedLoss)) {
+-      // Auto-lift quarantine
+-      isQuarantined = false;
+-      quarantineReason = null;
+-      isQuarantineAutoLifted = true;
+-    } else if (isMacroHardVetoSector && !isExecutionGateQualified) {
++    } else if (isMacroHardVetoSector) {
++      // A macro hard veto is never overridden by a conviction score.
+       isQuarantined = true;
+       quarantineReason = `11-Vector Macro & FII/DII Veto (${sectorCode}): ${sectorFlow?.rationale || 'Sector headwind active'}`;
+-    } else if (isPersistedQuarantine && !strongBreakoutRecovery) {
++    } else if (isPersistedQuarantine) {
+       isQuarantined = true;
+       quarantineReason = mem?.quarantineReason ?? `Persisted loss memory — Quarantined from re-entry`;
+-    } else if (hasRealizedLoss && !strongBreakoutRecovery) {
++    } else if (hasRealizedLoss) {
+       isQuarantined = true;
+       quarantineReason = `Session Realized Loss (₹${sessionRealizedPnlINR.toFixed(2)}) across ${totalLosses} losing trade(s) — Quarantined from re-entry`;
+     } else if (item.symbol === 'ULTRACEMCO' && changePct <= 0.35 && sessionOpenPnlINR <= 0 && totalWins === 0) {
+diff --git a/src/types/quant.ts b/src/types/quant.ts
+index d9dead4..93b1b1c 100644
+--- a/src/types/quant.ts
++++ b/src/types/quant.ts
+@@ -129,13 +129,17 @@ export interface AgentStrategyHealingReport {
+       entryFilter: string;
+       maxRiskPerTradeINR: number;
+     };
++    /**
++     * Measured backtest comparison of original vs proposed parameters.
++     * null = NO backtest was run. Never fill this with literals: only a real run over real candles may set it.
++     */
+     backtestImprovement: {
+       originalWinRatePct: number;
+       optimizedWinRatePct: number;
+       drawdownReductionPct: number;
+       sharpeRatio: number;
+       sampleBarsCount: number;
+-    };
++    } | null;
+   };
+   recalibratedRules: string[];
+   status: 'PENDING_REVIEW' | 'APPLIED';
+-- 
+2.43.0
+

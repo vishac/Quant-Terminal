@@ -487,20 +487,19 @@ export const ARCHITECTURE_REVERT_LEDGER: RevertLedgerEntry[] = [
     revertId: 'REV-032',
     dateIST: '10-Nov-2026',
     category: 'STRATEGY_VETO_ENGINE',
-    moduleName: 'Markov First-Passage Target Achievement Probability (T1 / T2 / T3 Hit Prob & EV %) Across Radar and Engine',
+    moduleName: 'P1 Integrity Fixes: Removal of Invented Backtest Numbers, 5-Day Quarantine Cooldown, and In-Sample Sync Labelling',
     filePath:
-      'src/data/institutionalEquityData.ts, src/server/marketData.ts, src/components/InstitutionalEquityRadar.tsx, src/components/MacroPolicyThesis.tsx, src/components/FirstPrinciplesMarketEngine.tsx',
+      'src/components/AutonomousAgentsDesk.tsx, src/services/agentQuantEngine.ts, src/services/scriptLearningEngine.ts, src/types/quant.ts, scripts/sync-data.ts, .data/latest_backtest_sync.json, tests/p1_integrity.test.ts',
     previousStateSummary:
-      'Tactical price targets (T1, T2, T3) displayed price and percentage upside (e.g. T1: ₹149.03 (+12.76%), T2: ₹160.51 (+21.44%)) without quantifying the statistical probability of reaching each target before hitting the stop-loss barrier.',
+      'Healing reports in generateStrategyHealingReport() carried hardcoded backtestImprovement literals without running a backtest; conviction >= 88 or a +1.25% green day lifted loss-driven quarantines and bypassed macro hard vetoes; and scripts/sync-data.ts labelled single in-sample runs as validated out-of-sample walk-forward results in .data/latest_walkforward_sync.json.',
     newStateSummary:
-      'Implemented deterministic Markov First-Passage / Drift-Diffusion Barrier Hit Probability Model (computeTargetHitProbabilities & getStockTargetProbabilities) that calculates P(Hit T1 before SL), conditional continuation P(Hit T2 | T1) -> P(T2), P(Hit T3 | T2) -> P(T3), and Expected Value (EV %) from reward-to-risk ratio (R), target excursion distance drag, and 5-pillar drift strength (conviction, order flow, momentum). Wired probabilities into the live server screener (/api/screener/chartink) and across all Radar views (Table Matrix T1/T2 column, Split Dossier left list & right 3-card Target Matrix, Quick Dossier Modal, CSV export, Tab 02 52W-Low & Bear Put strips) and First-Principles Market Engine Trade Setup Blueprint cards.',
+      'Applied all 3 P1 integrity patches: (1) Set backtestImprovement to null across all 5 agent post-mortem templates, added a TEMPLATE REPORT disclosure banner in AutonomousAgentsDesk.tsx, and updated re-arm toast/status labels to state no rules were changed and no backtest was run; (2) Removed the conviction/day-move quarantine bypass across scriptLearningEngine.ts and agentQuantEngine.ts, enforcing a 5-day cooldown (QUARANTINE_COOLDOWN_MS) for loss-driven quarantines at session rollover unless explicitly released by the user; (3) Renamed .data/latest_walkforward_sync.json to .data/latest_backtest_sync.json with evidenceClass: IN_SAMPLE_SINGLE_RUN and benchmarkIncluded: false across scripts/sync-data.ts and documentation; (4) Added 6 P1 regression tests in tests/p1_integrity.test.ts wired into npm test.',
     quantValueJustification:
-      'Provides transparent, mathematically monotonic (P(T1) > P(T2) > P(T3)) first-passage barrier probabilities and net expected value for every strategy target, distinguishing tight high-conviction swing targets (~72-76% T1 prob) from wide multi-week structural excursion targets (~56-62% T1 prob).',
+      'Enforces strict quantitative honesty by never fabricating backtest metrics, preventing unvalidated conviction scores from overriding realized loss quarantines or macro vetoes, and accurately labelling single-run historical backtests as in-sample.',
     revertInstruction:
-      'Revert src/data/institutionalEquityData.ts, src/server/marketData.ts, src/components/InstitutionalEquityRadar.tsx, src/components/MacroPolicyThesis.tsx, and src/components/FirstPrinciplesMarketEngine.tsx to REV-031.',
+      'Revert src/components/AutonomousAgentsDesk.tsx, src/services/agentQuantEngine.ts, src/services/scriptLearningEngine.ts, src/types/quant.ts, and scripts/sync-data.ts to REV-031.',
   },
 ];
-
 
 
 

@@ -57,7 +57,7 @@
 12. **Remediated Backtester (`src/server/backtester.ts`) & Automated Data Sync CLI (`npm run data:sync`)**:
     - Models **Next-Bar Open + 5 bps slippage** entries, **intraday Low (`candle.low`) stop checks**, **Gap-Through-Stop fills at the Open**, **monotonic High-Water-Mark ATR trailing stops**, and **Indian Cash-Delivery round-trip statutory costs (`0.2222%`) + `10 bps` slippage**.
     - Excludes unrealized open positions from Win Rate, Profit Factor, Expectancy, and *t*-statistics; subtracts the `6.50%` annualized risk-free rate in Sharpe/Sortino; and computes López de Prado `PSR` using per-period (daily) Sharpe and daily skewness/kurtosis.
-    - Run `npm run data:sync` (`scripts/sync-data.ts`) to execute automated historical candle validation and write results to `.data/latest_walkforward_sync.json`.
+    - Run `npm run data:sync` (`scripts/sync-data.ts`) to execute automated historical candle validation and write an IN-SAMPLE summary to `.data/latest_backtest_sync.json` (single fixed-parameter run per symbol and strategy; not walk-forward, not out-of-sample evidence).
 
 13. **Standalone & In-App User Guide + Complete Revert Ledger (`REV-001` – `REV-019`)**:
     - See `USER_GUIDE_STRENGTHS_AND_LIMITATIONS.md` (and Sub-Tab `06` inside **`4. Order Book`**) for reconciled feed disclosures (Upstox real-time when paired vs. Yahoo Finance delayed fallback when unpaired), heuristic prior disclaimers, and structural limitations.

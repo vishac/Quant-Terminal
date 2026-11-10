@@ -1,0 +1,102 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+
+// --- minimal browser shims (the learning engine reads localStorage at call time) ---
+const store = new Map<string, string>();
+(globalThis as any).localStorage = {
+  getItem: (k: string) => (store.has(k) ? store.get(k)! : null),
+  setItem: (k: string, v: string) => void store.set(k, String(v)),
+  removeItem: (k: string) => void store.delete(k),
+  clear: () => store.clear(),
+};
+
+const sle = await import('../src/services/scriptLearningEngine.ts');
+const { generateStrategyHealingReport } = await import('../src/services/agentQuantEngine.ts');
+
+const LEDGER_KEY = 'jarvis_script_learning_ledger_v1';
+const DATE_KEY = 'jarvis_script_learning_session_date_v1';
+const DAY = 24 * 60 * 60 * 1000;
+const mem = (over: Record<string, unknown>) => ({
+  wins: 0, losses: 1, realizedPnlINR: -80, quarantined: true, quarantineReason: 'Session Realized Loss',
+  quarantinedAtMs: Date.now(), observationTicks: 3, lastPrice: 100, lastPhase: 'DISCARDED_LOSER', ...over,
+});
+const quote = (symbol: string, price: number, changePct: number) => ({
+  symbol, name: symbol, price, change: price * changePct / 100, changePct, high: price * 1.02, low: price * 0.99,
+  prevClose: price / (1 + changePct / 100), timestamp: new Date().toISOString(),
+});
+const today = () => sle.getTodayISTDateString();
+
+test('a quarantined HIGH-conviction script with a strong green day is NOT auto-lifted', () => {
+  store.clear();
+  store.set(DATE_KEY, today());
+  store.set(LEDGER_KEY, JSON.stringify({ BEL: mem({ quarantinedAtMs: Date.now() - 60_000 }) }));
+  const quotes: any = { '^NSEI': quote('^NSEI', 24000, 0.1), 'BEL.NS': quote('BEL.NS', 400, 2.5) };
+  const rec = sle.evaluateAdaptiveScriptLearningMatrix(quotes, []).find((r: any) => r.symbol === 'BEL')!;
+  assert.ok(rec, 'BEL record present');
+  assert.ok((rec.convictionScore ?? 0) >= 88, 'precondition: BEL is a >=88 conviction name');
+  assert.equal(rec.isQuarantined, true);
+  assert.equal(rec.isQuarantineAutoLifted, false);
+});
+
+test('rollover keeps a loss quarantine until the cool-down has elapsed', () => {
+  store.clear();
+  store.set(DATE_KEY, '2000-01-01'); // forces the daily rollover path
+  store.set(LEDGER_KEY, JSON.stringify({
+    FRESH: mem({ quarantinedAtMs: Date.now() - 1 * DAY }),
+    STALE: mem({ quarantinedAtMs: Date.now() - (sle.QUARANTINE_COOLDOWN_MS / DAY + 1) * DAY }),
+    MACRO: mem({ quarantineReason: '11-Vector Macro & FII/DII Veto (X): headwind', quarantinedAtMs: Date.now() - 60_000 }),
+  }));
+  const m = sle.loadPersistedScriptMemory();
+  assert.equal(m.FRESH.quarantined, true, 'recent loss quarantine must survive the rollover');
+  assert.equal(m.STALE.quarantined, false, 'expired quarantine is released');
+  assert.equal(m.MACRO.quarantined, false, 'transient macro veto still clears at rollover');
+  assert.equal(m.FRESH.losses, 0, 'session counters still reset');
+});
+
+test('a human release still works', () => {
+  store.clear();
+  store.set(DATE_KEY, today());
+  store.set(LEDGER_KEY, JSON.stringify({ ABC: mem({}) }));
+  sle.releaseScriptQuarantine('ABC');
+  assert.equal(sle.isScriptQuarantined('ABC'), false);
+});
+
+test('healing reports carry NO invented backtest numbers', () => {
+  const quotes: any = {};
+  for (const id of ['agent_chanakya', 'agent_bhishma', 'agent_arjuna', 'agent_kuber', 'agent_vidura']) {
+    for (const trig of ['DAILY_2000', 'WEEKLY_5000'] as const) {
+      const r = generateStrategyHealingReport(id, 2500, trig, quotes);
+      assert.ok(r, `${id} produced a report`);
+      assert.equal(r.backtestDiagnostic.backtestImprovement, null, `${id}/${trig} must not fabricate a backtest`);
+    }
+  }
+});
+
+function walk(dir: string, out: string[] = []): string[] {
+  for (const n of readdirSync(dir)) {
+    const p = join(dir, n);
+    if (statSync(p).isDirectory()) walk(p, out); else if (/\.(ts|tsx)$/.test(n)) out.push(p);
+  }
+  return out;
+}
+
+test('source has no hardcoded backtestImprovement literals and no >=88 quarantine bypass', () => {
+  for (const f of walk(new URL('../src', import.meta.url).pathname)) {
+    const t = readFileSync(f, 'utf8');
+    assert.ok(!/originalWinRatePct:\s*\d/.test(t), `${f}: hardcoded originalWinRatePct`);
+    assert.ok(!/Auto-lift quarantine whenever conviction/.test(t), `${f}: auto-lift comment/logic back`);
+    assert.ok(!/isAutoLiftedOrHighConviction/.test(t), `${f}: conviction bypass back`);
+  }
+});
+
+test('sync-data output is labelled in-sample, and the old walk-forward name is gone', () => {
+  const src = readFileSync(new URL('../scripts/sync-data.ts', import.meta.url), 'utf8');
+  assert.ok(src.includes("evidenceClass: 'IN_SAMPLE_SINGLE_RUN'"));
+  assert.ok(!/validated out-of-sample walk-forward/i.test(src));
+  assert.equal(existsSync(new URL('../.data/latest_walkforward_sync.json', import.meta.url)), false);
+  const data = JSON.parse(readFileSync(new URL('../.data/latest_backtest_sync.json', import.meta.url), 'utf8'));
+  assert.equal(data.evidenceClass, 'IN_SAMPLE_SINGLE_RUN');
+  assert.equal(data.benchmarkIncluded, false);
+});

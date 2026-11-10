@@ -171,6 +171,14 @@ export function getTodayISTDateString(): string {
   }
 }
 
+/**
+ * A quarantined script is released only by (1) an explicit human release or (2) this fixed cool-down,
+ * applied at the next IST session rollover. A conviction score or one strong day must NEVER lift it:
+ * those signals are unvalidated, and a stock that just failed often bounces before failing again.
+ * 5 days is a conservative default, not a tuned value. Set it to 24h to restore the old one-session reset.
+ */
+export const QUARANTINE_COOLDOWN_MS = 5 * 24 * 60 * 60 * 1000;
+
 export function loadPersistedScriptMemory(): Record<string, PersistedScriptMemory> {
   try {
     const todayIST = getTodayISTDateString();
@@ -191,14 +199,23 @@ export function loadPersistedScriptMemory(): Record<string, PersistedScriptMemor
       let resetOccurred = false;
       for (const key of Object.keys(parsed)) {
         if (parsed[key]) {
+          // Session counters reset daily, but a quarantine survives until its cool-down has fully elapsed.
+          // Only loss-driven quarantines are held; a transient macro veto / static lock still clears at rollover.
+          const reasonText = String(parsed[key].quarantineReason ?? '');
+          const isTransientReason = reasonText.startsWith('11-Vector Macro') || reasonText.startsWith('Static Fallback');
+          const stillCoolingDown =
+            !isTransientReason &&
+            Boolean(parsed[key].quarantined) &&
+            typeof parsed[key].quarantinedAtMs === 'number' &&
+            Date.now() - (parsed[key].quarantinedAtMs as number) < QUARANTINE_COOLDOWN_MS;
           parsed[key] = {
             ...parsed[key],
             losses: 0,
             realizedPnlINR: 0,
-            quarantined: false,
-            quarantineReason: null,
-            quarantinedAtMs: null,
-            lastPhase: 'FLAT_OBSERVING',
+            quarantined: stillCoolingDown,
+            quarantineReason: stillCoolingDown ? parsed[key].quarantineReason : null,
+            quarantinedAtMs: stillCoolingDown ? parsed[key].quarantinedAtMs : null,
+            lastPhase: stillCoolingDown ? 'DISCARDED_LOSER' : 'FLAT_OBSERVING',
           };
           resetOccurred = true;
         }
@@ -490,11 +507,8 @@ export function evaluateAdaptiveScriptLearningMatrix(
     const hasRealizedLoss = sessionRealizedPnlINR < -35 || totalLosses > totalWins;
     const isPersistedQuarantine = Boolean(mem?.quarantined);
 
-    // Auto-lift quarantine whenever conviction reaches >=88 (Execution Gate) or strong relative alpha breakout,
-    // provided there is no active open loss eroding capital right now.
-    const strongBreakoutRecovery =
-      (isExecutionGateQualified || (changePct >= 1.25 && relAlpha >= 0.8 && intradayRangePct >= 60)) &&
-      !hasOpenLoss;
+    // There is NO automatic lift from conviction score or day-move. Release = human action or the
+    // QUARANTINE_COOLDOWN_MS expiry applied at session rollover (see loadPersistedScriptMemory).
 
     let isQuarantined = false;
     let quarantineReason: string | null = null;
@@ -503,18 +517,14 @@ export function evaluateAdaptiveScriptLearningMatrix(
     if (hasOpenLoss) {
       isQuarantined = true;
       quarantineReason = `Active Open Loss (₹${sessionOpenPnlINR.toFixed(2)}) — Thesis failed; flagged for immediate discard & capital protection`;
-    } else if (strongBreakoutRecovery && (isPersistedQuarantine || hasRealizedLoss)) {
-      // Auto-lift quarantine
-      isQuarantined = false;
-      quarantineReason = null;
-      isQuarantineAutoLifted = true;
-    } else if (isMacroHardVetoSector && !isExecutionGateQualified) {
+    } else if (isMacroHardVetoSector) {
+      // A macro hard veto is never overridden by a conviction score.
       isQuarantined = true;
       quarantineReason = `11-Vector Macro & FII/DII Veto (${sectorCode}): ${sectorFlow?.rationale || 'Sector headwind active'}`;
-    } else if (isPersistedQuarantine && !strongBreakoutRecovery) {
+    } else if (isPersistedQuarantine) {
       isQuarantined = true;
       quarantineReason = mem?.quarantineReason ?? `Persisted loss memory — Quarantined from re-entry`;
-    } else if (hasRealizedLoss && !strongBreakoutRecovery) {
+    } else if (hasRealizedLoss) {
       isQuarantined = true;
       quarantineReason = `Session Realized Loss (₹${sessionRealizedPnlINR.toFixed(2)}) across ${totalLosses} losing trade(s) — Quarantined from re-entry`;
     } else if (item.symbol === 'ULTRACEMCO' && changePct <= 0.35 && sessionOpenPnlINR <= 0 && totalWins === 0) {

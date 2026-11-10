@@ -424,7 +424,7 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({
     // Re-arm agent
     setAgentStatusOverrides(prev => ({ ...prev, [report.agentId]: 'ACTIVE_HEDGING' }));
     setActiveHealingModalReport(null);
-    setSyncToastMessage(`✨ Strategy Recalibrated: ${report.agentName} applied backtest-optimized rules and is re-armed!`);
+    setSyncToastMessage(`${report.agentName} re-armed by you. No parameters were changed and no backtest was run.`);
     setTimeout(() => setSyncToastMessage(null), 5000);
   };
 
@@ -1998,7 +1998,7 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({
                     ? 'bg-emerald-950/80 border-emerald-500/60 text-emerald-300'
                     : 'bg-amber-950/80 border-amber-500/60 text-amber-300 animate-pulse'
                 }`}>
-                  {activeHealingModalReport.status === 'APPLIED' ? 'RULES APPLIED & ACTIVE' : 'PENDING RE-ARM'}
+                  {activeHealingModalReport.status === 'APPLIED' ? 'RE-ARMED (NO RULES CHANGED)' : 'PENDING RE-ARM'}
                 </span>
                 <button
                   onClick={() => setActiveHealingModalReport(null)}
@@ -2007,6 +2007,13 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({
                   <X className="w-4 h-4" />
                 </button>
               </div>
+            </div>
+
+            {/* Honesty banner: these reports are templates, not analysis of this specific loss */}
+            <div className="p-3 rounded-xl bg-amber-950/40 border border-amber-500/50 text-[11px] text-amber-200">
+              <span className="font-bold">TEMPLATE REPORT, NOT A MEASURED ANALYSIS.</span>{' '}
+              The cause, headlines and proposed parameters below are canned text for this agent type; only the loss amount and a few quote values are live.
+              No backtest was run on the proposed parameters, and clicking the button below changes no trading rules.
             </div>
 
             {/* Breach Alert Callout */}
@@ -2092,7 +2099,7 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-500">Win Rate:</span>
-                      <span className="text-rose-300">{activeHealingModalReport.backtestDiagnostic.backtestImprovement.originalWinRatePct}%</span>
+                      <span className="text-rose-300">{activeHealingModalReport.backtestDiagnostic.backtestImprovement ? `${activeHealingModalReport.backtestDiagnostic.backtestImprovement.originalWinRatePct}%` : 'not measured'}</span>
                     </div>
                     <div className="pt-1 text-[10px] text-slate-400">
                       Filter: {activeHealingModalReport.backtestDiagnostic.originalParameters.entryFilter}
@@ -2105,7 +2112,7 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({
                   <div className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider pb-1 border-b border-slate-800 flex items-center justify-between">
                     <span>Recalibrated Leak-Proof Rules</span>
                     <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/40">
-                      +{activeHealingModalReport.backtestDiagnostic.backtestImprovement.drawdownReductionPct}% DD Shield
+                      {activeHealingModalReport.backtestDiagnostic.backtestImprovement ? `+${activeHealingModalReport.backtestDiagnostic.backtestImprovement.drawdownReductionPct}% DD Shield` : 'NOT BACKTESTED'}
                     </span>
                   </div>
                   <div className="space-y-1.5 text-[11px]">
@@ -2123,7 +2130,7 @@ export const AutonomousAgentsDesk: React.FC<AutonomousAgentsDeskProps> = ({
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-500">Optimized Win Rate:</span>
-                      <span className="text-emerald-400 font-bold">{activeHealingModalReport.backtestDiagnostic.backtestImprovement.optimizedWinRatePct}%</span>
+                      <span className="text-emerald-400 font-bold">{activeHealingModalReport.backtestDiagnostic.backtestImprovement ? `${activeHealingModalReport.backtestDiagnostic.backtestImprovement.optimizedWinRatePct}%` : 'not measured'}</span>
                     </div>
                     <div className="pt-1 text-[10px] text-cyan-300">
                       Filter: {activeHealingModalReport.backtestDiagnostic.optimizedParameters.entryFilter}

@@ -217,7 +217,7 @@ Under no circumstances should dummy, mock, or hardcoded static seed trades be in
 - [x] **Second-Pass Code Re-Audit, 2026 Statutory P&L Reconciliation & Transition to Subtle `PAPER-ONLY` Header Indicator (`REV-020`) (`src/services/paperTradeService.ts`, `src/services/orderLifecycle.ts`, `src/services/agentQuantEngine.ts`, `src/App.tsx`, `src/components/Header.tsx`)**:
   - Removed legacy F&O `exitPrice` clamp (`exitPrice <= 2.0 || exitPrice > entryPrice + 20`) and deducted full 2026 round-trip statutory friction (both-leg `0.20%` cash delivery STT, `0.15%` F&O option sell STT, exchange+IPFT, SEBI, stamp duty, `₹40` brokerage, `18%` GST) from realized P&L across `paperTradeService.ts` and `orderLifecycle.ts`.
   - Removed forced 1-unit floor (`Math.max(1, ...)`) in `computeLeakProofPositionSize` (`src/services/agentQuantEngine.ts`) so any trade where 1 share breaches the `₹400` (`1R`) risk cap is rejected cleanly (`allowed: false, qty: 0`).
-  - Executed `npm run data:sync` walk-forward validation (`.data/latest_walkforward_sync.json`), retired `DoNotUseWatermarkBanner.tsx`, restored `top-0` header/sidebar layout, and added a subtle `PAPER-ONLY` indicator in `Header.tsx`.
+  - Executed `npm run data:sync` in-sample backtest (`.data/latest_backtest_sync.json`; not walk-forward), retired `DoNotUseWatermarkBanner.tsx`, restored `top-0` header/sidebar layout, and added a subtle `PAPER-ONLY` indicator in `Header.tsx`.
 - **Intraday Session Entry Cutoff (`15:15 IST` Autonomous / `15:25 IST` Manual) & `15:20 IST` Auto Square-Off (`REV-021` — `09-Nov-2026`)**:
   - Fixed `getOfficialNseOptionChainExpiries()` in `src/utils/orderFormatters.ts` to evaluate holiday-stepped-back Monday expiries (e.g., `09-Nov-2026` from Tuesday `10-Nov-2026` Diwali Balipratipada) against `todayMidnightMs` and the `15:15 IST` rollover cutoff.
   - Added `checkSessionEntryCutoffWindow()` (enforced as Gate 0 in `statutoryVetoEngine.ts` and `runAutonomousAgentCycleIfArmed` in `paperTradeService.ts`) to block autonomous NSE/BSE entries at `>= 15:15 IST` while allowing manual overrides up to `15:25 IST` for non-expiring contracts.
@@ -265,7 +265,7 @@ Under no circumstances should dummy, mock, or hardcoded static seed trades be in
 - **10-Point Brutal Stress Audit**: Passing `10 / 10` checks in `2. Stress Lab` (`BrutalStressTestLab.tsx`).
 
 ### 9.4 Immediate Next Steps & Future Roadmap
-- [x] **Out-of-Sample Walk-Forward Validation**: Executed `npm run data:sync` across benchmark NSE universe and saved `.data/latest_walkforward_sync.json`.
+- [ ] **Out-of-Sample Walk-Forward Validation**: NOT done. `npm run data:sync` writes an in-sample summary (`.data/latest_backtest_sync.json`); 12 of 16 runs in the last sync lost money.
 - [x] **Intraday & Expiry Lifecycle Guard (`REV-021`)**: Enforced `15:15 IST` autonomous entry cutoff, `15:25 IST` manual override cutoff, and `15:20 IST` auto square-off (with catch-up) for intraday cash and expiring F&O positions.
 - [x] **Whole-NSE Dynamic Discovery & 100% Live Scoring (`REV-022`)**: Replaced hardcoded 45-stock Upstox shortcut and static fundamental profile score boosts with Chartink whole-NSE discovery + Upstox/Yahoo enrichment and 100% live market-data scoring.
 - [x] **SEBI/AMFI Market Cap Tiering, Cross-Sectional Percentile Scoring & Mobile LTP Visibility (`REV-023`)**: Enforced official SEBI/AMFI + Chartink market-cap tiering, eliminated `91/100` score ties via cross-sectional percentile ranking, balanced `SWING` vs `COMPOUNDER` horizon tags, and surfaced inline `LTP` + `% change` on mobile screens.

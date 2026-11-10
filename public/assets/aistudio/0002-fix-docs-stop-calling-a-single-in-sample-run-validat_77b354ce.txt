@@ -1,0 +1,132 @@
+From 4e5773e8cd15604075e69510dad82f883d469442 Mon Sep 17 00:00:00 2001
+From: "P1 patch (for review)" <p1-patch@local>
+Date: Tue, 10 Nov 2026 18:20:42 +0530
+Subject: [PATCH 2/3] fix(docs): stop calling a single in-sample run 'validated
+ out-of-sample walk-forward'
+
+- sync-data: header/log/output renamed; JSON gets evidenceClass=IN_SAMPLE_SINGLE_RUN and benchmarkIncluded=false
+- .data/latest_walkforward_sync.json -> .data/latest_backtest_sync.json
+- README/USER_GUIDE/PROJECT_INSTRUCTIONS corrected; walk-forward item unticked (12 of 16 runs lost money)
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01AkU18WCTdxQ1WTLjLDbEwp
+---
+ .data/latest_backtest_sync.json         |  2 ++
+ PROJECT_INSTRUCTIONS.md                 |  4 ++--
+ README.md                               |  2 +-
+ USER_GUIDE_STRENGTHS_AND_LIMITATIONS.md |  2 +-
+ scripts/sync-data.ts                    | 12 ++++++++----
+ 5 files changed, 14 insertions(+), 8 deletions(-)
+
+diff --git a/.data/latest_backtest_sync.json b/.data/latest_backtest_sync.json
+index 6154dc7..e3aa9c9 100644
+--- a/.data/latest_backtest_sync.json
++++ b/.data/latest_backtest_sync.json
+@@ -1,6 +1,8 @@
+ {
+   "syncedAtISO": "2026-11-09T09:54:52.295Z",
+   "feedMode": "YAHOO_HISTORICAL_CANDLES",
++  "evidenceClass": "IN_SAMPLE_SINGLE_RUN",
++  "benchmarkIncluded": false,
+   "methodology": {
+     "entryFill": "Next-Bar Open + 5 bps slippage",
+     "stopFill": "Intraday Low check with Gap-Through-Stop fill at Open",
+diff --git a/PROJECT_INSTRUCTIONS.md b/PROJECT_INSTRUCTIONS.md
+index a80b838..459c24f 100644
+--- a/PROJECT_INSTRUCTIONS.md
++++ b/PROJECT_INSTRUCTIONS.md
+@@ -217,7 +217,7 @@ Under no circumstances should dummy, mock, or hardcoded static seed trades be in
+ - [x] **Second-Pass Code Re-Audit, 2026 Statutory P&L Reconciliation & Transition to Subtle `PAPER-ONLY` Header Indicator (`REV-020`) (`src/services/paperTradeService.ts`, `src/services/orderLifecycle.ts`, `src/services/agentQuantEngine.ts`, `src/App.tsx`, `src/components/Header.tsx`)**:
+   - Removed legacy F&O `exitPrice` clamp (`exitPrice <= 2.0 || exitPrice > entryPrice + 20`) and deducted full 2026 round-trip statutory friction (both-leg `0.20%` cash delivery STT, `0.15%` F&O option sell STT, exchange+IPFT, SEBI, stamp duty, `₹40` brokerage, `18%` GST) from realized P&L across `paperTradeService.ts` and `orderLifecycle.ts`.
+   - Removed forced 1-unit floor (`Math.max(1, ...)`) in `computeLeakProofPositionSize` (`src/services/agentQuantEngine.ts`) so any trade where 1 share breaches the `₹400` (`1R`) risk cap is rejected cleanly (`allowed: false, qty: 0`).
+-  - Executed `npm run data:sync` walk-forward validation (`.data/latest_walkforward_sync.json`), retired `DoNotUseWatermarkBanner.tsx`, restored `top-0` header/sidebar layout, and added a subtle `PAPER-ONLY` indicator in `Header.tsx`.
++  - Executed `npm run data:sync` in-sample backtest (`.data/latest_backtest_sync.json`; not walk-forward), retired `DoNotUseWatermarkBanner.tsx`, restored `top-0` header/sidebar layout, and added a subtle `PAPER-ONLY` indicator in `Header.tsx`.
+ - **Intraday Session Entry Cutoff (`15:15 IST` Autonomous / `15:25 IST` Manual) & `15:20 IST` Auto Square-Off (`REV-021` — `09-Nov-2026`)**:
+   - Fixed `getOfficialNseOptionChainExpiries()` in `src/utils/orderFormatters.ts` to evaluate holiday-stepped-back Monday expiries (e.g., `09-Nov-2026` from Tuesday `10-Nov-2026` Diwali Balipratipada) against `todayMidnightMs` and the `15:15 IST` rollover cutoff.
+   - Added `checkSessionEntryCutoffWindow()` (enforced as Gate 0 in `statutoryVetoEngine.ts` and `runAutonomousAgentCycleIfArmed` in `paperTradeService.ts`) to block autonomous NSE/BSE entries at `>= 15:15 IST` while allowing manual overrides up to `15:25 IST` for non-expiring contracts.
+@@ -265,7 +265,7 @@ Under no circumstances should dummy, mock, or hardcoded static seed trades be in
+ - **10-Point Brutal Stress Audit**: Passing `10 / 10` checks in `2. Stress Lab` (`BrutalStressTestLab.tsx`).
+ 
+ ### 9.4 Immediate Next Steps & Future Roadmap
+-- [x] **Out-of-Sample Walk-Forward Validation**: Executed `npm run data:sync` across benchmark NSE universe and saved `.data/latest_walkforward_sync.json`.
++- [ ] **Out-of-Sample Walk-Forward Validation**: NOT done. `npm run data:sync` writes an in-sample summary (`.data/latest_backtest_sync.json`); 12 of 16 runs in the last sync lost money.
+ - [x] **Intraday & Expiry Lifecycle Guard (`REV-021`)**: Enforced `15:15 IST` autonomous entry cutoff, `15:25 IST` manual override cutoff, and `15:20 IST` auto square-off (with catch-up) for intraday cash and expiring F&O positions.
+ - [x] **Whole-NSE Dynamic Discovery & 100% Live Scoring (`REV-022`)**: Replaced hardcoded 45-stock Upstox shortcut and static fundamental profile score boosts with Chartink whole-NSE discovery + Upstox/Yahoo enrichment and 100% live market-data scoring.
+ - [x] **SEBI/AMFI Market Cap Tiering, Cross-Sectional Percentile Scoring & Mobile LTP Visibility (`REV-023`)**: Enforced official SEBI/AMFI + Chartink market-cap tiering, eliminated `91/100` score ties via cross-sectional percentile ranking, balanced `SWING` vs `COMPOUNDER` horizon tags, and surfaced inline `LTP` + `% change` on mobile screens.
+diff --git a/README.md b/README.md
+index a8ede28..ecc91e5 100644
+--- a/README.md
++++ b/README.md
+@@ -57,7 +57,7 @@
+ 12. **Remediated Backtester (`src/server/backtester.ts`) & Automated Data Sync CLI (`npm run data:sync`)**:
+     - Models **Next-Bar Open + 5 bps slippage** entries, **intraday Low (`candle.low`) stop checks**, **Gap-Through-Stop fills at the Open**, **monotonic High-Water-Mark ATR trailing stops**, and **Indian Cash-Delivery round-trip statutory costs (`0.2222%`) + `10 bps` slippage**.
+     - Excludes unrealized open positions from Win Rate, Profit Factor, Expectancy, and *t*-statistics; subtracts the `6.50%` annualized risk-free rate in Sharpe/Sortino; and computes López de Prado `PSR` using per-period (daily) Sharpe and daily skewness/kurtosis.
+-    - Run `npm run data:sync` (`scripts/sync-data.ts`) to execute automated historical candle validation and write results to `.data/latest_walkforward_sync.json`.
++    - Run `npm run data:sync` (`scripts/sync-data.ts`) to execute automated historical candle validation and write an IN-SAMPLE summary to `.data/latest_backtest_sync.json` (single fixed-parameter run per symbol and strategy; not walk-forward, not out-of-sample evidence).
+ 
+ 13. **Standalone & In-App User Guide + Complete Revert Ledger (`REV-001` – `REV-019`)**:
+     - See `USER_GUIDE_STRENGTHS_AND_LIMITATIONS.md` (and Sub-Tab `06` inside **`4. Order Book`**) for reconciled feed disclosures (Upstox real-time when paired vs. Yahoo Finance delayed fallback when unpaired), heuristic prior disclaimers, and structural limitations.
+diff --git a/USER_GUIDE_STRENGTHS_AND_LIMITATIONS.md b/USER_GUIDE_STRENGTHS_AND_LIMITATIONS.md
+index 232ae15..cdca501 100644
+--- a/USER_GUIDE_STRENGTHS_AND_LIMITATIONS.md
++++ b/USER_GUIDE_STRENGTHS_AND_LIMITATIONS.md
+@@ -58,7 +58,7 @@
+ 1. **Market Data Feed Hierarchy (Upstox Primary When Paired vs. Yahoo Finance Fallback When Unpaired)**:
+    - **When `UPSTOX_ACCESS_TOKEN` is paired** (via `.env` or Control Tower -> Broker Gateway), the server streams live NSE/BSE market quotes (`UPSTOX_ANALYTICS_REALTIME`).
+    - **When `UPSTOX_ACCESS_TOKEN` is unpaired**, the server automatically falls back to delayed, unofficial Yahoo Finance daily/intraday candles (`YAHOO_DELAYED_UNOFFICIAL`, `~1.5s–3.0s` poll latency and exchange delay).
+-   - **Local Automated CLI Sync (`npm run data:sync`)**: Runs `scripts/sync-data.ts` using native Node.js `fetch` to pull historical daily candles, execute out-of-sample backtests across the core NSE universe, and write validated metrics to `.data/latest_walkforward_sync.json`.
++   - **Local Automated CLI Sync (`npm run data:sync`)**: Runs `scripts/sync-data.ts` using native Node.js `fetch` to pull historical daily candles, run in-sample backtests across the core NSE universe (one fixed-parameter run each, no train/test split, no benchmark), and write the summary to `.data/latest_backtest_sync.json`. These are not validated or out-of-sample results.
+ 2. **Intraday Drawdown Cap (`<= 1.50%`) vs. Overnight Gap Risk**:
+    - The `<= 1.50%` daily drawdown cap is an **intraday circuit-breaker and per-trade stop-sizing rule** enforced during active exchange hours.
+    - **Overnight Gap Disclosure**: Cash equities and futures held overnight can gap past an intraday stop-loss at the `09:15 IST` market open during sovereign or earnings shocks (which `backtester.ts` explicitly models via **gap-through-stop fills at the Open**). Only defined-risk long option (`PE` / `CE`) setups have mathematically capped overnight loss equal to the option premium paid.
+diff --git a/scripts/sync-data.ts b/scripts/sync-data.ts
+index 3f9b64b..d94bd0e 100644
+--- a/scripts/sync-data.ts
++++ b/scripts/sync-data.ts
+@@ -1,5 +1,5 @@
+ /**
+- * scripts/sync-data.ts — Automated Historical Candle, Live Quote & Walk-Forward Validation CLI
++ * scripts/sync-data.ts — Automated Historical Candle, Live Quote & In-Sample Backtest CLI
+  *
+  * Usage:
+  *   npm run data:sync
+@@ -11,7 +11,9 @@
+  *   3. Runs the remediated backtester (next-bar open + slippage, gap-through-stop fills at open,
+  *      monotonic high-water-mark trailing stops, full cash-delivery statutory costs, and closed-only stats)
+  *      across the core NSE universe.
+- *   4. Writes the validated out-of-sample walk-forward summary to `.data/latest_walkforward_sync.json`.
++ *   4. Writes an IN-SAMPLE backtest summary to `.data/latest_backtest_sync.json`. Each row is ONE fixed-parameter run
++ *      over the whole sample: there is no train/test split, no parameter selection and no benchmark, so it is
++ *      NOT walk-forward and NOT out-of-sample evidence. Use qt-core's walk-forward for that.
+  */
+ 
+ import fs from 'fs';
+@@ -86,13 +88,15 @@ async function runAutomatedDataAndWalkForwardSync() {
+   if (!fs.existsSync(dataDir)) {
+     fs.mkdirSync(dataDir, { recursive: true });
+   }
+-  const outPath = path.join(dataDir, 'latest_walkforward_sync.json');
++  const outPath = path.join(dataDir, 'latest_backtest_sync.json');
+   fs.writeFileSync(
+     outPath,
+     JSON.stringify(
+       {
+         syncedAtISO: new Date().toISOString(),
+         feedMode: upstoxToken ? 'UPSTOX_PRIMARY' : 'YAHOO_HISTORICAL_CANDLES',
++        evidenceClass: 'IN_SAMPLE_SINGLE_RUN', // not walk-forward, not out-of-sample
++        benchmarkIncluded: false,
+         methodology: {
+           entryFill: 'Next-Bar Open + 5 bps slippage',
+           stopFill: 'Intraday Low check with Gap-Through-Stop fill at Open',
+@@ -110,7 +114,7 @@ async function runAutomatedDataAndWalkForwardSync() {
+   );
+ 
+   console.log('--------------------------------------------------------------------------------');
+-  console.log(`Saved validated walk-forward telemetry (${resultsSummary.length} runs) to ${outPath}`);
++  console.log(`Saved IN-SAMPLE backtest summary (not walk-forward) (${resultsSummary.length} runs) to ${outPath}`);
+ }
+ 
+ runAutomatedDataAndWalkForwardSync().catch((err) => {
+-- 
+2.43.0
+

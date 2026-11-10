@@ -371,11 +371,11 @@ export function deriveLiveAutonomousAgents(
     .filter((item) => {
       const clean = item.rec.symbol;
       const hasOpenLoss = openLosingSymbols.has(clean);
-      const isAutoLiftedOrHighConviction =
-        Boolean((item.rec.convictionScore && item.rec.convictionScore >= 88) || item.rec.isQuarantineAutoLifted);
+      // Only an elapsed cool-down (isQuarantineAutoLifted) overrides a quarantine; conviction >= 88 does not.
+      const isCooldownReleased = Boolean(item.rec.isQuarantineAutoLifted);
       const isQuarantined =
         hasOpenLoss ||
-        (!isAutoLiftedOrHighConviction && (item.rec.isQuarantined || Boolean(learnedMemory[clean]?.quarantined)));
+        (!isCooldownReleased && (item.rec.isQuarantined || Boolean(learnedMemory[clean]?.quarantined)));
       return item.rec.changePct > 0 && !isQuarantined;
     })
     .sort((a, b) => b.rec.learnedScore - a.rec.learnedScore || b.rec.changePct - a.rec.changePct);
@@ -384,11 +384,11 @@ export function deriveLiveAutonomousAgents(
     .filter((item) => {
       const clean = item.rec.symbol;
       const hasOpenLoss = openLosingSymbols.has(clean);
-      const isAutoLiftedOrHighConviction =
-        Boolean((item.rec.convictionScore && item.rec.convictionScore >= 88) || item.rec.isQuarantineAutoLifted);
+      // Only an elapsed cool-down (isQuarantineAutoLifted) overrides a quarantine; conviction >= 88 does not.
+      const isCooldownReleased = Boolean(item.rec.isQuarantineAutoLifted);
       const isQuarantined =
         hasOpenLoss ||
-        (!isAutoLiftedOrHighConviction && (item.rec.isQuarantined || Boolean(learnedMemory[clean]?.quarantined)));
+        (!isCooldownReleased && (item.rec.isQuarantined || Boolean(learnedMemory[clean]?.quarantined)));
       // Only include stocks that are genuinely declining OR quarantined with negative/flat performance; never short positive high-conviction leaders!
       return item.rec.changePct < 0 || (isQuarantined && item.rec.changePct <= 0.1);
     })
@@ -1781,9 +1781,9 @@ export function autoSquareOffBreachedAgentOrders(
 }
 
 /**
- * Automated Strategy Self-Healing & Diagnostic Post-Mortem Generator:
- * Triggered when an agent hits the ₹2,000 daily or ₹5,000 weekly drawdown limit.
- * Integrates backtesting validation, live news, and sentiment analysis to repair rules.
+ * Post-mortem TEMPLATE generator, triggered when an agent hits the ₹2,000 daily or ₹5,000 weekly drawdown limit.
+ * Only the loss amount and a few quote values are live. The cause, headlines and proposed parameters are canned
+ * text per agent, and NO backtest is run (backtestImprovement is null). Do not describe it as analysis.
  */
 export function generateStrategyHealingReport(
   agentId: string,
@@ -1817,7 +1817,7 @@ export function generateStrategyHealingReport(
         testedSymbol: 'INFY',
         originalParameters: { stopLossPct: 1.4, takeProfitPct: 3.2, entryFilter: 'Standard Trend Breakout', maxRiskPerTradeINR: 1400 },
         optimizedParameters: { stopLossPct: 0.9, takeProfitPct: 2.7, entryFilter: 'NASDAQ Correlation Regime Gate + USD/INR Floor (≥ ₹84.50)', maxRiskPerTradeINR: 800 },
-        backtestImprovement: { originalWinRatePct: 46.2, optimizedWinRatePct: 62.4, drawdownReductionPct: 38.5, sharpeRatio: 1.88, sampleBarsCount: 252 }
+        backtestImprovement: null
       },
       recalibratedRules: [
         'RULE 1 (Pre-Trade Sizing Ceiling): Single trade loss strictly capped at ≤ ₹800 (0.8% of capital)',
@@ -1846,7 +1846,7 @@ export function generateStrategyHealingReport(
         testedSymbol: 'NIFTY_OPTIONS',
         originalParameters: { stopLossPct: 2.0, takeProfitPct: 1.5, entryFilter: 'ATM Credit Spread (100-pt width)', maxRiskPerTradeINR: 2200 },
         optimizedParameters: { stopLossPct: 1.1, takeProfitPct: 1.8, entryFilter: 'OTM Delta-Neutral Wing Spread (50-pt width, Delta ≤ 0.18)', maxRiskPerTradeINR: 780 },
-        backtestImprovement: { originalWinRatePct: 52.0, optimizedWinRatePct: 71.2, drawdownReductionPct: 44.0, sharpeRatio: 2.21, sampleBarsCount: 250 }
+        backtestImprovement: null
       },
       recalibratedRules: [
         'RULE 1 (Defined Risk Ceiling): Spread mathematical max loss strictly limited to ≤ ₹780 per trade',
@@ -1875,7 +1875,7 @@ export function generateStrategyHealingReport(
         testedSymbol: 'TCS',
         originalParameters: { stopLossPct: 1.3, takeProfitPct: 2.8, entryFilter: '20-Day Donchian Breakout', maxRiskPerTradeINR: 1300 },
         optimizedParameters: { stopLossPct: 0.85, takeProfitPct: 2.4, entryFilter: 'Donchian Breakout + VWAP Consecutive Bar Holding + Vol Ratio > 1.8x', maxRiskPerTradeINR: 780 },
-        backtestImprovement: { originalWinRatePct: 48.5, optimizedWinRatePct: 65.6, drawdownReductionPct: 41.2, sharpeRatio: 2.04, sampleBarsCount: 252 }
+        backtestImprovement: null
       },
       recalibratedRules: [
         'RULE 1 (Pre-Trade Sizing): Order quantity strictly derived via floor(780 / |entry - stop|)',
@@ -1904,7 +1904,7 @@ export function generateStrategyHealingReport(
         testedSymbol: 'ASIANPAINT',
         originalParameters: { stopLossPct: 1.5, takeProfitPct: 3.0, entryFilter: 'RSI Swing Value Accumulation', maxRiskPerTradeINR: 1500 },
         optimizedParameters: { stopLossPct: 0.95, takeProfitPct: 2.8, entryFilter: 'Crude Inverse Ratio Beta Filter (Crude Chg < +0.8%)', maxRiskPerTradeINR: 760 },
-        backtestImprovement: { originalWinRatePct: 50.0, optimizedWinRatePct: 67.2, drawdownReductionPct: 37.0, sharpeRatio: 1.96, sampleBarsCount: 252 }
+        backtestImprovement: null
       },
       recalibratedRules: [
         'RULE 1 (Instant Crude Inverse Hedge): Immediately short / exit paint and aviation equities whenever Brent jumps > 1.0%',
@@ -1933,7 +1933,7 @@ export function generateStrategyHealingReport(
       testedSymbol: 'PORTFOLIO_BASKET',
       originalParameters: { stopLossPct: 1.2, takeProfitPct: 2.4, entryFilter: 'Defensive Regime Filter (50-SMA)', maxRiskPerTradeINR: 1200 },
       optimizedParameters: { stopLossPct: 0.8, takeProfitPct: 2.2, entryFilter: 'Cluster Correlation Cap ≤ 0.35 + Dynamic VIX Sizing', maxRiskPerTradeINR: 750 },
-      backtestImprovement: { originalWinRatePct: 53.5, optimizedWinRatePct: 71.4, drawdownReductionPct: 46.0, sharpeRatio: 2.30, sampleBarsCount: 252 }
+      backtestImprovement: null
     },
     recalibratedRules: [
       'RULE 1 (Pre-Trade Sizing Ceiling): No position may risk > ₹750 under any circumstances',

@@ -16,7 +16,6 @@ import {
 } from 'lucide-react';
 import { useLiveMarketData } from '../services/liveMarketService';
 import { getStoredPaperTrades, persistPaperTrades } from '../services/paperTradeService';
-import { computeTargetHitProbabilities } from '../data/institutionalEquityData';
 import {
   evaluateElevenVectorMacroMatrix,
   loadMacroStressConfig,
@@ -540,49 +539,29 @@ export const MacroPolicyThesis: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Entry, Stop & T1 / T2 / T3 Strip with Hit Probabilities */}
-                    {(() => {
-                      const entryP = Math.max(1, setup.entryPrice);
-                      const riskP = ((setup.stopLossPrice - entryP) / entryP) * 100;
-                      const t1Pct = ((setup.t1Price - entryP) / entryP) * 100;
-                      const t2Pct = ((setup.t2Price - entryP) / entryP) * 100;
-                      const t3Pct = ((setup.t3Price - entryP) / entryP) * 100;
-                      const probs = computeTargetHitProbabilities({
-                        compositeScore: setup.accumulationOrPutScore || 88,
-                        riskPct: riskP,
-                        t1UpsidePct: t1Pct,
-                        t2UpsidePct: t2Pct,
-                        t3UpsidePct: t3Pct,
-                      });
-                      return (
-                        <div className="grid grid-cols-5 gap-1.5 text-center p-2 rounded-xl bg-slate-900/90 border border-slate-800 text-[10px]">
-                          <div>
-                            <span className="text-slate-400 block">ENTRY</span>
-                            <span className="font-bold text-white block">₹{setup.entryPrice}</span>
-                          </div>
-                          <div>
-                            <span className="text-rose-400 block">HARD SL</span>
-                            <span className="font-bold text-rose-300 block">₹{setup.stopLossPrice}</span>
-                            <span className="text-[8px] text-rose-400/80">{riskP.toFixed(1)}%</span>
-                          </div>
-                          <div>
-                            <span className="text-emerald-400 block">TARGET 1</span>
-                            <span className="font-bold text-emerald-300 block">₹{setup.t1Price}</span>
-                            <span className="text-[8px] text-emerald-400 font-bold">{probs.t1ProbabilityPct}% Prob</span>
-                          </div>
-                          <div>
-                            <span className="text-cyan-400 block">TARGET 2</span>
-                            <span className="font-bold text-cyan-300 block">₹{setup.t2Price}</span>
-                            <span className="text-[8px] text-cyan-300 font-bold">{probs.t2ProbabilityPct}% Prob</span>
-                          </div>
-                          <div>
-                            <span className="text-amber-400 block">TARGET 3</span>
-                            <span className="font-bold text-amber-300 block">₹{setup.t3Price}</span>
-                            <span className="text-[8px] text-amber-300 font-bold">{probs.t3ProbabilityPct}% Prob</span>
-                          </div>
-                        </div>
-                      );
-                    })()}
+                    {/* Entry, Stop & T1 / T2 / T3 Strip */}
+                    <div className="grid grid-cols-5 gap-1.5 text-center p-2 rounded-xl bg-slate-900/90 border border-slate-800 text-[10px]">
+                      <div>
+                        <span className="text-slate-400 block">ENTRY</span>
+                        <span className="font-bold text-white">₹{setup.entryPrice}</span>
+                      </div>
+                      <div>
+                        <span className="text-rose-400 block">HARD SL</span>
+                        <span className="font-bold text-rose-300">₹{setup.stopLossPrice}</span>
+                      </div>
+                      <div>
+                        <span className="text-emerald-400 block">TARGET 1</span>
+                        <span className="font-bold text-emerald-300">₹{setup.t1Price}</span>
+                      </div>
+                      <div>
+                        <span className="text-cyan-400 block">TARGET 2</span>
+                        <span className="font-bold text-cyan-300">₹{setup.t2Price}</span>
+                      </div>
+                      <div>
+                        <span className="text-amber-400 block">TARGET 3</span>
+                        <span className="font-bold text-amber-300">₹{setup.t3Price}</span>
+                      </div>
+                    </div>
 
                     {/* Non-Erosion Exit Plan */}
                     <div className="p-2.5 rounded-xl bg-[#060b16] border border-slate-800/90 space-y-1 text-[10px] font-sans">
@@ -678,49 +657,29 @@ export const MacroPolicyThesis: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Option Premium Entry, Stop & T1 / T2 / T3 Strip with Hit Probabilities */}
-                    {(() => {
-                      const entryP = Math.max(1, setup.entryPrice);
-                      const riskP = ((setup.stopLossPrice - entryP) / entryP) * 100;
-                      const t1Pct = ((setup.t1Price - entryP) / entryP) * 100;
-                      const t2Pct = ((setup.t2Price - entryP) / entryP) * 100;
-                      const t3Pct = ((setup.t3Price - entryP) / entryP) * 100;
-                      const probs = computeTargetHitProbabilities({
-                        compositeScore: setup.accumulationOrPutScore || 89,
-                        riskPct: riskP,
-                        t1UpsidePct: t1Pct,
-                        t2UpsidePct: t2Pct,
-                        t3UpsidePct: t3Pct,
-                      });
-                      return (
-                        <div className="grid grid-cols-5 gap-1.5 text-center p-2 rounded-xl bg-slate-900/90 border border-slate-800 text-[10px]">
-                          <div>
-                            <span className="text-slate-400 block">PE ENTRY</span>
-                            <span className="font-bold text-white block">₹{setup.entryPrice}</span>
-                          </div>
-                          <div>
-                            <span className="text-rose-400 block">STOP SL</span>
-                            <span className="font-bold text-rose-300 block">₹{setup.stopLossPrice}</span>
-                            <span className="text-[8px] text-rose-400/80">{riskP.toFixed(1)}%</span>
-                          </div>
-                          <div>
-                            <span className="text-emerald-400 block">TARGET 1</span>
-                            <span className="font-bold text-emerald-300 block">₹{setup.t1Price}</span>
-                            <span className="text-[8px] text-emerald-400 font-bold">{probs.t1ProbabilityPct}% Prob</span>
-                          </div>
-                          <div>
-                            <span className="text-cyan-400 block">TARGET 2</span>
-                            <span className="font-bold text-cyan-300 block">₹{setup.t2Price}</span>
-                            <span className="text-[8px] text-cyan-300 font-bold">{probs.t2ProbabilityPct}% Prob</span>
-                          </div>
-                          <div>
-                            <span className="text-amber-400 block">TARGET 3</span>
-                            <span className="font-bold text-amber-300 block">₹{setup.t3Price}</span>
-                            <span className="text-[8px] text-amber-300 font-bold">{probs.t3ProbabilityPct}% Prob</span>
-                          </div>
-                        </div>
-                      );
-                    })()}
+                    {/* Option Premium Entry, Stop & T1 / T2 / T3 Strip */}
+                    <div className="grid grid-cols-5 gap-1.5 text-center p-2 rounded-xl bg-slate-900/90 border border-slate-800 text-[10px]">
+                      <div>
+                        <span className="text-slate-400 block">PE ENTRY</span>
+                        <span className="font-bold text-white">₹{setup.entryPrice}</span>
+                      </div>
+                      <div>
+                        <span className="text-rose-400 block">STOP SL</span>
+                        <span className="font-bold text-rose-300">₹{setup.stopLossPrice}</span>
+                      </div>
+                      <div>
+                        <span className="text-emerald-400 block">TARGET 1</span>
+                        <span className="font-bold text-emerald-300">₹{setup.t1Price}</span>
+                      </div>
+                      <div>
+                        <span className="text-cyan-400 block">TARGET 2</span>
+                        <span className="font-bold text-cyan-300">₹{setup.t2Price}</span>
+                      </div>
+                      <div>
+                        <span className="text-amber-400 block">TARGET 3</span>
+                        <span className="font-bold text-amber-300">₹{setup.t3Price}</span>
+                      </div>
+                    </div>
 
                     {/* Non-Erosion Exit Plan */}
                     <div className="p-2.5 rounded-xl bg-[#060b16] border border-slate-800/90 space-y-1 text-[10px] font-sans">

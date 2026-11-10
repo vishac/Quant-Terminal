@@ -1,6 +1,8 @@
 {
   "syncedAtISO": "2026-11-09T09:54:52.295Z",
   "feedMode": "YAHOO_HISTORICAL_CANDLES",
+  "evidenceClass": "IN_SAMPLE_SINGLE_RUN",
+  "benchmarkIncluded": false,
   "methodology": {
     "entryFill": "Next-Bar Open + 5 bps slippage",
     "stopFill": "Intraday Low check with Gap-Through-Stop fill at Open",
