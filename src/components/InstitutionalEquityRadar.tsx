@@ -49,7 +49,7 @@ import {
 } from 'lucide-react';
 
 type ViewMode = 'TABLE_MATRIX' | 'SPLIT_DOSSIER';
-type SortField = 'CONVICTION' | 'LTP_HIGH' | 'LTP_LOW' | 'CHANGE_PCT' | 'VOLUME' | 'UPSIDE_T1';
+type SortField = 'CONVICTION' | 'LTP_HIGH' | 'LTP_LOW' | 'CHANGE_PCT' | 'VOLUME';
 
 const DEFAULT_STRATEGY_QUANT: StrategyQuantification = {
   compositeScore: 75,
@@ -312,9 +312,6 @@ export const InstitutionalEquityRadar: React.FC = () => {
           break;
         case 'VOLUME':
           comparison = bVol - aVol;
-          break;
-        case 'UPSIDE_T1':
-          comparison = b.tacticalLevels.target1.upsidePct - a.tacticalLevels.target1.upsidePct;
           break;
         default:
           comparison = bScore - aScore || bChg - aChg;
@@ -739,7 +736,6 @@ export const InstitutionalEquityRadar: React.FC = () => {
               <option value="LTP_LOW">Live LTP (Lowest First)</option>
               <option value="CHANGE_PCT">Session Gain % (Highest)</option>
               <option value="VOLUME">Session Volume (Highest)</option>
-              <option value="UPSIDE_T1">Target 1 Upside %</option>
             </select>
           </div>
 
@@ -888,7 +884,6 @@ export const InstitutionalEquityRadar: React.FC = () => {
                   </th>
                   <th className="py-3.5 px-3 font-bold text-center">Entry Zone</th>
                   <th className="py-3.5 px-3 font-bold text-center">Hard SL</th>
-                  <th className="py-3.5 px-3 font-bold text-right">Targets (T1 / T2)</th>
                   <th className="py-3.5 px-3 font-bold text-center">R:R</th>
                   <th className="py-3.5 px-4 font-bold">Conviction Rationale & Core Driver</th>
                   <th className="py-3.5 px-3 font-bold text-center">Action</th>
@@ -1067,15 +1062,6 @@ export const InstitutionalEquityRadar: React.FC = () => {
                         <span className="text-[9px] text-rose-400/90">{stock.tacticalLevels.riskPct}% risk</span>
                       </td>
 
-                      {/* Targets */}
-                      <td className="py-3.5 px-3 text-right font-mono text-[11px]">
-                        <div className="text-emerald-300 font-bold">
-                          T1: ₹{stock.tacticalLevels.target1.price} (+{stock.tacticalLevels.target1.upsidePct}%)
-                        </div>
-                        <div className="text-cyan-300 text-[10px]">
-                          T2: ₹{stock.tacticalLevels.target2.price} (+{stock.tacticalLevels.target2.upsidePct}%)
-                        </div>
-                      </td>
 
                       {/* R:R */}
                       <td className="py-3.5 px-3 text-center font-mono text-[11px]">
@@ -1251,8 +1237,8 @@ export const InstitutionalEquityRadar: React.FC = () => {
                           </div>
                         )}
                       </div>
-                      <div className="text-emerald-400 font-bold font-mono text-xs">
-                        T1: +{stock.tacticalLevels.target1.upsidePct}%
+                      <div className="text-cyan-300 font-bold font-mono text-[11px]">
+                        R:R {stock.tacticalLevels.riskRewardRatio.split(' ')[0]}
                       </div>
                     </div>
 
